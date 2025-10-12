@@ -21,5 +21,12 @@
     "noImplicitAny": false,
     "strictBindCallApply": false,
     "noFallthroughCasesInSwitch": false
-  }
+  },
+  "exclude": [
+    "node_modules",
+    "dist",
+    "commitlint.config.js",
+    "jest.config.mjs",
+    "eslint.config.mjs"
+  ]
 }
