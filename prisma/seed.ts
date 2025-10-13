@@ -1,3 +1,4 @@
+import { hash } from 'crypto';
 import { Prisma, PrismaClient } from '../generated/prisma/client';
 
 const prisma = new PrismaClient();
@@ -121,13 +122,16 @@ async function main() {
 
   console.log('Role permissions seeded');
 
+  const passwordHash = hash('sha256', '123456');
   const user = await prisma.user.upsert({
-    where: { email: 'admin@example.com' },
+    where: { phoneNumber: '0987654321' },
     update: {},
     create: {
+      phoneNumber: '0987654321',
       email: 'admin@example.com',
-      name: 'Admin',
-      password: 'password',
+      firstName: 'Admin',
+      lastName: 'User',
+      passwordHash: passwordHash,
     },
   });
 
