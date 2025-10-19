@@ -4,6 +4,7 @@ import {
   ApiResponse,
   ApiResponseCommonMetadata,
   ApiResponseNoStatusOptions,
+  getSchemaPath,
 } from '@nestjs/swagger';
 
 export const ApiStandardResponse = <TModel extends Type<any>>(
@@ -24,7 +25,7 @@ export const ApiStandardResponse = <TModel extends Type<any>>(
               success: { type: 'boolean', example: true },
               message: { type: 'string', example: 'Request successful' },
               data: {
-                $ref: `#/components/schemas/${model.name}`,
+                $ref: getSchemaPath(model),
               },
               meta: {
                 type: 'object',
@@ -61,7 +62,7 @@ export const ApiPaginatedResponse = <TModel extends Type<any>>(
               data: {
                 type: 'array',
                 items: {
-                  $ref: `#/components/schemas/${model.name}`,
+                  $ref: getSchemaPath(model),
                 },
               },
               pagination: {
