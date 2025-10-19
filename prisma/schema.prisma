@@ -51,14 +51,16 @@ enum VisibilityLevel {
 }
 
 model User {
-  id           String         @id @default(uuid())
-  phoneNumber  String         @unique
-  passwordHash String
-  firstName    String?
-  lastName     String?
-  email        String?
-  avatarUrl    String?
-  isActive     Boolean        @default(true)
+  id                 String         @id @default(uuid())
+  phoneNumber        String         @unique
+  passwordHash       String
+  firstName          String?
+  lastName           String?
+  email              String?
+  avatarUrl          String?
+  isActive           Boolean        @default(true)
+  refreshToken       String?
+  refreshTokenExpiry DateTime?
   // relation
   roles        UserRole[]
   bookings     Booking[]
