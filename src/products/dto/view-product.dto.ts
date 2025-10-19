@@ -6,56 +6,9 @@ import {
   IsString,
   Min,
 } from 'class-validator';
-import { Prisma, Product } from 'generated/prisma';
+import { Product } from 'generated/prisma';
 
-export class CreateProductDto implements Prisma.ProductCreateInput {
-  @ApiProperty({
-    description: 'The name of the product',
-    example: 'Product 12',
-  })
-  @IsString()
-  name: string;
-
-  @ApiProperty({
-    description: 'The description of the product',
-    example: 'This is a sample product',
-    required: false,
-  })
-  @IsOptional()
-  @IsString()
-  description?: string;
-
-  @ApiProperty({
-    description: 'The price of the product',
-    example: 100,
-    required: false,
-  })
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  price: number = 0;
-
-  @ApiProperty({
-    description: 'The stock quantity of the product',
-    example: 50,
-    required: false,
-  })
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  stockQty: number = 0;
-
-  @ApiProperty({
-    description: 'Whether the product is active',
-    example: true,
-    required: false,
-  })
-  @IsOptional()
-  @IsBoolean()
-  isActive: boolean = false;
-}
-
-export class CreateProductResponseDto implements Product {
+export class ViewProductDto implements Product {
   @ApiProperty({
     description: 'The unique identifier of the product',
     example: 'uuid-1234',
@@ -77,7 +30,7 @@ export class CreateProductResponseDto implements Product {
   })
   @IsOptional()
   @IsString()
-  description: string;
+  description: string | null;
 
   @ApiProperty({
     description: 'The price of the product',
