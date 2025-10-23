@@ -181,3 +181,155 @@ export const ApiDeletedSuccessResponse = (options?: {
     description: options?.description || 'Resource deleted successfully',
   });
 };
+
+export const ApiUnauthorizedResponse = () => {
+  return applyDecorators(
+    ApiResponse({
+      status: 401,
+      description: 'Unauthorized access',
+      schema: {
+        type: 'object',
+        properties: {
+          success: { type: 'boolean', example: false },
+          message: { type: 'string', example: 'Request failed' },
+          error: {
+            type: 'object',
+            properties: {
+              code: { type: 'string', example: 'UNAUTHORIZED' },
+              message: { type: 'string', example: 'Unauthorized' },
+              details: {
+                type: 'object',
+                properties: {
+                  message: { type: 'string', example: 'Unauthorized' },
+                  statusCode: { type: 'number', example: 401 },
+                },
+              },
+            },
+          },
+          meta: {
+            type: 'object',
+            properties: {
+              timestamp: { type: 'string', format: 'date-time' },
+              version: { type: 'string', example: '1.0.0' },
+              requestId: { type: 'string' },
+            },
+          },
+        },
+      },
+    }),
+  );
+};
+
+export const ApiForbiddenResponse = (options?: { description?: string }) => {
+  return applyDecorators(
+    ApiResponse({
+      status: 403,
+      description: options?.description || 'Forbidden access',
+      schema: {
+        type: 'object',
+        properties: {
+          success: { type: 'boolean', example: false },
+          message: { type: 'string', example: 'Request failed' },
+          error: {
+            type: 'object',
+            properties: {
+              code: { type: 'string', example: 'FORBIDDEN' },
+              message: { type: 'string', example: 'Forbidden' },
+              details: {
+                type: 'object',
+                properties: {
+                  message: { type: 'string', example: 'Forbidden' },
+                  statusCode: { type: 'number', example: 403 },
+                },
+              },
+            },
+          },
+          meta: {
+            type: 'object',
+            properties: {
+              timestamp: { type: 'string', format: 'date-time' },
+              version: { type: 'string', example: '1.0.0' },
+              requestId: { type: 'string' },
+            },
+          },
+        },
+      },
+    }),
+  );
+};
+
+export const ApiNotFoundResponse = (options?: { description?: string }) => {
+  return applyDecorators(
+    ApiResponse({
+      status: 404,
+      description: options?.description || 'Resource not found',
+      schema: {
+        type: 'object',
+        properties: {
+          success: { type: 'boolean', example: false },
+          message: { type: 'string', example: 'Request failed' },
+          error: {
+            type: 'object',
+            properties: {
+              code: { type: 'string', example: 'NOT_FOUND' },
+              message: { type: 'string', example: 'Resource not found' },
+              details: {
+                type: 'object',
+                properties: {
+                  message: { type: 'string', example: 'Resource not found' },
+                  statusCode: { type: 'number', example: 404 },
+                },
+              },
+            },
+          },
+          meta: {
+            type: 'object',
+            properties: {
+              timestamp: { type: 'string', format: 'date-time' },
+              version: { type: 'string', example: '1.0.0' },
+              requestId: { type: 'string' },
+            },
+          },
+        },
+      },
+    }),
+  );
+};
+
+export const ApiConflictResponse = (options?: { description?: string }) => {
+  return applyDecorators(
+    ApiResponse({
+      status: 409,
+      description: options?.description || 'Conflict occurred',
+      schema: {
+        type: 'object',
+        properties: {
+          success: { type: 'boolean', example: false },
+          message: { type: 'string', example: 'Request failed' },
+          error: {
+            type: 'object',
+            properties: {
+              code: { type: 'string', example: 'CONFLICT' },
+              message: { type: 'string', example: 'Conflict occurred' },
+              details: {
+                type: 'object',
+                properties: {
+                  message: { type: 'string', example: 'Conflict occurred' },
+                  statusCode: { type: 'number', example: 409 },
+                },
+              },
+            },
+          },
+          meta: {
+            type: 'object',
+            properties: {
+              timestamp: { type: 'string', format: 'date-time' },
+              version: { type: 'string', example: '1.0.0' },
+              requestId: { type: 'string' },
+            },
+          },
+        },
+      },
+    }),
+  );
+};
