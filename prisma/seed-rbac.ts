@@ -1,15 +1,11 @@
-import * as bcrypt from 'bcryptjs';
 import { PrismaClient } from '../generated/prisma';
 
 const prisma = new PrismaClient();
 
-/**
- * Seed RBAC permissions and roles
- */
-async function seedRBAC() {
-  console.log('🔐 Seeding RBAC permissions and roles...');
+async function seedRBACPermissions() {
+  console.log('Seeding RBAC permissions...');
 
-  // Define all permissions with proper format (resource:action)
+  // Define permissions
   const permissions = [
     // Role permissions
     { key: 'roles:create', description: 'Create new roles' },
@@ -18,10 +14,13 @@ async function seedRBAC() {
     { key: 'roles:delete', description: 'Delete roles' },
 
     // Permission permissions
+    { key: 'permissions:create', description: 'Create new permissions' },
     {
       key: 'permissions:read',
       description: 'View permissions and their details',
     },
+    { key: 'permissions:update', description: 'Update permissions' },
+    { key: 'permissions:delete', description: 'Delete permissions' },
 
     // User permissions
     { key: 'users:create', description: 'Create new users' },
@@ -70,15 +69,15 @@ async function seedRBAC() {
   for (const permission of permissions) {
     await prisma.permission.upsert({
       where: { key: permission.key },
-      update: { description: permission.description },
+      update: {},
       create: permission,
     });
   }
 
-  console.log(`  ✓ Created ${permissions.length} permissions`);
+  console.log(`✓ Created ${permissions.length} permissions`);
 
   // Create default roles
-  console.log('  Creating default roles...');
+  console.log('Creating default roles...');
 
   // Super Admin - All permissions
   const superAdminRole = await prisma.role.upsert({
@@ -91,9 +90,6 @@ async function seedRBAC() {
   });
 
   const allPermissions = await prisma.permission.findMany();
-  await prisma.rolePermission.deleteMany({
-    where: { roleId: superAdminRole.id },
-  });
   await prisma.rolePermission.createMany({
     data: allPermissions.map((p) => ({
       roleId: superAdminRole.id,
@@ -102,9 +98,9 @@ async function seedRBAC() {
     skipDuplicates: true,
   });
 
-  console.log('  ✓ Created super-admin role with all permissions');
+  console.log('✓ Created super-admin role with all permissions');
 
-  // Admin - Most permissions except user and permission deletion
+  // Admin - Most permissions except user deletion
   const adminRole = await prisma.role.upsert({
     where: { name: 'admin' },
     update: {},
@@ -122,7 +118,6 @@ async function seedRBAC() {
     },
   });
 
-  await prisma.rolePermission.deleteMany({ where: { roleId: adminRole.id } });
   await prisma.rolePermission.createMany({
     data: adminPermissions.map((p) => ({
       roleId: adminRole.id,
@@ -131,7 +126,7 @@ async function seedRBAC() {
     skipDuplicates: true,
   });
 
-  console.log('  ✓ Created admin role');
+  console.log('✓ Created admin role');
 
   // Manager - Read all, manage bookings and orders
   const managerRole = await prisma.role.upsert({
@@ -161,7 +156,6 @@ async function seedRBAC() {
     where: { key: { in: managerPermissionKeys } },
   });
 
-  await prisma.rolePermission.deleteMany({ where: { roleId: managerRole.id } });
   await prisma.rolePermission.createMany({
     data: managerPermissions.map((p) => ({
       roleId: managerRole.id,
@@ -170,7 +164,7 @@ async function seedRBAC() {
     skipDuplicates: true,
   });
 
-  console.log('  ✓ Created manager role');
+  console.log('✓ Created manager role');
 
   // Staff - Basic read and create permissions
   const staffRole = await prisma.role.upsert({
@@ -195,7 +189,6 @@ async function seedRBAC() {
     where: { key: { in: staffPermissionKeys } },
   });
 
-  await prisma.rolePermission.deleteMany({ where: { roleId: staffRole.id } });
   await prisma.rolePermission.createMany({
     data: staffPermissions.map((p) => ({
       roleId: staffRole.id,
@@ -204,7 +197,7 @@ async function seedRBAC() {
     skipDuplicates: true,
   });
 
-  console.log('  ✓ Created staff role');
+  console.log('✓ Created staff role');
 
   // Customer - Basic read permissions
   const customerRole = await prisma.role.upsert({
@@ -226,9 +219,6 @@ async function seedRBAC() {
     where: { key: { in: customerPermissionKeys } },
   });
 
-  await prisma.rolePermission.deleteMany({
-    where: { roleId: customerRole.id },
-  });
   await prisma.rolePermission.createMany({
     data: customerPermissions.map((p) => ({
       roleId: customerRole.id,
@@ -237,83 +227,23 @@ async function seedRBAC() {
     skipDuplicates: true,
   });
 
-  console.log('  ✓ Created customer role');
+  console.log('✓ Created customer role');
 
-  return { superAdminRole, adminRole, managerRole, staffRole, customerRole };
+  console.log('\n✅ RBAC seeding completed successfully!');
 }
 
-/**
- * Seed default admin user
- */
-async function seedAdminUser(adminRoleId: string) {
-  console.log('👤 Seeding admin user...');
-
-  // Hash password using bcrypt
-  const saltRounds = process.env.HASH_SALT
-    ? parseInt(process.env.HASH_SALT, 10)
-    : 10;
-  const passwordHash = await bcrypt.hash('123456', saltRounds);
-  const adminUser = await prisma.user.upsert({
-    where: { phoneNumber: '0987654321' },
-    update: {},
-    create: {
-      phoneNumber: '0987654321',
-      email: 'admin@example.com',
-      firstName: 'Admin',
-      lastName: 'User',
-      passwordHash: passwordHash,
-    },
-  });
-
-  await prisma.userRole.upsert({
-    where: {
-      userId_roleId: {
-        userId: adminUser.id,
-        roleId: adminRoleId,
-      },
-    },
-    update: {},
-    create: {
-      userId: adminUser.id,
-      roleId: adminRoleId,
-    },
-  });
-
-  console.log('  ✓ Created admin user');
-  console.log('    📧 Email: admin@example.com');
-  console.log('    📱 Phone: 0987654321');
-  console.log('    🔑 Password: 123456');
-
-  return adminUser;
-}
-
-/**
- * Main seed function
- */
 async function main() {
-  console.log('🌱 Starting database seeding...\n');
-
   try {
-    // Seed RBAC (permissions and roles)
-    const roles = await seedRBAC();
-
-    // Seed admin user with super-admin role
-    await seedAdminUser(roles.superAdminRole.id);
-
-    console.log('\n✅ Database seeding completed successfully!');
+    await seedRBACPermissions();
   } catch (error) {
-    console.error('❌ Error seeding database:', error);
+    console.error('Error seeding RBAC:', error);
     throw error;
   }
 }
 
 main()
-  .then(() => {
-    console.log('\n🔌 Disconnecting from database...');
-    return prisma.$disconnect();
-  })
+  .then(() => prisma.$disconnect())
   .catch(async (e) => {
-    console.error('❌ Seeding failed:', e);
-    await prisma.$disconnect();
-    process.exit(1);
+    console.error(e);
+    return prisma.$disconnect();
   });
