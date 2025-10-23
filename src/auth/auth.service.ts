@@ -109,7 +109,7 @@ export class AuthService {
       user: userWithoutPassword,
       accessToken, // For cookie setting
       refreshToken, // For cookie setting
-    } as any;
+    } as AuthResponseDto;
   }
 
   async login(loginDto: LoginDto): Promise<AuthResponseDto> {
@@ -148,7 +148,7 @@ export class AuthService {
       user: userWithoutPassword,
       accessToken, // For cookie setting
       refreshToken, // For cookie setting
-    } as any;
+    } as AuthResponseDto;
   }
 
   async validateUser(userId: string) {
