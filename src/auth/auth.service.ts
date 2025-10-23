@@ -81,7 +81,7 @@ export class AuthService {
     }
 
     // Hash password
-    const saltRounds = 10;
+    const saltRounds = this.configService.get<number>('HASH_SALT', 10);
     const hashedPassword = await bcrypt.hash(password, saltRounds);
 
     // Create user

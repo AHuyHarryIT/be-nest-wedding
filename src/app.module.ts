@@ -4,6 +4,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DatabaseService } from './database/database.service';
 import { DatabaseModule } from './database/database.module';
+import { CommonModule } from './common/common.module';
 import { RolesModule } from './roles/roles.module';
 import { PermissionsModule } from './permissions/permissions.module';
 import { ProductsModule } from './products/products.module';
@@ -17,6 +18,7 @@ import { AuthModule } from './auth/auth.module';
       isGlobal: true,
     }),
     DatabaseModule,
+    CommonModule,
     AuthModule,
     RolesModule,
     PermissionsModule,
