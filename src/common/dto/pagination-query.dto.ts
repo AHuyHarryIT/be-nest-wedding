@@ -7,27 +7,25 @@ export class PaginationQueryDto {
     description: 'Page number (1-based)',
     minimum: 1,
     default: 1,
-    example: 1,
   })
   @IsOptional()
   @Type(() => Number)
   @IsPositive()
   @Min(1)
-  page?: number = 1;
+  page?: number;
 
   @ApiPropertyOptional({
     description: 'Number of items per page',
     minimum: 1,
     maximum: 100,
     default: 10,
-    example: 10,
   })
   @IsOptional()
   @Type(() => Number)
   @IsPositive()
   @Min(1)
   @Max(100)
-  limit?: number = 10;
+  limit?: number;
 
   @ApiPropertyOptional({
     description: 'Search term for filtering results',
@@ -41,7 +39,6 @@ export class PaginationQueryDto {
 
   @ApiPropertyOptional({
     description: 'Field to sort by',
-    example: 'createdAt',
   })
   @IsOptional()
   @IsString()
@@ -50,8 +47,6 @@ export class PaginationQueryDto {
   @ApiPropertyOptional({
     description: 'Sort order',
     enum: ['asc', 'desc'],
-    default: 'desc',
-    example: 'desc',
   })
   @IsOptional()
   @IsString()
