@@ -1,9 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { CreateServiceDto } from './dto/create-service.dto';
-import { UpdateServiceDto } from './dto/update-service.dto';
-import { QueryServiceDto } from './dto/query-service.dto';
-import { DatabaseService } from '../database/database.service';
 import { Prisma } from 'generated/prisma';
+import { PaginationHelper } from '../common/utils/pagination.helper';
+import { DatabaseService } from '../database/database.service';
+import { CreateServiceDto, QueryServiceDto, UpdateServiceDto } from './dto';
 
 @Injectable()
 export class ServicesService {
@@ -39,24 +38,24 @@ export class ServicesService {
     });
   }
 
-  async findAll(queryDto?: QueryServiceDto) {
+  async findAll(params?: QueryServiceDto) {
     const {
-      q,
-      isActive,
-      minPrice,
-      maxPrice,
-      page = 1,
-      limit = 10,
+      page,
+      limit,
       sortBy = 'createdAt',
-      sortOrder = 'desc',
-    } = queryDto || {};
+      sortOrder,
+      search,
+    } = PaginationHelper.mergeWithDefaults(params || {});
 
+    const { isActive, minPrice, maxPrice } = params || {};
+
+    // Build where clause for search and filters
     const where: Prisma.ServiceWhereInput = {};
 
-    if (q) {
+    if (search) {
       where.OR = [
-        { name: { contains: q, mode: 'insensitive' } },
-        { description: { contains: q, mode: 'insensitive' } },
+        { name: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
       ];
     }
 
@@ -77,37 +76,28 @@ export class ServicesService {
     // Exclude soft-deleted records
     where.deletedAt = null;
 
-    // If pagination is requested
-    if (page && limit) {
-      const skip = (page - 1) * limit;
-      const [services, total] = await Promise.all([
-        this.databaseService.service.findMany({
-          where,
-          orderBy: { [sortBy]: sortOrder },
-          skip,
-          take: limit,
-        }),
-        this.databaseService.service.count({ where }),
-      ]);
+    // Build orderBy
+    const orderBy: Prisma.ServiceOrderByWithRelationInput = {
+      [sortBy]: sortOrder,
+    };
 
-      return {
-        data: services,
-        pagination: {
-          page,
-          limit,
-          total,
-          totalPages: Math.ceil(total / limit),
-          hasNext: page < Math.ceil(total / limit),
-          hasPrevious: page > 1,
-        },
-      };
-    }
+    // Get total count for pagination
+    const total = await this.databaseService.service.count({ where });
 
-    // Return all without pagination
-    return this.databaseService.service.findMany({
+    // Get paginated data
+    const services = await this.databaseService.service.findMany({
       where,
-      orderBy: { [sortBy]: sortOrder },
+      orderBy,
+      skip: PaginationHelper.getSkip(page, limit),
+      take: limit,
     });
+
+    return PaginationHelper.createPaginatedResponse(
+      services,
+      page,
+      limit,
+      total,
+    );
   }
 
   async findOne(id: string) {
@@ -225,6 +215,84 @@ export class ServicesService {
     }
 
     return slug;
+  }
+
+  /**
+   * Get all soft-deleted services with pagination and filtering
+   */
+  async findDeleted(params?: QueryServiceDto) {
+    const paginationParams = PaginationHelper.mergeWithDefaults(params || {});
+    const { page, limit, sortBy = 'deletedAt', sortOrder } = paginationParams;
+
+    const { isActive, minPrice, maxPrice, search } = params || {};
+
+    // Build where clause for search and filters
+    const where: Prisma.ServiceWhereInput = {};
+
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    if (isActive !== undefined) {
+      where.isActive = isActive;
+    }
+
+    if (minPrice !== undefined || maxPrice !== undefined) {
+      where.price = {};
+      if (minPrice !== undefined) {
+        where.price.gte = minPrice;
+      }
+      if (maxPrice !== undefined) {
+        where.price.lte = maxPrice;
+      }
+    }
+
+    // Only include soft-deleted records
+    where.deletedAt = { not: null };
+
+    // Build orderBy
+    const orderBy: Prisma.ServiceOrderByWithRelationInput = {
+      [sortBy]: sortOrder,
+    };
+
+    // Get total count for pagination
+    const total = await this.databaseService.service.count({ where });
+
+    // Get paginated data
+    const services = await this.databaseService.service.findMany({
+      where,
+      orderBy,
+      skip: PaginationHelper.getSkip(page, limit),
+      take: limit,
+    });
+
+    return PaginationHelper.createPaginatedResponse(
+      services,
+      page,
+      limit,
+      total,
+    );
+  }
+
+  /**
+   * Permanently delete a service
+   */
+  async hardDelete(id: string) {
+    // First check if soft-deleted service exists
+    const service = await this.databaseService.service.findFirst({
+      where: { id, deletedAt: { not: null } },
+    });
+
+    if (!service) {
+      throw new NotFoundException(`Service with ID "${id}" not found`);
+    }
+
+    return await this.databaseService.service.delete({
+      where: { id },
+    });
   }
 
   /**

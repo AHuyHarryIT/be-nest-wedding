@@ -1,33 +1,44 @@
 import {
-  Controller,
-  Get,
-  Post,
   Body,
-  Patch,
-  Param,
+  Controller,
   Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import {
+  ApiBadRequestResponse,
+  ApiBearerAuth,
+  ApiExtraModels,
   ApiOperation,
   ApiTags,
-  ApiQuery,
-  ApiExtraModels,
 } from '@nestjs/swagger';
-import { ServicesService } from './services.service';
-import { CreateServiceDto } from './dto/create-service.dto';
-import { UpdateServiceDto } from './dto/update-service.dto';
-import { QueryServiceDto } from './dto/query-service.dto';
-import { ViewServiceDto } from './dto/view-service.dto';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import {
-  ApiStandardResponse,
-  ApiPaginatedResponse,
+  ApiConflictResponse,
   ApiCreatedSuccessResponse,
-  ApiUpdatedSuccessResponse,
   ApiDeletedSuccessResponse,
   ApiErrorResponse,
-} from '../common/decorators/api-response.decorator';
-import { ResponseBuilder } from '../common/utils/response-builder.util';
+  ApiForbiddenResponse,
+  ApiNotFoundResponse,
+  ApiPaginatedResponse,
+  ApiStandardResponse,
+  ApiUnauthorizedResponse,
+  ApiUpdatedSuccessResponse,
+  ResponseBuilder,
+} from '../common';
+import { RequirePermissions } from '../common/decorators/permissions.decorator';
+import { PermissionsGuard } from '../common/guards/permissions.guard';
+import {
+  CreateServiceDto,
+  QueryServiceDto,
+  UpdateServiceDto,
+  ViewServiceDto,
+} from './dto';
+import { ServicesService } from './services.service';
 
 @ApiTags('Services')
 @ApiExtraModels(
@@ -41,101 +52,56 @@ export class ServicesController {
   constructor(private readonly servicesService: ServicesService) {}
 
   @Post()
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @ApiBearerAuth('JWT-auth')
+  @RequirePermissions('services:create')
   @ApiOperation({ summary: 'Create a new service' })
-  @ApiCreatedSuccessResponse({
-    description: 'Service created successfully',
-  })
-  @ApiErrorResponse({ status: 400, description: 'Bad request' })
+  @ApiCreatedSuccessResponse({ description: 'Service created successfully' })
+  @ApiUnauthorizedResponse()
+  @ApiForbiddenResponse()
+  @ApiConflictResponse()
+  @ApiErrorResponse({ description: 'Error occurred while creating service' })
   async create(@Body() createServiceDto: CreateServiceDto) {
     const service = await this.servicesService.create(createServiceDto);
     return ResponseBuilder.created(service, 'Service created successfully');
   }
 
   @Get()
-  @ApiOperation({ summary: 'Get all services with optional filters' })
-  @ApiQuery({ name: 'q', required: false, description: 'Search query' })
-  @ApiQuery({
-    name: 'isActive',
-    required: false,
-    description: 'Filter by active status',
-  })
-  @ApiQuery({
-    name: 'minPrice',
-    required: false,
-    description: 'Minimum price filter',
-  })
-  @ApiQuery({
-    name: 'maxPrice',
-    required: false,
-    description: 'Maximum price filter',
-  })
-  @ApiQuery({
-    name: 'page',
-    required: false,
-    description: 'Page number for pagination',
-  })
-  @ApiQuery({
-    name: 'limit',
-    required: false,
-    description: 'Number of items per page',
-  })
-  @ApiQuery({
-    name: 'sortBy',
-    required: false,
-    description: 'Sort field',
-    enum: ['name', 'price', 'createdAt', 'updatedAt'],
-  })
-  @ApiQuery({
-    name: 'sortOrder',
-    required: false,
-    description: 'Sort order',
-    enum: ['asc', 'desc'],
-  })
+  @ApiOperation({ summary: 'Get all services with pagination' })
   @ApiPaginatedResponse(ViewServiceDto, {
     description: 'Services retrieved successfully',
   })
+  @ApiErrorResponse({ description: 'Error occurred while retrieving services' })
   async findAll(
-    @Query('q') q?: string,
+    @Query() query: QueryServiceDto,
     @Query('isActive') isActive?: boolean,
-    @Query('minPrice') minPrice?: string,
-    @Query('maxPrice') maxPrice?: string,
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
-    @Query('sortBy') sortBy?: string,
-    @Query('sortOrder') sortOrder?: string,
   ) {
-    // Manually convert query parameters
-    const queryDto: QueryServiceDto = {
-      q,
-      isActive: isActive,
-      minPrice: minPrice ? parseFloat(minPrice) : undefined,
-      maxPrice: maxPrice ? parseFloat(maxPrice) : undefined,
-      page: page ? parseInt(page, 10) : undefined,
-      limit: limit ? parseInt(limit, 10) : undefined,
-      sortBy: ['name', 'price', 'createdAt', 'updatedAt'].includes(sortBy || '')
-        ? (sortBy as 'name' | 'price' | 'createdAt' | 'updatedAt')
-        : undefined,
-      sortOrder: ['asc', 'desc'].includes(sortOrder || '')
-        ? (sortOrder as 'asc' | 'desc')
-        : undefined,
-    };
-    const result = await this.servicesService.findAll(queryDto);
+    const {
+      page,
+      limit,
+      search,
+      sortBy,
+      sortOrder,
+      minPrice,
+      maxPrice,
+    }: QueryServiceDto = query;
 
-    // Check if result has pagination data
-    if (
-      typeof result === 'object' &&
-      'data' in result &&
-      'pagination' in result
-    ) {
-      return ResponseBuilder.paginated(
-        result.data,
-        result.pagination,
-        'Services retrieved successfully',
-      );
-    }
+    const result = await this.servicesService.findAll({
+      page,
+      limit,
+      search,
+      sortBy,
+      sortOrder,
+      isActive,
+      minPrice,
+      maxPrice,
+    });
 
-    // Return simple array without pagination
-    return ResponseBuilder.success(result, 'Services retrieved successfully');
+    return ResponseBuilder.paginated(
+      result.data,
+      result.pagination,
+      'Services retrieved successfully',
+    );
   }
 
   @Get(':id')
@@ -143,19 +109,23 @@ export class ServicesController {
   @ApiStandardResponse(ViewServiceDto, {
     description: 'Service retrieved successfully',
   })
-  @ApiErrorResponse({ status: 404, description: 'Service not found' })
+  @ApiNotFoundResponse({ description: 'Service not found' })
   async findOne(@Param('id') id: string) {
     const service = await this.servicesService.findOne(id);
     return ResponseBuilder.success(service, 'Service retrieved successfully');
   }
 
   @Patch(':id')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @ApiBearerAuth('JWT-auth')
+  @RequirePermissions('services:update')
   @ApiOperation({ summary: 'Update a service by ID' })
-  @ApiUpdatedSuccessResponse({
-    description: 'Service updated successfully',
-  })
-  @ApiErrorResponse({ status: 404, description: 'Service not found' })
-  @ApiErrorResponse({ status: 400, description: 'Bad request' })
+  @ApiUpdatedSuccessResponse({ description: 'Service updated successfully' })
+  @ApiNotFoundResponse({ description: 'Service not found' })
+  @ApiUnauthorizedResponse()
+  @ApiForbiddenResponse()
+  @ApiConflictResponse()
+  @ApiBadRequestResponse()
   async update(
     @Param('id') id: string,
     @Body() updateServiceDto: UpdateServiceDto,
@@ -164,39 +134,87 @@ export class ServicesController {
     return ResponseBuilder.updated(service, 'Service updated successfully');
   }
 
-  @Patch(':id/toggle-status')
-  @ApiOperation({ summary: 'Toggle service active status' })
-  @ApiUpdatedSuccessResponse({
-    description: 'Service status toggled successfully',
+  @Get('deleted')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @ApiBearerAuth('JWT-auth')
+  @RequirePermissions('services:read:deleted')
+  @ApiOperation({ summary: 'Get all deleted services' })
+  @ApiPaginatedResponse(ViewServiceDto, {
+    description: 'Paginated list of deleted services',
   })
-  @ApiErrorResponse({ status: 404, description: 'Service not found' })
-  async toggleActiveStatus(@Param('id') id: string) {
-    const service = await this.servicesService.toggleActiveStatus(id);
-    return ResponseBuilder.updated(
-      service,
-      'Service status toggled successfully',
+  @ApiUnauthorizedResponse()
+  @ApiForbiddenResponse()
+  async findDeleted(@Query() query: QueryServiceDto) {
+    const {
+      page,
+      limit,
+      search,
+      sortBy,
+      sortOrder,
+      isActive,
+      minPrice,
+      maxPrice,
+    }: QueryServiceDto = query;
+
+    const result = await this.servicesService.findDeleted({
+      page,
+      limit,
+      search,
+      sortBy,
+      sortOrder,
+      isActive,
+      minPrice,
+      maxPrice,
+    });
+
+    return ResponseBuilder.paginated(
+      result.data,
+      result.pagination,
+      'Deleted services retrieved successfully',
     );
   }
 
   @Delete(':id')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @ApiBearerAuth('JWT-auth')
+  @RequirePermissions('services:delete')
   @ApiOperation({ summary: 'Soft delete a service by ID' })
-  @ApiDeletedSuccessResponse({
-    description: 'Service deleted successfully',
-  })
-  @ApiErrorResponse({ status: 404, description: 'Service not found' })
+  @ApiDeletedSuccessResponse({ description: 'Service deleted successfully' })
+  @ApiNotFoundResponse({ description: 'Service not found' })
+  @ApiUnauthorizedResponse()
+  @ApiForbiddenResponse()
   async remove(@Param('id') id: string) {
     await this.servicesService.remove(id);
     return ResponseBuilder.deleted('Service deleted successfully');
   }
 
   @Patch(':id/restore')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @ApiBearerAuth('JWT-auth')
+  @RequirePermissions('services:restore')
   @ApiOperation({ summary: 'Restore a soft-deleted service' })
   @ApiUpdatedSuccessResponse({
     description: 'Service restored successfully',
   })
-  @ApiErrorResponse({ status: 404, description: 'Service not found' })
+  @ApiNotFoundResponse({ description: 'Service not found' })
+  @ApiUnauthorizedResponse()
+  @ApiForbiddenResponse()
   async restore(@Param('id') id: string) {
     const service = await this.servicesService.restore(id);
     return ResponseBuilder.updated(service, 'Service restored successfully');
+  }
+
+  @Delete(':id/hard')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @ApiBearerAuth('JWT-auth')
+  @RequirePermissions('services:hard-delete')
+  @ApiOperation({ summary: 'Permanently delete a service by ID' })
+  @ApiDeletedSuccessResponse({ description: 'Service permanently deleted' })
+  @ApiNotFoundResponse({ description: 'Service not found' })
+  @ApiUnauthorizedResponse()
+  @ApiForbiddenResponse()
+  async hardDelete(@Param('id') id: string) {
+    await this.servicesService.hardDelete(id);
+    return ResponseBuilder.deleted('Service permanently deleted');
   }
 }
