@@ -1,10 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { CreatePackageDto } from './dto/create-package.dto';
-import { UpdatePackageDto } from './dto/update-package.dto';
-import { UpdatePackageServicesDto } from './dto/update-package-services.dto';
-import { QueryPackageDto } from './dto/query-package.dto';
-import { DatabaseService } from '../database/database.service';
 import { Prisma } from 'generated/prisma';
+import { PaginationHelper } from '../common/utils/pagination.helper';
+import { DatabaseService } from '../database/database.service';
+import { CreatePackageDto, QueryPackageDto, UpdatePackageDto } from './dto';
+import { UpdatePackageServicesDto } from './dto/update-package-services.dto';
 
 @Injectable()
 export class PackagesService {
@@ -40,26 +39,32 @@ export class PackagesService {
     });
   }
 
-  async findAll(queryDto?: QueryPackageDto) {
+  /**
+   * Get all packages with pagination and filtering
+   */
+  async findAll(params?: QueryPackageDto) {
+    const paginationParams = PaginationHelper.mergeWithDefaults(params || {});
     const {
-      q,
+      page,
+      limit,
+      search,
+      sortBy = 'createdAt',
+      sortOrder,
+    } = paginationParams;
+
+    const {
       isActive,
       minPrice,
       maxPrice,
-      page = 1,
-      limit = 10,
-      sortBy = 'createdAt',
-      sortOrder = 'desc',
       includeServices = false,
-    } = queryDto || {};
+    } = params || {};
 
-    // Build where clause
     const where: Prisma.PackageWhereInput = {};
 
-    if (q) {
+    if (search) {
       where.OR = [
-        { name: { contains: q, mode: 'insensitive' } },
-        { description: { contains: q, mode: 'insensitive' } },
+        { name: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
       ];
     }
 
@@ -91,39 +96,29 @@ export class PackagesService {
         }
       : undefined;
 
-    // If pagination is requested
-    if (page && limit) {
-      const skip = (page - 1) * limit;
-      const [packages, total] = await Promise.all([
-        this.databaseService.package.findMany({
-          where,
-          include,
-          orderBy: { [sortBy]: sortOrder },
-          skip,
-          take: limit,
-        }),
-        this.databaseService.package.count({ where }),
-      ]);
+    // Build orderBy
+    const orderBy: Prisma.PackageOrderByWithRelationInput = {
+      [sortBy]: sortOrder,
+    };
 
-      return {
-        data: packages,
-        pagination: {
-          page,
-          limit,
-          total,
-          totalPages: Math.ceil(total / limit),
-          hasNext: page < Math.ceil(total / limit),
-          hasPrevious: page > 1,
-        },
-      };
-    }
+    // Get total count for pagination
+    const total = await this.databaseService.package.count({ where });
 
-    // Return all without pagination
-    return this.databaseService.package.findMany({
+    // Get paginated data
+    const packages = await this.databaseService.package.findMany({
       where,
       include,
-      orderBy: { [sortBy]: sortOrder },
+      orderBy,
+      skip: PaginationHelper.getSkip(page, limit),
+      take: limit,
     });
+
+    return PaginationHelper.createPaginatedResponse(
+      packages,
+      page,
+      limit,
+      total,
+    );
   }
 
   async findOne(id: string) {
@@ -215,9 +210,101 @@ export class PackagesService {
     });
   }
 
+  /**
+   * Get all soft-deleted packages with pagination and filtering
+   */
+  async findDeleted(params?: QueryPackageDto) {
+    const paginationParams = PaginationHelper.mergeWithDefaults(params || {});
+    const {
+      page,
+      limit,
+      search,
+      sortBy = 'deletedAt',
+      sortOrder,
+    } = paginationParams;
+
+    const {
+      isActive,
+      minPrice,
+      maxPrice,
+      includeServices = false,
+    } = params || {};
+
+    // Build where clause for search and filters
+    const where: Prisma.PackageWhereInput = {};
+
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    if (isActive !== undefined) {
+      where.isActive = isActive;
+    }
+
+    if (minPrice !== undefined || maxPrice !== undefined) {
+      where.price = {};
+      if (minPrice !== undefined) {
+        where.price.gte = minPrice;
+      }
+      if (maxPrice !== undefined) {
+        where.price.lte = maxPrice;
+      }
+    }
+
+    // Only include soft-deleted records
+    where.deletedAt = { not: null };
+
+    // Build include clause
+    const include = includeServices
+      ? {
+          services: {
+            include: {
+              service: true,
+            },
+          },
+        }
+      : undefined;
+
+    // Build orderBy
+    const orderBy: Prisma.PackageOrderByWithRelationInput = {
+      [sortBy]: sortOrder,
+    };
+
+    // Get total count for pagination
+    const total = await this.databaseService.package.count({ where });
+
+    // Get paginated data
+    const packages = await this.databaseService.package.findMany({
+      where,
+      include,
+      orderBy,
+      skip: PaginationHelper.getSkip(page, limit),
+      take: limit,
+    });
+
+    return PaginationHelper.createPaginatedResponse(
+      packages,
+      page,
+      limit,
+      total,
+    );
+  }
+
+  /**
+   * Permanently delete a package
+   */
   async hardDelete(id: string) {
-    // First check if package exists
-    await this.findOne(id);
+    // First check if soft-deleted package exists
+    const packageItem = await this.databaseService.package.findFirst({
+      where: { id, deletedAt: { not: null } },
+    });
+
+    if (!packageItem) {
+      throw new NotFoundException(`Package with ID "${id}" not found`);
+    }
 
     return this.databaseService.package.delete({
       where: { id },
