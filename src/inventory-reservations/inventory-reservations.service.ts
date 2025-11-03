@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { CreateInventoryReservationDto } from './dto/create-inventory-reservation.dto';
 import { UpdateInventoryReservationDto } from './dto/update-inventory-reservation.dto';
 import { DatabaseService } from '../database/database.service';
@@ -46,7 +46,7 @@ export class InventoryReservationsService {
       });
 
     if (!reservation) {
-      throw new Error('Inventory reservation not found');
+      throw new NotFoundException('Inventory reservation not found');
     }
 
     return reservation;

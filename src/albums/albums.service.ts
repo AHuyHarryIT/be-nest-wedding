@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { CreateAlbumDto } from './dto/create-album.dto';
 import { UpdateAlbumDto } from './dto/update-album.dto';
 import { DatabaseService } from '../database/database.service';
@@ -49,7 +49,7 @@ export class AlbumsService {
     });
 
     if (!album) {
-      throw new Error('Album not found');
+      throw new NotFoundException('Album not found');
     }
 
     return album;

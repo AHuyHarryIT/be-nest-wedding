@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
 import { DatabaseService } from '../database/database.service';
@@ -43,7 +43,7 @@ export class PaymentsService {
     });
 
     if (!payment) {
-      throw new Error('Payment not found');
+      throw new NotFoundException('Payment not found');
     }
 
     return payment;

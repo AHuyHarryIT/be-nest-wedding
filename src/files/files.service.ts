@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { CreateFileDto } from './dto/create-file.dto';
 import { UpdateFileDto } from './dto/update-file.dto';
 import { DatabaseService } from '../database/database.service';
@@ -35,7 +35,7 @@ export class FilesService {
     });
 
     if (!file) {
-      throw new Error('File not found');
+      throw new NotFoundException('File not found');
     }
 
     return file;

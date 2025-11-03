@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { CreateBookingSessionDto } from './dto/create-booking-session.dto';
 import { UpdateBookingSessionDto } from './dto/update-booking-session.dto';
 import { DatabaseService } from '../database/database.service';
@@ -43,7 +43,7 @@ export class BookingSessionsService {
     });
 
     if (!session) {
-      throw new Error('Booking session not found');
+      throw new NotFoundException('Booking session not found');
     }
 
     return session;
