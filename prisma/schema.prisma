@@ -9,11 +9,6 @@ generator client {
   output   = "../generated/prisma"
 }
 
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
-
 // Enums
 enum BookingStatus {
   PENDING
@@ -62,16 +57,15 @@ model User {
   refreshToken       String?
   refreshTokenExpiry DateTime?
   // relation
-  roles        UserRole[]
-  bookings     Booking[]
-  sessions     SessionStaff[]
-  files        File[]
-  albums       Album[]
-  orders       Order[]
+  roles              UserRole[]
+  bookings           Booking[]
+  sessions           SessionStaff[]
+  files              File[]
+  albums             Album[]
   // timestamps
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
-  deletedAt    DateTime?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  deletedAt          DateTime?
 }
 
 model Role {
@@ -197,11 +191,11 @@ model Booking {
   package     Package          @relation(fields: [packageId], references: [id], onDelete: Cascade)
   sessions    BookingSession[]
   albums      Album[]
-  orders      Order[]
   // timestamps
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @default(now())
   deletedAt   DateTime?
+  Payment     Payment[]
 
   @@index([customerId, packageId, status, createdAt])
 }
@@ -268,40 +262,33 @@ model InventoryReservation {
   @@index([productId])
 }
 
-model Order {
-  id          String      @id @default(uuid())
-  bookingId   String
-  customerId  String
-  totalAmount Float       @default(0)
-  status      OrderStatus @default(UNPAID)
-
-  // relation
-  booking  Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  customer User      @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  payments Payment[]
-
-  // timestamps
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
 model Payment {
-  id            String        @id @default(uuid())
-  orderId       String
-  amount        Float
-  method        PaymentMethod
-  status        PaymentStatus @default(PENDING)
-  providerTxnId String?
-  paidAt        DateTime      @default(now())
+  id          String  @id @default(uuid())
+  bookingId   String?
+  totalAmount Float   @default(0)
+
+  // deposit payments
+  depositTxnId  String?
+  depositMethod PaymentMethod?
+  depositStatus PaymentStatus  @default(PENDING)
+  depositAmount Float          @default(0)
+  depositNote   String?
+  depositAt     DateTime?
+
+  // remaining balance payments
+  remainingTxnId  String?
+  remainingMethod PaymentMethod?
+  remainingStatus PaymentStatus  @default(PENDING)
+  remainingAmount Float          @default(0)
+  remainingNote   String?
+  remainingAt     DateTime?
 
   // relation
-  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  
+  booking Booking? @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
   // timestamps
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
-  @@index([orderId])
 }
 
 // Media and Albums

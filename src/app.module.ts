@@ -11,6 +11,12 @@ import { ProductsModule } from './products/products.module';
 import { ServicesModule } from './services/services.module';
 import { PackagesModule } from './packages/packages.module';
 import { AuthModule } from './auth/auth.module';
+import { BookingsModule } from './bookings/bookings.module';
+import { BookingSessionsModule } from './booking-sessions/booking-sessions.module';
+import { PaymentsModule } from './payments/payments.module';
+import { FilesModule } from './files/files.module';
+import { AlbumsModule } from './albums/albums.module';
+import { InventoryReservationsModule } from './inventory-reservations/inventory-reservations.module';
 
 @Module({
   imports: [
@@ -25,6 +31,12 @@ import { AuthModule } from './auth/auth.module';
     ProductsModule,
     ServicesModule,
     PackagesModule,
+    BookingsModule,
+    BookingSessionsModule,
+    PaymentsModule,
+    FilesModule,
+    AlbumsModule,
+    InventoryReservationsModule,
   ],
   controllers: [AppController],
   providers: [AppService, DatabaseService],
