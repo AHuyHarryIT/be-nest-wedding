@@ -62,6 +62,15 @@ export class ViewProductDto implements Product {
   isActive: boolean = false;
 
   @ApiProperty({
+    description: 'The category ID of the product',
+    example: 'uuid-category-123',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  categoryId: string | null;
+
+  @ApiProperty({
     description: 'The creation timestamp of the product',
     example: '2023-10-01T12:00:00Z',
   })

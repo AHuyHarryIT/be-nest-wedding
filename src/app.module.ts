@@ -8,6 +8,7 @@ import { CommonModule } from './common/common.module';
 import { RolesModule } from './roles/roles.module';
 import { PermissionsModule } from './permissions/permissions.module';
 import { ProductsModule } from './products/products.module';
+import { CategoriesModule } from './categories/categories.module';
 import { ServicesModule } from './services/services.module';
 import { PackagesModule } from './packages/packages.module';
 import { AuthModule } from './auth/auth.module';
@@ -28,6 +29,7 @@ import { InventoryReservationsModule } from './inventory-reservations/inventory-
     AuthModule,
     RolesModule,
     PermissionsModule,
+    CategoriesModule,
     ProductsModule,
     ServicesModule,
     PackagesModule,

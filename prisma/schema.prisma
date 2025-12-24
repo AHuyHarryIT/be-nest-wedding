@@ -9,6 +9,12 @@ generator client {
   output   = "../generated/prisma"
 }
 
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+
 // Enums
 enum BookingStatus {
   PENDING
@@ -120,14 +126,31 @@ model Product {
   price       Float   @default(0)
   stockQty    Int     @default(0)
   isActive    Boolean @default(false)
+  categoryId  String?
 
   // relation
+  category               Category?                @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   inventoryReservations InventoryReservation[]
 
   // timestamps
   createdAt DateTime  @default(now())
   updatedAt DateTime  @default(now())
   deletedAt DateTime?
+}
+
+model Category {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  description String?
+  isActive    Boolean   @default(true)
+
+  // relation
+  products    Product[]
+
+  // timestamps
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @default(now())
+  deletedAt   DateTime?
 }
 
 model Service {

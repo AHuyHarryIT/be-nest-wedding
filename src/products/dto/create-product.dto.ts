@@ -53,6 +53,15 @@ export class CreateProductDto implements Prisma.ProductCreateInput {
   @IsOptional()
   @IsBoolean()
   isActive: boolean = false;
+
+  @ApiProperty({
+    description: 'The category ID of the product',
+    example: 'uuid-category-123',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  categoryId?: string;
 }
 
 export class CreateProductResponseDto implements Product {
@@ -107,6 +116,15 @@ export class CreateProductResponseDto implements Product {
   @IsOptional()
   @IsBoolean()
   isActive: boolean = false;
+
+  @ApiProperty({
+    description: 'The category ID of the product',
+    example: 'uuid-category-123',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  categoryId: string | null;
 
   @ApiProperty({
     description: 'The creation timestamp of the product',

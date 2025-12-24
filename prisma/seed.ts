@@ -35,6 +35,12 @@ async function seedRBAC() {
     { key: 'products:update', description: 'Update products' },
     { key: 'products:delete', description: 'Delete products' },
 
+    // Category permissions
+    { key: 'categories:create', description: 'Create new product categories' },
+    { key: 'categories:read', description: 'View product categories' },
+    { key: 'categories:update', description: 'Update product categories' },
+    { key: 'categories:delete', description: 'Delete product categories' },
+
     // Service permissions
     { key: 'services:create', description: 'Create new services' },
     { key: 'services:read', description: 'View services' },
@@ -145,8 +151,13 @@ async function seedRBAC() {
 
   const managerPermissionKeys = [
     'products:read',
+    'products:create',
+    'products:update',
     'services:read',
     'packages:read',
+    'categories:read',
+    'categories:create',
+    'categories:update',
     'bookings:create',
     'bookings:read',
     'bookings:update',
@@ -186,6 +197,7 @@ async function seedRBAC() {
     'products:read',
     'services:read',
     'packages:read',
+    'categories:read',
     'bookings:read',
     'bookings:create',
     'orders:read',
@@ -220,6 +232,7 @@ async function seedRBAC() {
     'products:read',
     'services:read',
     'packages:read',
+    'categories:read',
   ];
 
   const customerPermissions = await prisma.permission.findMany({
@@ -240,6 +253,51 @@ async function seedRBAC() {
   console.log('  ✓ Created customer role');
 
   return { superAdminRole, adminRole, managerRole, staffRole, customerRole };
+}
+
+/**
+ * Seed super admin user
+ */
+async function seedSuperAdminUser(superAdminRoleId: string) {
+  console.log('👤 Seeding super admin user...');
+
+  // Hash password using bcrypt
+  const saltRounds = process.env.HASH_SALT
+    ? parseInt(process.env.HASH_SALT, 10)
+    : 10;
+  const passwordHash = await bcrypt.hash('123456', saltRounds);
+  const superAdminUser = await prisma.user.upsert({
+    where: { phoneNumber: '0912345678' },
+    update: {},
+    create: {
+      phoneNumber: '0912345678',
+      email: 'superadmin@example.com',
+      firstName: 'Super',
+      lastName: 'Admin',
+      passwordHash: passwordHash,
+    },
+  });
+
+  await prisma.userRole.upsert({
+    where: {
+      userId_roleId: {
+        userId: superAdminUser.id,
+        roleId: superAdminRoleId,
+      },
+    },
+    update: {},
+    create: {
+      userId: superAdminUser.id,
+      roleId: superAdminRoleId,
+    },
+  });
+
+  console.log('  ✓ Created super admin user');
+  console.log('    📧 Email: superadmin@example.com');
+  console.log('    📱 Phone: 0912345678');
+  console.log('    🔑 Password: 123456');
+
+  return superAdminUser;
 }
 
 /**
@@ -297,8 +355,11 @@ async function main() {
     // Seed RBAC (permissions and roles)
     const roles = await seedRBAC();
 
-    // Seed admin user with super-admin role
-    await seedAdminUser(roles.superAdminRole.id);
+    // Seed super admin user with super-admin role
+    await seedSuperAdminUser(roles.superAdminRole.id);
+
+    // Seed admin user with admin role
+    await seedAdminUser(roles.adminRole.id);
 
     console.log('\n✅ Database seeding completed successfully!');
   } catch (error) {

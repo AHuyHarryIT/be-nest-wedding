@@ -73,6 +73,9 @@ export class ProductsService {
       orderBy,
       skip: PaginationHelper.getSkip(page, limit),
       take: limit,
+      include: {
+        category: true,
+      },
     });
 
     return PaginationHelper.createPaginatedResponse(
@@ -91,6 +94,9 @@ export class ProductsService {
       where: {
         id,
         deletedAt: null,
+      },
+      include: {
+        category: true,
       },
     });
 
