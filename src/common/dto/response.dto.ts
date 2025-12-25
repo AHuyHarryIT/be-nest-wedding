@@ -1,4 +1,6 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsNumber, IsOptional, Min } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class ResponseMetaDto {
   @ApiProperty()
@@ -23,6 +25,22 @@ export class ErrorDto {
 
   @ApiProperty({ required: false })
   stack?: string;
+}
+
+export class PaginationRequestDto {
+  @ApiPropertyOptional({ description: 'Page number (1-indexed)', default: 1 })
+  @IsNumber()
+  @Min(1)
+  @IsOptional()
+  @Type(() => Number)
+  page?: number;
+
+  @ApiPropertyOptional({ description: 'Number of items per page', default: 10 })
+  @IsNumber()
+  @Min(1)
+  @IsOptional()
+  @Type(() => Number)
+  limit?: number;
 }
 
 export class PaginationDto {

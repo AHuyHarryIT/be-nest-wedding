@@ -70,6 +70,19 @@ async function seedRBAC() {
     { key: 'payments:read', description: 'View payment records' },
     { key: 'payments:update', description: 'Update payment information' },
     { key: 'payments:refund', description: 'Process refunds' },
+
+    // Album permissions
+    { key: 'albums:create', description: 'Create new albums' },
+    { key: 'albums:read', description: 'View albums' },
+    { key: 'albums:update', description: 'Update albums' },
+    { key: 'albums:delete', description: 'Delete albums' },
+    { key: 'albums:share', description: 'Share albums with others' },
+
+    // File permissions
+    { key: 'files:create', description: 'Upload files' },
+    { key: 'files:read', description: 'View files' },
+    { key: 'files:update', description: 'Update file information' },
+    { key: 'files:delete', description: 'Delete files' },
   ];
 
   // Create permissions

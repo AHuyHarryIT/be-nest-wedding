@@ -14,7 +14,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-
 // Enums
 enum BookingStatus {
   PENDING
@@ -129,7 +128,7 @@ model Product {
   categoryId  String?
 
   // relation
-  category               Category?                @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  category              Category?              @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   inventoryReservations InventoryReservation[]
 
   // timestamps
@@ -139,18 +138,18 @@ model Product {
 }
 
 model Category {
-  id          String    @id @default(uuid())
-  name        String    @unique
+  id          String  @id @default(uuid())
+  name        String  @unique
   description String?
-  isActive    Boolean   @default(true)
+  isActive    Boolean @default(true)
 
   // relation
-  products    Product[]
+  products Product[]
 
   // timestamps
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @default(now())
-  deletedAt   DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @default(now())
+  deletedAt DateTime?
 }
 
 model Service {
@@ -341,7 +340,7 @@ model File {
 
 model Album {
   id          String    @id @default(uuid())
-  ownerUserId String
+  ownerUserId String?
   bookingId   String?
   title       String
   description String?
@@ -351,7 +350,7 @@ model Album {
   coverFileId String?
 
   // relation
-  owner     User        @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  owner     User?       @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
   booking   Booking?    @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   coverFile File?       @relation(fields: [coverFileId], references: [id], onDelete: Cascade)
   files     AlbumFile[]

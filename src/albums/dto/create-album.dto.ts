@@ -9,10 +9,10 @@ import {
 } from 'class-validator';
 
 export class CreateAlbumDto {
-  @ApiProperty({ description: 'Owner user ID' })
+  @ApiPropertyOptional({ description: 'Owner user ID' })
   @IsUUID()
-  @IsNotEmpty()
-  ownerUserId: string;
+  @IsOptional()
+  ownerUserId?: string;
 
   @ApiPropertyOptional({ description: 'Booking ID' })
   @IsUUID()
