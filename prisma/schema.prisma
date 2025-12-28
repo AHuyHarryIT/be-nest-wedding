@@ -317,13 +317,13 @@ model Payment {
 model File {
   id         String          @id @default(uuid())
   uploaderId String
+  name       String
   storageKey String
   storageUrl String
   mimeType   String
   byteSize   Int
   width      Int?
   height     Int?
-  checksum   String?         @unique
   usageType  String
   visibility VisibilityLevel @default(PRIVATE)
 

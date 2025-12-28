@@ -102,7 +102,7 @@ export class OneDriveService {
   async uploadFile(
     fileBuffer: Buffer,
     fileName: string,
-    folderName: string = 'images',
+    folderId: string,
   ): Promise<OneDriveFileResponse> {
     const token = await this.getAccessToken();
     const userId = this.configService.get<string>('AZURE_USER_ID');
@@ -111,10 +111,7 @@ export class OneDriveService {
       throw new BadRequestException('Azure user ID not configured');
     }
 
-    // Get or create the folder
-    const folderId = await this.getOrCreateFolder(token, userId, folderName);
-
-    // Upload file to folder
+    // Upload file to album
     const uploadUrl = `https://graph.microsoft.com/v1.0/users/${userId}/drive/items/${folderId}:/${fileName}:/content`;
 
     try {
@@ -129,13 +126,10 @@ export class OneDriveService {
         },
       );
 
-      // console.log('OneDrive upload response:', response.data);
-
       const uploadedFile = response.data;
 
       return uploadedFile;
     } catch (error) {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
       const errorMessage = error.response?.data?.error?.message;
       const message = (errorMessage as string) || 'Unknown error';
       throw new BadRequestException(
@@ -149,7 +143,7 @@ export class OneDriveService {
     userId: string,
     folderName: string,
   ): Promise<string> {
-    const cacheKey = `${userId}:AppUploads:${folderName}`;
+    const cacheKey = `${userId}:Albums:${folderName}`;
 
     // Return cached folder ID if available
     if (this.folderCache.has(cacheKey)) {
@@ -157,14 +151,13 @@ export class OneDriveService {
     }
 
     try {
-      // Get or create base "AppUploads" folder
+      // Get or create base "Albums" folder
       const baseFolderId = await this.ensureFolderExists(
         token,
         userId,
-        'AppUploads',
+        'Albums',
       );
-
-      // Get or create subfolder within AppUploads
+      // Get or create subfolder within Albums
       const subFolderId = await this.ensureFolderExists(
         token,
         userId,
@@ -432,6 +425,99 @@ export class OneDriveService {
       const errorMessage = error.response?.data?.error?.message;
       const message = (errorMessage as string) || 'Unknown error';
       throw new BadRequestException(`Failed to create share link: ${message}`);
+    }
+  }
+
+  async getFileStream(fileId: string) {
+    const token = await this.getAccessToken();
+    const userId = this.configService.get<string>('AZURE_USER_ID');
+
+    if (!userId) {
+      const error = 'Azure user ID not configured';
+      console.error(`[OneDrive.getFileStream] ${error}`);
+      throw new BadRequestException(error);
+    }
+
+    // Get file content stream from OneDrive
+    const downloadUrl = `https://graph.microsoft.com/v1.0/users/${userId}/drive/items/${fileId}/content`;
+
+    try {
+      const response = await axios.get(downloadUrl, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        responseType: 'stream',
+      });
+
+      return response.data;
+    } catch (error) {
+      console.error(
+        `[OneDrive.getFileStream] Error getting file stream:`,
+        error,
+      );
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment
+      const errorMessage = error.response?.data?.error?.message;
+      const status = error.response?.status;
+      const message =
+        (errorMessage as string) ||
+        (error instanceof Error ? error.message : 'Unknown error');
+      console.error(
+        `[OneDrive.getFileStream] Status: ${status}, Message: ${message}`,
+      );
+      throw new BadRequestException(`Failed to download file: ${message}`);
+    }
+  }
+
+  async getThumbnailUrl(
+    fileId: string,
+    size: 'small' | 'medium' | 'large' = 'medium',
+  ): Promise<string> {
+    const token = await this.getAccessToken();
+    const userId = this.configService.get<string>('AZURE_USER_ID');
+
+    if (!userId) {
+      const error = 'Azure user ID not configured';
+      throw new BadRequestException(error);
+    }
+
+    // Direct thumbnail URL using the specific size endpoint
+    // Format: GET /users/{user-id}/drive/items/{item-id}/thumbnails/{thumb-id}/{size}
+    const thumbnailUrl = `https://graph.microsoft.com/v1.0/users/${userId}/drive/items/${fileId}/thumbnails/0/${size}`;
+
+    try {
+      const response = await axios.get<{ url: string }>(thumbnailUrl, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const url = response.data.url;
+
+      if (!url) {
+        console.warn(
+          `[OneDrive.getThumbnailUrl] No thumbnail URL found for file: ${fileId}`,
+        );
+        return '';
+      }
+
+      return url;
+    } catch (error) {
+      console.error(
+        `[OneDrive.getThumbnailUrl] Error getting ${size} thumbnail:`,
+        error,
+      );
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment
+      const errorMessage = error.response?.data?.error?.message;
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment
+      const status = error.response?.status;
+      const message =
+        (errorMessage as string) ||
+        (error instanceof Error ? error.message : 'Unknown error');
+      console.error(
+        `[OneDrive.getThumbnailUrl] Status: ${status}, Message: ${message}`,
+      );
+      // Return empty string instead of throwing, so grid can still load without thumbnails
+      return '';
     }
   }
 }

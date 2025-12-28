@@ -1,39 +1,49 @@
 import {
-  Controller,
-  Get,
-  Post,
+  BadRequestException,
   Body,
-  Patch,
-  Param,
+  Controller,
   Delete,
+  Get,
+  InternalServerErrorException,
+  Param,
+  Patch,
+  Post,
   Query,
+  Res,
+  UploadedFiles,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FilesInterceptor } from '@nestjs/platform-express';
 import {
-  ApiTags,
-  ApiOperation,
   ApiBearerAuth,
+  ApiConsumes,
   ApiExtraModels,
+  ApiOperation,
+  ApiTags,
 } from '@nestjs/swagger';
-import { AlbumsService } from './albums.service';
-import {
-  CreateAlbumDto,
-  UpdateAlbumDto,
-  AddFilesToAlbumDto,
-  RemoveFilesFromAlbumDto,
-  GenerateShareTokenDto,
-  QueryAlbumDto,
-  ViewAlbumDto,
-} from './dto';
+import type { Response } from 'express';
+import { GetUser, type AuthenticatedUser } from '../auth/get-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { PermissionsGuard } from '../common/guards/permissions.guard';
-import { RequirePermissions } from '../common/decorators/permissions.decorator';
-import { ResponseBuilder } from '../common/utils/response-builder.util';
 import {
   ApiCreatedSuccessResponse,
-  ApiSuccessResponse,
   ApiPaginatedResponse,
+  ApiSuccessResponse,
 } from '../common/decorators/api-response.decorator';
+import { RequirePermissions } from '../common/decorators/permissions.decorator';
+import { PermissionsGuard } from '../common/guards/permissions.guard';
+import { ResponseBuilder } from '../common/utils/response-builder.util';
+import { AlbumsService } from './albums.service';
+import {
+  AddFilesToAlbumDto,
+  CreateAlbumDto,
+  GenerateShareTokenDto,
+  QueryAlbumDto,
+  RemoveFilesFromAlbumDto,
+  UpdateAlbumDto,
+  UploadImageToAlbumDto,
+  ViewAlbumDto,
+} from './dto';
 
 @ApiTags('Albums')
 @ApiExtraModels(
@@ -44,6 +54,7 @@ import {
   GenerateShareTokenDto,
   QueryAlbumDto,
   ViewAlbumDto,
+  UploadImageToAlbumDto,
 )
 @ApiBearerAuth()
 @Controller('albums')
@@ -95,6 +106,45 @@ export class AlbumsController {
   async findByShareToken(@Param('token') token: string) {
     const album = await this.albumsService.findByShareToken(token);
     return ResponseBuilder.success(album, 'Album retrieved successfully');
+  }
+
+  @Get('file/:fileId/download')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Download/stream file from OneDrive' })
+  async downloadFile(@Param('fileId') fileId: string, @Res() res: Response) {
+    try {
+      const fileStream = await this.albumsService.getFileStream(fileId);
+      res.set({
+        'Content-Type': fileStream.mimeType,
+        'Content-Length': fileStream.byteSize,
+        'Content-Disposition': `attachment; filename="${fileStream.name}"`,
+      });
+      fileStream.stream.pipe(res);
+    } catch (error: unknown) {
+      console.error(`[downloadFile] Error downloading file ${fileId}:`, error);
+      const errorMessage =
+        error instanceof Error ? error.message : 'Failed to download file';
+      throw new InternalServerErrorException(errorMessage);
+    }
+  }
+
+  @Get('file/:fileId/thumbnail')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Get thumbnail URL for a file' })
+  @ApiSuccessResponse({ description: 'Thumbnail URL retrieved successfully' })
+  async getThumbnail(@Param('fileId') fileId: string) {
+    try {
+      const thumbnailUrl = await this.albumsService.getThumbnailUrl(fileId);
+      return ResponseBuilder.success(
+        { url: thumbnailUrl },
+        'Thumbnail URL retrieved successfully',
+      );
+    } catch (error: unknown) {
+      console.error(`[getThumbnail] Error getting thumbnail ${fileId}:`, error);
+      const errorMessage =
+        error instanceof Error ? error.message : 'Failed to get thumbnail';
+      throw new InternalServerErrorException(errorMessage);
+    }
   }
 
   @Get(':id')
@@ -160,6 +210,49 @@ export class AlbumsController {
   async revokeShareToken(@Param('id') id: string) {
     const album = await this.albumsService.revokeShareToken(id);
     return ResponseBuilder.success(album, 'Share token revoked successfully');
+  }
+
+  @Post(':id/upload-image')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions('albums:update')
+  @UseInterceptors(FilesInterceptor('files'))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Upload multiple images to album' })
+  @ApiSuccessResponse({ description: 'Images uploaded to album successfully' })
+  async uploadImages(
+    @Param('id') id: string,
+    @UploadedFiles() files: Express.Multer.File[],
+    @Body() uploadImageDto: UploadImageToAlbumDto,
+    @GetUser() user: AuthenticatedUser,
+  ) {
+    if (!files || files.length === 0) {
+      throw new BadRequestException('No files provided');
+    }
+
+    for (const file of files) {
+      if (!file.mimetype || !file.mimetype.startsWith('image/')) {
+        throw new BadRequestException(
+          `File ${file.originalname} must be an image`,
+        );
+      }
+    }
+
+    try {
+      const album = await this.albumsService.uploadImagesToAlbum(
+        id,
+        files,
+        uploadImageDto,
+        user.userId,
+      );
+      return ResponseBuilder.success(
+        album,
+        `${files.length} image(s) uploaded to album successfully`,
+      );
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Failed to upload images';
+      throw new InternalServerErrorException(errorMessage);
+    }
   }
 
   @Patch(':id')

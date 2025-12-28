@@ -5,3 +5,4 @@ export * from './remove-files-from-album.dto';
 export * from './generate-share-token.dto';
 export * from './query-album.dto';
 export * from './view-album.dto';
+export * from './upload-image-to-album.dto';

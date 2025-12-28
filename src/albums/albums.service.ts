@@ -1,20 +1,22 @@
 import {
+  BadRequestException,
   Injectable,
   NotFoundException,
-  BadRequestException,
 } from '@nestjs/common';
-import { Prisma } from 'generated/prisma';
 import * as crypto from 'crypto';
+import { Prisma, VisibilityLevel } from 'generated/prisma';
+import sharp, { Metadata } from 'sharp';
+import { PaginationHelper } from '../common/utils/pagination.helper';
 import { DatabaseService } from '../database/database.service';
 import { OneDriveService } from '../storage/onedrive.service';
-import { PaginationHelper } from '../common/utils/pagination.helper';
 import {
-  CreateAlbumDto,
-  UpdateAlbumDto,
   AddFilesToAlbumDto,
-  RemoveFilesFromAlbumDto,
+  CreateAlbumDto,
   GenerateShareTokenDto,
   QueryAlbumDto,
+  RemoveFilesFromAlbumDto,
+  UpdateAlbumDto,
+  UploadImageToAlbumDto,
 } from './dto';
 
 @Injectable()
@@ -231,8 +233,18 @@ export class AlbumsService {
       );
     }
 
+    // Transform files to have 'image' property instead of 'file'
+    const transformedFiles = album.files.map((albumFile) => ({
+      albumId: albumFile.albumId,
+      fileId: albumFile.fileId,
+      sortOrder: albumFile.sortOrder,
+      caption: albumFile.caption,
+      image: albumFile.file,
+    }));
+
     return {
       ...album,
+      files: transformedFiles,
       oneDriveFolderUrl,
     };
   }
@@ -394,5 +406,196 @@ export class AlbumsService {
     return {
       message: 'Share token revoked successfully',
     };
+  }
+
+  async uploadImageToAlbum(
+    albumId: string,
+    file: Express.Multer.File,
+    uploadImageDto: UploadImageToAlbumDto,
+    userId: string,
+  ) {
+    return this.uploadImagesToAlbum(albumId, [file], uploadImageDto, userId);
+  }
+
+  async uploadImagesToAlbum(
+    albumId: string,
+    files: Express.Multer.File[],
+    uploadImageDto: UploadImageToAlbumDto,
+    userId: string,
+  ) {
+    // Verify album exists
+    try {
+      await this.findOne(albumId);
+    } catch (error) {
+      console.error(`[uploadImagesToAlbum] Album not found: ${albumId}`, error);
+      throw error;
+    }
+
+    // Upload all files
+
+    const uploadedFiles: any[] = [];
+    for (const file of files) {
+      try {
+        // Get image metadata using sharp
+        let metadata: Metadata;
+        try {
+          metadata = await sharp(file.buffer).metadata();
+        } catch (error) {
+          console.error(
+            `[uploadImagesToAlbum] Sharp metadata extraction failed:`,
+            error,
+          );
+          throw new BadRequestException(
+            `Failed to read image metadata for ${file.originalname}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          );
+        }
+
+        //
+        const fileName = file.originalname.substring(
+          0,
+          file.originalname.lastIndexOf('.'),
+        );
+        const fileExt = file.originalname.substring(
+          file.originalname.lastIndexOf('.'),
+        );
+        const timestamp = Date.now();
+        const finalFileName = `${fileName}_${timestamp}${fileExt}`;
+
+        // Upload to OneDrive in the album's folder
+        try {
+          const oneDriveData = await this.oneDriveService.uploadFile(
+            file.buffer,
+            finalFileName,
+            albumId,
+          );
+
+          const storageUrl = oneDriveData.webUrl;
+
+          const fileData: Prisma.FileCreateInput = {
+            name: finalFileName,
+            uploader: { connect: { id: userId } },
+            storageKey: oneDriveData?.id,
+            storageUrl,
+            mimeType: file.mimetype,
+            byteSize: file.size,
+            width: metadata.width,
+            height: metadata.height,
+            usageType: uploadImageDto.usageType || 'album',
+            visibility: uploadImageDto.visibility ?? VisibilityLevel.PRIVATE,
+          };
+
+          const createdFile = await this.databaseService.file.create({
+            data: fileData,
+            include: { uploader: true },
+          });
+
+          // Add file to album
+          await this.databaseService.albumFile.create({
+            data: {
+              albumId: albumId,
+              fileId: createdFile.id,
+              sortOrder: (uploadImageDto.sortOrder ?? 0) + uploadedFiles.length,
+              caption: uploadImageDto.caption,
+            },
+          });
+
+          uploadedFiles.push(createdFile);
+        } catch (error) {
+          console.error(
+            `[uploadImagesToAlbum] Error uploading file ${file.originalname}:`,
+            error,
+          );
+          throw error;
+        }
+      } catch (error) {
+        console.error(
+          `[uploadImagesToAlbum] Error caught for file ${file.originalname}:`,
+          error,
+        );
+
+        if (error instanceof BadRequestException) {
+          console.error(`[uploadImagesToAlbum] Rethrowing BadRequestException`);
+          throw error;
+        }
+
+        const errorMessage =
+          error instanceof Error ? error.message : 'Unknown error';
+        console.error(
+          `[uploadImagesToAlbum] Throwing new Error: ${errorMessage}`,
+        );
+        throw new Error(
+          `Failed to upload image ${file.originalname} to storage service: ${errorMessage}`,
+        );
+      }
+    }
+
+    // Return updated album with files
+    const result = await this.findOne(albumId);
+    return result;
+  }
+
+  async getFileStream(fileId: string) {
+    // Get file info from database
+    const file = await this.databaseService.file.findUnique({
+      where: { id: fileId, deletedAt: null },
+    });
+
+    if (!file) {
+      console.error(`[getFileStream] File not found in database: ${fileId}`);
+      throw new NotFoundException(`File with ID ${fileId} not found`);
+    }
+
+    // Get file stream from OneDrive using storageKey (which is the OneDrive file ID)
+    try {
+      const stream = await this.oneDriveService.getFileStream(file.storageKey);
+
+      return {
+        stream,
+        mimeType: file.mimeType,
+        byteSize: file.byteSize,
+        name: file.name,
+      };
+    } catch (error) {
+      console.error(
+        `[getFileStream] Error getting file stream from OneDrive:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  async getThumbnailUrl(fileId: string): Promise<string> {
+    // Get file info from database
+    const file = await this.databaseService.file.findUnique({
+      where: { id: fileId, deletedAt: null },
+    });
+
+    if (!file) {
+      console.error(`[getThumbnailUrl] File not found in database: ${fileId}`);
+      throw new NotFoundException(`File with ID ${fileId} not found`);
+    }
+
+    console.log(
+      `[getThumbnailUrl] File found: ${file.name}, storageKey: ${file.storageKey}`,
+    );
+
+    // Get thumbnail URL from OneDrive using storageKey (which is the OneDrive file ID)
+    try {
+      console.log(
+        `[getThumbnailUrl] Requesting thumbnail from OneDrive: ${file.storageKey}`,
+      );
+      const thumbnailUrl = await this.oneDriveService.getThumbnailUrl(
+        file.storageKey,
+      );
+      console.log(`[getThumbnailUrl] Got thumbnail URL successfully`);
+      return thumbnailUrl;
+    } catch (error) {
+      console.error(
+        `[getThumbnailUrl] Error getting thumbnail URL from OneDrive:`,
+        error,
+      );
+      // Return empty string so frontend can fallback to original image
+      return '';
+    }
   }
 }
