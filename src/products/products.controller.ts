@@ -8,15 +8,21 @@ import {
   Post,
   Query,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
+  ApiConsumes,
   ApiExtraModels,
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { GetUser, type AuthenticatedUser } from '../auth/get-user.decorator';
+import { ProductImageService } from './product-image.service';
 import {
   ApiConflictResponse,
   ApiCreatedSuccessResponse,
@@ -49,11 +55,16 @@ import { ProductsService } from './products.service';
 )
 @Controller('products')
 export class ProductsController {
-  constructor(private readonly productsService: ProductsService) {}
+  constructor(
+    private readonly productsService: ProductsService,
+    private readonly productImageService: ProductImageService,
+  ) {}
 
   @Post()
   @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @UseInterceptors(FileInterceptor('image'))
   @ApiBearerAuth('JWT-auth')
+  @ApiConsumes('multipart/form-data')
   @RequirePermissions('products:create')
   @ApiOperation({ summary: 'Create a new product' })
   @ApiCreatedSuccessResponse({ description: 'Product created successfully' })
@@ -61,8 +72,36 @@ export class ProductsController {
   @ApiForbiddenResponse()
   @ApiConflictResponse()
   @ApiErrorResponse({ description: 'Error occurred while creating product' })
-  async create(@Body() createProductDto: CreateProductDto) {
+  async create(
+    @Body() createProductDto: CreateProductDto,
+    @UploadedFile() file?: Express.Multer.File,
+    @GetUser() user?: AuthenticatedUser,
+  ) {
+    // Create product first
     const product = await this.productsService.create(createProductDto);
+
+    let imageFileId: string | undefined;
+    // Upload image if provided
+    if (file && product.oneDriveFolderId && user) {
+      try {
+        const uploadResult = await this.productImageService.uploadProductImage(
+          file,
+          product.id,
+          product.oneDriveFolderId,
+          user.userId,
+        );
+        imageFileId = uploadResult.id;
+
+        // Update product with image file ID
+        await this.productsService.update(product.id, {
+          imageFileId,
+        });
+      } catch (error) {
+        console.error('Failed to upload product image:', error);
+        // Don't fail the entire request if image upload fails
+      }
+    }
+
     return ResponseBuilder.created(product, 'Product created successfully');
   }
 
@@ -117,7 +156,9 @@ export class ProductsController {
 
   @Patch(':id')
   @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @UseInterceptors(FileInterceptor('image'))
   @ApiBearerAuth('JWT-auth')
+  @ApiConsumes('multipart/form-data')
   @RequirePermissions('products:update')
   @ApiOperation({ summary: 'Update a product by ID' })
   @ApiUpdatedSuccessResponse({ description: 'Product updated successfully' })
@@ -129,8 +170,53 @@ export class ProductsController {
   async update(
     @Param('id') id: string,
     @Body() updateProductDto: UpdateProductDto,
+    @UploadedFile() file?: Express.Multer.File,
+    @GetUser() user?: AuthenticatedUser,
   ) {
-    const product = await this.productsService.update(id, updateProductDto);
+    // Get existing product to access OneDrive folder
+    const existingProduct = await this.productsService.findOne(id);
+    if (!existingProduct) {
+      throw new Error('Product not found');
+    }
+
+    let imageFileId: string | undefined;
+    let oneDriveFolderId = existingProduct.oneDriveFolderId;
+
+    // Upload image if provided
+    if (file && user) {
+      try {
+        // Create OneDrive folder if it doesn't exist
+        if (!oneDriveFolderId) {
+          const folderName = `${existingProduct.name}_${id}`;
+          oneDriveFolderId = await this.productImageService.createProductFolder(
+            id,
+            folderName,
+          );
+
+          // Update product with OneDrive folder ID
+          await this.productsService.update(id, {
+            oneDriveFolderId,
+          });
+        }
+
+        // Upload the image
+        const uploadResult = await this.productImageService.uploadProductImage(
+          file,
+          id,
+          oneDriveFolderId,
+          user.userId,
+        );
+        imageFileId = uploadResult.id;
+      } catch (error) {
+        console.error('Failed to upload product image:', error);
+        // Don't fail the entire request if image upload fails
+      }
+    }
+
+    const product = await this.productsService.update(id, {
+      ...updateProductDto,
+      ...(imageFileId && { imageFileId }),
+    });
     return ResponseBuilder.updated(product, 'Product updated successfully');
   }
 

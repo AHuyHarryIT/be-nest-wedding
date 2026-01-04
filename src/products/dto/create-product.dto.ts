@@ -62,6 +62,24 @@ export class CreateProductDto implements Prisma.ProductCreateInput {
   @IsOptional()
   @IsString()
   categoryId?: string;
+
+  @ApiProperty({
+    description: 'The product image file ID (stored in File storage)',
+    example: 'uuid-file-123',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  imageFileId?: string;
+
+  @ApiProperty({
+    description: 'The OneDrive folder ID for storing product images',
+    example: 'folder-id-123',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  oneDriveFolderId?: string;
 }
 
 export class CreateProductResponseDto implements Product {
@@ -125,6 +143,24 @@ export class CreateProductResponseDto implements Product {
   @IsOptional()
   @IsString()
   categoryId: string | null;
+
+  @ApiProperty({
+    description: 'The file ID of the product image',
+    example: 'uuid-file-id',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  imageFileId: string | null;
+
+  @ApiProperty({
+    description: 'The OneDrive folder ID for product images',
+    example: 'uuid-folder-id',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  oneDriveFolderId: string | null;
 
   @ApiProperty({
     description: 'The creation timestamp of the product',

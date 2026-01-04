@@ -56,4 +56,11 @@ export class Product {
     required: false,
   })
   deletedAt?: Date;
+
+  @ApiProperty({
+    description: 'The file ID of the product image',
+    example: 'uuid-file-id',
+    required: false,
+  })
+  imageFileId?: string;
 }

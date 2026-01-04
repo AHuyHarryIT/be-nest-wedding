@@ -89,4 +89,22 @@ export class ViewProductDto implements Product {
   })
   @IsOptional()
   deletedAt: Date | null;
+
+  @ApiProperty({
+    description: 'The file ID of the product image',
+    example: 'uuid-file-id',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  imageFileId: string | null;
+
+  @ApiProperty({
+    description: 'The OneDrive folder ID for product images',
+    example: 'uuid-folder-id',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  oneDriveFolderId: string | null;
 }

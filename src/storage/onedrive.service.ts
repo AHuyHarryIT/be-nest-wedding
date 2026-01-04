@@ -138,6 +138,53 @@ export class OneDriveService {
     }
   }
 
+  /**
+   * Create or get a product folder in OneDrive
+   * Creates a "Products" root folder and then a subfolder for the specific product
+   */
+  async getOrCreateProductFolder(folderName: string): Promise<string> {
+    const token = await this.getAccessToken();
+    const userId = this.configService.get<string>('AZURE_USER_ID');
+
+    if (!userId) {
+      throw new BadRequestException('Azure user ID not configured');
+    }
+
+    const cacheKey = `${userId}:Products:${folderName}`;
+
+    // Return cached folder ID if available
+    if (this.folderCache.has(cacheKey)) {
+      return this.folderCache.get(cacheKey)!;
+    }
+
+    try {
+      // Get or create base "Products" folder
+      const baseFolderId = await this.ensureFolderExists(
+        token,
+        userId,
+        'Products',
+      );
+      // Get or create subfolder within Products
+      const subFolderId = await this.ensureFolderExists(
+        token,
+        userId,
+        folderName,
+        baseFolderId,
+      );
+
+      // Cache the result
+      this.folderCache.set(cacheKey, subFolderId);
+
+      return subFolderId;
+    } catch (error) {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
+      const errorMessage = error.response?.data?.error?.message;
+      throw new BadRequestException(
+        `Failed to get/create product folder "${folderName}": ${errorMessage || 'Unknown error'}`,
+      );
+    }
+  }
+
   private async getOrCreateFolder(
     token: string,
     userId: string,

@@ -575,19 +575,19 @@ export class AlbumsService {
       throw new NotFoundException(`File with ID ${fileId} not found`);
     }
 
-    console.log(
-      `[getThumbnailUrl] File found: ${file.name}, storageKey: ${file.storageKey}`,
-    );
+    // console.log(
+    //   `[getThumbnailUrl] File found: ${file.name}, storageKey: ${file.storageKey}`,
+    // );
 
     // Get thumbnail URL from OneDrive using storageKey (which is the OneDrive file ID)
     try {
-      console.log(
-        `[getThumbnailUrl] Requesting thumbnail from OneDrive: ${file.storageKey}`,
-      );
+      // console.log(
+      //   `[getThumbnailUrl] Requesting thumbnail from OneDrive: ${file.storageKey}`,
+      // );
       const thumbnailUrl = await this.oneDriveService.getThumbnailUrl(
         file.storageKey,
       );
-      console.log(`[getThumbnailUrl] Got thumbnail URL successfully`);
+      // console.log(`[getThumbnailUrl] Got thumbnail URL successfully`);
       return thumbnailUrl;
     } catch (error) {
       console.error(

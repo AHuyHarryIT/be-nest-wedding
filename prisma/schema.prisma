@@ -119,13 +119,15 @@ model RolePermission {
 }
 
 model Product {
-  id          String  @id @default(uuid())
-  name        String
-  description String?
-  price       Float   @default(0)
-  stockQty    Int     @default(0)
-  isActive    Boolean @default(false)
-  categoryId  String?
+  id               String  @id @default(uuid())
+  name             String
+  description      String?
+  price            Float   @default(0)
+  stockQty         Int     @default(0)
+  isActive         Boolean @default(false)
+  categoryId       String?
+  imageFileId      String?
+  oneDriveFolderId String?
 
   // relation
   category              Category?              @relation(fields: [categoryId], references: [id], onDelete: SetNull)

@@ -2,19 +2,44 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from 'generated/prisma';
 import { PaginationHelper } from '../common/utils/pagination.helper';
 import { DatabaseService } from '../database/database.service';
+import { ProductImageService } from './product-image.service';
 import { CreateProductDto, QueryProductDto, UpdateProductDto } from './dto';
 
 @Injectable()
 export class ProductsService {
-  constructor(private readonly databaseService: DatabaseService) {}
+  constructor(
+    private readonly databaseService: DatabaseService,
+    private readonly productImageService: ProductImageService,
+  ) {}
 
   /**
-   * Create a new product
+   * Create a new product with OneDrive folder
    */
   async create(createProductDto: CreateProductDto) {
-    return await this.databaseService.product.create({
+    // First create the product to get the ID
+    const product = await this.databaseService.product.create({
       data: createProductDto,
     });
+
+    // Create OneDrive folder for this product
+    try {
+      const folderName = `${product.name}_${product.id}`;
+      const oneDriveFolderId =
+        await this.productImageService.createProductFolder(
+          product.id,
+          folderName,
+        );
+
+      // Update product with OneDrive folder ID
+      return await this.databaseService.product.update({
+        where: { id: product.id },
+        data: { oneDriveFolderId },
+      });
+    } catch (error) {
+      console.error('Failed to create OneDrive folder for product:', error);
+      // Still return the product even if folder creation fails
+      return product;
+    }
   }
 
   /**
@@ -111,7 +136,6 @@ export class ProductsService {
    * Update a product
    */
   async update(id: string, updateProductDto: UpdateProductDto) {
-    // Check if product exists
     await this.findOne(id);
 
     return await this.databaseService.product.update({
