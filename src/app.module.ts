@@ -17,6 +17,7 @@ import { BookingSessionsModule } from './booking-sessions/booking-sessions.modul
 import { PaymentsModule } from './payments/payments.module';
 import { AlbumsModule } from './albums/albums.module';
 import { InventoryReservationsModule } from './inventory-reservations/inventory-reservations.module';
+import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { InventoryReservationsModule } from './inventory-reservations/inventory-
     DatabaseModule,
     CommonModule,
     AuthModule,
+    UsersModule,
     RolesModule,
     PermissionsModule,
     CategoriesModule,
