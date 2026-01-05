@@ -48,12 +48,12 @@ import { ServicesService } from './services.service';
   QueryServiceDto,
 )
 @Controller('services')
+@UseGuards(JwtAuthGuard, PermissionsGuard)
+@ApiBearerAuth('JWT-auth')
 export class ServicesController {
   constructor(private readonly servicesService: ServicesService) {}
 
   @Post()
-  @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @ApiBearerAuth('JWT-auth')
   @RequirePermissions('services:create')
   @ApiOperation({ summary: 'Create a new service' })
   @ApiCreatedSuccessResponse({ description: 'Service created successfully' })
@@ -67,11 +67,13 @@ export class ServicesController {
   }
 
   @Get()
+  @RequirePermissions('services:read')
   @ApiOperation({ summary: 'Get all services with pagination' })
   @ApiPaginatedResponse(ViewServiceDto, {
     description: 'Services retrieved successfully',
   })
-  @ApiErrorResponse({ description: 'Error occurred while retrieving services' })
+  @ApiUnauthorizedResponse()
+  @ApiForbiddenResponse()
   async findAll(
     @Query() query: QueryServiceDto,
     @Query('isActive') isActive?: boolean,
@@ -104,39 +106,7 @@ export class ServicesController {
     );
   }
 
-  @Get(':id')
-  @ApiOperation({ summary: 'Get a service by ID' })
-  @ApiStandardResponse(ViewServiceDto, {
-    description: 'Service retrieved successfully',
-  })
-  @ApiNotFoundResponse({ description: 'Service not found' })
-  async findOne(@Param('id') id: string) {
-    const service = await this.servicesService.findOne(id);
-    return ResponseBuilder.success(service, 'Service retrieved successfully');
-  }
-
-  @Patch(':id')
-  @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @ApiBearerAuth('JWT-auth')
-  @RequirePermissions('services:update')
-  @ApiOperation({ summary: 'Update a service by ID' })
-  @ApiUpdatedSuccessResponse({ description: 'Service updated successfully' })
-  @ApiNotFoundResponse({ description: 'Service not found' })
-  @ApiUnauthorizedResponse()
-  @ApiForbiddenResponse()
-  @ApiConflictResponse()
-  @ApiBadRequestResponse()
-  async update(
-    @Param('id') id: string,
-    @Body() updateServiceDto: UpdateServiceDto,
-  ) {
-    const service = await this.servicesService.update(id, updateServiceDto);
-    return ResponseBuilder.updated(service, 'Service updated successfully');
-  }
-
   @Get('deleted')
-  @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @ApiBearerAuth('JWT-auth')
   @RequirePermissions('services:read:deleted')
   @ApiOperation({ summary: 'Get all deleted services' })
   @ApiPaginatedResponse(ViewServiceDto, {
@@ -174,9 +144,38 @@ export class ServicesController {
     );
   }
 
+  @Get(':id')
+  @RequirePermissions('services:read')
+  @ApiOperation({ summary: 'Get a service by ID' })
+  @ApiStandardResponse(ViewServiceDto, {
+    description: 'Service retrieved successfully',
+  })
+  @ApiNotFoundResponse({ description: 'Service not found' })
+  @ApiUnauthorizedResponse()
+  @ApiForbiddenResponse()
+  async findOne(@Param('id') id: string) {
+    const service = await this.servicesService.findOne(id);
+    return ResponseBuilder.success(service, 'Service retrieved successfully');
+  }
+
+  @Patch(':id')
+  @RequirePermissions('services:update')
+  @ApiOperation({ summary: 'Update a service by ID' })
+  @ApiUpdatedSuccessResponse({ description: 'Service updated successfully' })
+  @ApiNotFoundResponse({ description: 'Service not found' })
+  @ApiUnauthorizedResponse()
+  @ApiForbiddenResponse()
+  @ApiConflictResponse()
+  @ApiBadRequestResponse()
+  async update(
+    @Param('id') id: string,
+    @Body() updateServiceDto: UpdateServiceDto,
+  ) {
+    const service = await this.servicesService.update(id, updateServiceDto);
+    return ResponseBuilder.updated(service, 'Service updated successfully');
+  }
+
   @Delete(':id')
-  @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @ApiBearerAuth('JWT-auth')
   @RequirePermissions('services:delete')
   @ApiOperation({ summary: 'Soft delete a service by ID' })
   @ApiDeletedSuccessResponse({ description: 'Service deleted successfully' })
@@ -189,8 +188,6 @@ export class ServicesController {
   }
 
   @Patch(':id/restore')
-  @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @ApiBearerAuth('JWT-auth')
   @RequirePermissions('services:restore')
   @ApiOperation({ summary: 'Restore a soft-deleted service' })
   @ApiUpdatedSuccessResponse({
@@ -205,8 +202,6 @@ export class ServicesController {
   }
 
   @Delete(':id/hard')
-  @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @ApiBearerAuth('JWT-auth')
   @RequirePermissions('services:hard-delete')
   @ApiOperation({ summary: 'Permanently delete a service by ID' })
   @ApiDeletedSuccessResponse({ description: 'Service permanently deleted' })
