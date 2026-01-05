@@ -7,6 +7,8 @@ import {
   IsNotEmpty,
   MaxLength,
   Min,
+  IsArray,
+  IsUUID,
 } from 'class-validator';
 import { Prisma, Package } from 'generated/prisma';
 import { Transform } from 'class-transformer';
@@ -73,9 +75,21 @@ export class CreatePackageDto implements Prisma.PackageCreateInput {
     if (typeof value === 'string') {
       return value.toLowerCase() === 'true';
     }
-    return Boolean(value);
+    return value === true || value === 1;
   })
   isActive?: boolean;
+
+  @ApiProperty({
+    description: 'Array of service IDs to associate with this package',
+    example: ['service-id-1', 'service-id-2'],
+    required: false,
+    isArray: true,
+    type: 'string',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  serviceIds?: string[];
 }
 
 export class CreatePackageResponseDto implements Package {

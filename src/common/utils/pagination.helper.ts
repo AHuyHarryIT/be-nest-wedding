@@ -17,7 +17,7 @@ export class PaginationHelper {
   /**
    * Calculate skip value for Prisma
    */
-  static getSkip(page: number, limit: number): number {
+  static getSkip(page: number = 1, limit: number = 10): number {
     return (page - 1) * limit;
   }
 

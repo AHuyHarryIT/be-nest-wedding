@@ -75,8 +75,13 @@ export class PackagesController {
     description: 'Paginated list of packages',
   })
   @ApiErrorResponse({ description: 'Error occurred while retrieving packages' })
-  async findAll(@Query() query: QueryPackageDto) {
-    const result = await this.packagesService.findAll(query);
+  async findAll(
+    @Query() query: QueryPackageDto,
+    @Query('includeServices') includeServices: boolean,
+    @Query('isActive') isActive: boolean,
+  ) {
+    const queryParams = { ...query, includeServices, isActive };
+    const result = await this.packagesService.findAll(queryParams);
 
     // Check if result has pagination data
     if (
@@ -154,8 +159,13 @@ export class PackagesController {
   })
   @ApiUnauthorizedResponse()
   @ApiForbiddenResponse()
-  async findDeleted(@Query() query: QueryPackageDto) {
-    const result = await this.packagesService.findDeleted(query);
+  async findDeleted(
+    @Query() query: QueryPackageDto,
+    @Query('includeServices') includeServices: boolean,
+    @Query('isActive') isActive: boolean,
+  ) {
+    const queryParams = { ...query, includeServices, isActive };
+    const result = await this.packagesService.findDeleted(queryParams);
 
     // Check if result has pagination data
     if (

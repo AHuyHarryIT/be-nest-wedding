@@ -42,9 +42,9 @@ export class ServicesService {
     const {
       page,
       limit,
+      search,
       sortBy = 'createdAt',
       sortOrder,
-      search,
     } = PaginationHelper.mergeWithDefaults(params || {});
 
     const { isActive, minPrice, maxPrice } = params || {};
@@ -85,19 +85,14 @@ export class ServicesService {
     const total = await this.databaseService.service.count({ where });
 
     // Get paginated data
-    const services = await this.databaseService.service.findMany({
+    const data = await this.databaseService.service.findMany({
       where,
       orderBy,
       skip: PaginationHelper.getSkip(page, limit),
       take: limit,
     });
 
-    return PaginationHelper.createPaginatedResponse(
-      services,
-      page,
-      limit,
-      total,
-    );
+    return PaginationHelper.createPaginatedResponse(data, page, limit, total);
   }
 
   async findOne(id: string) {
@@ -221,10 +216,15 @@ export class ServicesService {
    * Get all soft-deleted services with pagination and filtering
    */
   async findDeleted(params?: QueryServiceDto) {
-    const paginationParams = PaginationHelper.mergeWithDefaults(params || {});
-    const { page, limit, sortBy = 'deletedAt', sortOrder } = paginationParams;
+    const {
+      page,
+      limit,
+      search,
+      sortBy = 'deletedAt',
+      sortOrder,
+    } = PaginationHelper.mergeWithDefaults(params || {});
 
-    const { isActive, minPrice, maxPrice, search } = params || {};
+    const { isActive, minPrice, maxPrice } = params || {};
 
     // Build where clause for search and filters
     const where: Prisma.ServiceWhereInput = {};
@@ -262,19 +262,14 @@ export class ServicesService {
     const total = await this.databaseService.service.count({ where });
 
     // Get paginated data
-    const services = await this.databaseService.service.findMany({
+    const data = await this.databaseService.service.findMany({
       where,
       orderBy,
       skip: PaginationHelper.getSkip(page, limit),
       take: limit,
     });
 
-    return PaginationHelper.createPaginatedResponse(
-      services,
-      page,
-      limit,
-      total,
-    );
+    return PaginationHelper.createPaginatedResponse(data, page, limit, total);
   }
 
   /**

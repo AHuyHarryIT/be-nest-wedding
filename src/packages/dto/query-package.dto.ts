@@ -39,5 +39,5 @@ export class QueryPackageDto extends PaginationQueryDto {
   })
   @IsOptional()
   @IsBoolean()
-  includeServices?: boolean;
+  includeServices: boolean;
 }

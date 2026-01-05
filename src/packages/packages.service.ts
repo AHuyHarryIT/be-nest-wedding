@@ -31,11 +31,23 @@ export class PackagesService {
       slug,
       description: createPackageDto.description || null,
       price: createPackageDto.price || 0,
-      isActive: createPackageDto.isActive || false,
+      isActive: createPackageDto.isActive ?? false,
     };
+
+    // Handle service associations if provided
+    if (createPackageDto.serviceIds && createPackageDto.serviceIds.length > 0) {
+      data.services = {
+        create: createPackageDto.serviceIds.map((serviceId) => ({
+          serviceId,
+        })),
+      };
+    }
 
     return this.databaseService.package.create({
       data,
+      include: {
+        services: true,
+      },
     });
   }
 
@@ -169,15 +181,18 @@ export class PackagesService {
     // First check if package exists
     await this.findOne(id);
 
-    // Handle slug updates
-    const data: Prisma.PackageUpdateInput = { ...updatePackageDto };
+    // Separate serviceIds from other update data
+    const { serviceIds, ...updateData } = updatePackageDto;
 
-    if (updatePackageDto.slug !== undefined) {
-      if (updatePackageDto.slug) {
+    // Handle slug updates
+    const data: Prisma.PackageUpdateInput = { ...updateData };
+
+    if (updateData.slug !== undefined) {
+      if (updateData.slug) {
         // Check if the new slug conflicts with existing packages (excluding current one)
         const existingPackage = await this.databaseService.package.findFirst({
           where: {
-            slug: updatePackageDto.slug,
+            slug: updateData.slug,
             deletedAt: null,
             NOT: { id },
           },
@@ -185,15 +200,36 @@ export class PackagesService {
 
         if (existingPackage) {
           // Generate a unique slug based on the provided one
-          data.slug = await this.generateUniqueSlug(updatePackageDto.slug);
+          data.slug = await this.generateUniqueSlug(updateData.slug);
         }
       }
       // If slug is empty string or null, allow it
     }
 
+    // Handle service associations if provided
+    if (serviceIds !== undefined) {
+      // Delete existing service associations
+      await this.databaseService.packageService.deleteMany({
+        where: { packageId: id },
+      });
+
+      // Create new associations if serviceIds is not empty
+      if (serviceIds.length > 0) {
+        await this.databaseService.packageService.createMany({
+          data: serviceIds.map((serviceId) => ({
+            packageId: id,
+            serviceId,
+          })),
+        });
+      }
+    }
+
     return this.databaseService.package.update({
       where: { id },
       data,
+      include: {
+        services: true,
+      },
     });
   }
 
