@@ -163,8 +163,9 @@ model Service {
   isActive    Boolean @default(false)
 
   // relation
-  packages PackageService[]
-  sessions SessionService[]
+  packages   PackageService[]
+  sessions   SessionService[]
+  bookings   BookingService[]
 
   // timestamps
   createdAt DateTime  @default(now())
@@ -181,8 +182,8 @@ model Package {
   isActive    Boolean @default(false)
 
   // relation
-  services PackageService[]
-  bookings Booking[]
+  services   PackageService[]
+  bookingPackages BookingPackage[]
 
   // timestamps
   createdAt DateTime  @default(now())
@@ -204,7 +205,6 @@ model PackageService {
 model Booking {
   id          String           @id @default(uuid())
   customerId  String
-  packageId   String
   notes       String?
   status      BookingStatus    @default(PENDING)
   eventDate   DateTime
@@ -212,7 +212,8 @@ model Booking {
   cancelledAt DateTime?
   // relation
   customer    User             @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  package     Package          @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  packages    BookingPackage[]
+  services    BookingService[]
   sessions    BookingSession[]
   albums      Album[]
   // timestamps
@@ -221,7 +222,33 @@ model Booking {
   deletedAt   DateTime?
   Payment     Payment[]
 
-  @@index([customerId, packageId, status, createdAt])
+  @@index([customerId, status, createdAt])
+}
+
+model BookingPackage {
+  bookingId String
+  packageId String
+  price     Float   @default(0)  // Price at time of booking
+  quantity  Int     @default(1)
+  // relation
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  package   Package @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  @@id([bookingId, packageId])
+  @@index([packageId])
+}
+
+model BookingService {
+  bookingId String
+  serviceId String
+  price     Float   @default(0)  // Price at time of booking
+  quantity  Int     @default(1)
+  // relation
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  service   Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@id([bookingId, serviceId])
+  @@index([serviceId])
 }
 
 model BookingSession {

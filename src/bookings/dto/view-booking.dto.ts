@@ -8,9 +8,6 @@ export class ViewBookingDto {
   @ApiProperty()
   customerId: string;
 
-  @ApiProperty()
-  packageId: string;
-
   @ApiPropertyOptional()
   notes?: string;
 

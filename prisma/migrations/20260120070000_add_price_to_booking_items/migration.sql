@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE "BookingPackage" ADD COLUMN "price" DOUBLE PRECISION NOT NULL DEFAULT 0;
+
+-- AlterTable
+ALTER TABLE "BookingService" ADD COLUMN "price" DOUBLE PRECISION NOT NULL DEFAULT 0;

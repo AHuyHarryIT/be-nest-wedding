@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { Prisma, BookingStatus } from 'generated/prisma';
 import { PaginationHelper } from '../common/utils/pagination.helper';
 import { DatabaseService } from '../database/database.service';
@@ -19,28 +23,88 @@ export class BookingsService {
       );
     }
 
-    // Validate package exists
-    const packageItem = await this.databaseService.package.findFirst({
-      where: {
-        id: createBookingDto.packageId,
-        deletedAt: null,
-        isActive: true,
-      },
-    });
-    if (!packageItem) {
-      throw new NotFoundException(
-        `Package with ID ${createBookingDto.packageId} not found`,
+    // Determine which packages/services to use
+    const packageIds = createBookingDto.packageIds || [];
+    const serviceIds = createBookingDto.serviceIds || [];
+
+    // At least one package or service is required
+    if (packageIds.length === 0 && serviceIds.length === 0) {
+      throw new BadRequestException(
+        'At least one package or service must be selected',
       );
+    }
+
+    // Validate packages exist
+    if (packageIds.length > 0) {
+      const packages = await this.databaseService.package.findMany({
+        where: {
+          id: { in: packageIds },
+          deletedAt: null,
+          isActive: true,
+        },
+      });
+
+      if (packages.length !== packageIds.length) {
+        throw new NotFoundException('One or more packages not found');
+      }
+    }
+
+    // Validate services exist
+    if (serviceIds.length > 0) {
+      const services = await this.databaseService.service.findMany({
+        where: {
+          id: { in: serviceIds },
+          deletedAt: null,
+          isActive: true,
+        },
+      });
+
+      if (services.length !== serviceIds.length) {
+        throw new NotFoundException('One or more services not found');
+      }
     }
 
     const data: Prisma.BookingCreateInput = {
       customer: { connect: { id: createBookingDto.customerId } },
-      package: { connect: { id: createBookingDto.packageId } },
       notes: createBookingDto.notes,
       eventDate: new Date(createBookingDto.eventDate),
       totalPrice: createBookingDto.totalPrice ?? 0,
-      status: createBookingDto.status ?? BookingStatus.PENDING,
+      status: BookingStatus.PENDING,
     };
+
+    // Add packages through junction table with their current prices
+    if (packageIds.length > 0) {
+      const packages = await this.databaseService.package.findMany({
+        where: { id: { in: packageIds } },
+        select: { id: true, price: true },
+      });
+      data.packages = {
+        create: packageIds.map((pkgId) => {
+          const pkg = packages.find((p) => p.id === pkgId);
+          return {
+            packageId: pkgId,
+            price: pkg?.price || 0,
+          };
+        }),
+      };
+    }
+
+    // Add services through junction table with their current prices
+    if (serviceIds.length > 0) {
+      const services = await this.databaseService.service.findMany({
+        where: { id: { in: serviceIds } },
+        select: { id: true, price: true },
+      });
+      data.services = {
+        create: serviceIds.map((svcId) => {
+          const svc = services.find((s) => s.id === svcId);
+          return {
+            serviceId: svcId,
+            price: svc?.price || 0,
+          };
+        }),
+      };
+    }
 
     return this.databaseService.booking.create({
       data,
@@ -54,12 +118,21 @@ export class BookingsService {
             phoneNumber: true,
           },
         },
-        package: {
-          select: {
-            id: true,
-            name: true,
-            description: true,
-            price: true,
+        packages: {
+          include: {
+            package: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+                price: true,
+              },
+            },
+          },
+        },
+        services: {
+          include: {
+            service: true,
           },
         },
       },
@@ -78,11 +151,10 @@ export class BookingsService {
 
     const {
       customerId,
-      packageId,
       status,
       includeCustomer,
-      includePackage,
-      includeSessions,
+      includePackages,
+      includeServices,
     } = params || {};
 
     const where: Prisma.BookingWhereInput = { deletedAt: null };
@@ -92,7 +164,6 @@ export class BookingsService {
     }
 
     if (customerId) where.customerId = customerId;
-    if (packageId) where.packageId = packageId;
     if (status) where.status = status;
 
     const include: Prisma.BookingInclude = {};
@@ -106,25 +177,23 @@ export class BookingsService {
           phoneNumber: true,
         },
       };
-    if (includePackage)
-      include.package = {
-        select: {
-          id: true,
-          name: true,
-          description: true,
-          price: true,
+    if (includePackages)
+      include.packages = {
+        include: {
+          package: {
+            select: {
+              id: true,
+              name: true,
+              description: true,
+              price: true,
+            },
+          },
         },
       };
-    if (includeSessions)
-      include.sessions = {
-        select: {
-          id: true,
-          title: true,
-          startsAt: true,
-          endsAt: true,
-          locationName: true,
-          address: true,
-          status: true,
+    if (includeServices)
+      include.services = {
+        include: {
+          service: true,
         },
       };
 
@@ -154,8 +223,23 @@ export class BookingsService {
       where: { id, deletedAt: null },
       include: {
         customer: true,
-        package: true,
-        sessions: true,
+        packages: {
+          include: {
+            package: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+                price: true,
+              },
+            },
+          },
+        },
+        services: {
+          include: {
+            service: true,
+          },
+        },
         albums: true,
       },
     });
@@ -168,7 +252,14 @@ export class BookingsService {
   }
 
   async update(id: string, updateBookingDto: UpdateBookingDto) {
-    await this.findOne(id);
+    const booking = await this.findOne(id);
+
+    // Check if booking status is PENDING - only PENDING bookings can be edited
+    if (booking.status !== BookingStatus.PENDING) {
+      throw new BadRequestException(
+        `Only bookings with PENDING status can be edited. Current status: ${booking.status}`,
+      );
+    }
 
     // Validate customer exists if being updated
     if (updateBookingDto.customerId) {
@@ -182,43 +273,128 @@ export class BookingsService {
       }
     }
 
-    // Validate package exists if being updated
-    if (updateBookingDto.packageId) {
-      const packageItem = await this.databaseService.package.findFirst({
-        where: { id: updateBookingDto.packageId, deletedAt: null },
+    // Validate packages if being updated
+    if (updateBookingDto.packageIds && updateBookingDto.packageIds.length > 0) {
+      const packages = await this.databaseService.package.findMany({
+        where: {
+          id: { in: updateBookingDto.packageIds },
+          deletedAt: null,
+        },
       });
-      if (!packageItem) {
-        throw new NotFoundException(
-          `Package with ID ${updateBookingDto.packageId} not found`,
-        );
+      if (packages.length !== updateBookingDto.packageIds.length) {
+        throw new NotFoundException('One or more packages not found');
+      }
+    }
+
+    // Validate services if being updated
+    if (updateBookingDto.serviceIds && updateBookingDto.serviceIds.length > 0) {
+      const services = await this.databaseService.service.findMany({
+        where: {
+          id: { in: updateBookingDto.serviceIds },
+          deletedAt: null,
+        },
+      });
+      if (services.length !== updateBookingDto.serviceIds.length) {
+        throw new NotFoundException('One or more services not found');
       }
     }
 
     const data: Prisma.BookingUpdateInput = {};
     if (updateBookingDto.customerId)
       data.customer = { connect: { id: updateBookingDto.customerId } };
-    if (updateBookingDto.packageId)
-      data.package = { connect: { id: updateBookingDto.packageId } };
     if (updateBookingDto.notes !== undefined)
       data.notes = updateBookingDto.notes;
     if (updateBookingDto.eventDate)
       data.eventDate = new Date(updateBookingDto.eventDate);
     if (updateBookingDto.totalPrice !== undefined)
       data.totalPrice = updateBookingDto.totalPrice;
-    if (updateBookingDto.status) data.status = updateBookingDto.status;
+
+    // Handle packageIds update
+    if (updateBookingDto.packageIds) {
+      // Delete existing packages
+      await this.databaseService.bookingPackage.deleteMany({
+        where: { bookingId: id },
+      });
+
+      // Create new packages if provided with their current prices
+      if (updateBookingDto.packageIds.length > 0) {
+        const packages = await this.databaseService.package.findMany({
+          where: { id: { in: updateBookingDto.packageIds } },
+          select: { id: true, price: true },
+        });
+        data.packages = {
+          create: updateBookingDto.packageIds.map((pkgId) => {
+            const pkg = packages.find((p) => p.id === pkgId);
+            return {
+              packageId: pkgId,
+              price: pkg?.price || 0,
+            };
+          }),
+        };
+      }
+    }
+
+    // Handle serviceIds update
+    if (updateBookingDto.serviceIds) {
+      // Delete existing services
+      await this.databaseService.bookingService.deleteMany({
+        where: { bookingId: id },
+      });
+
+      // Create new services if provided with their current prices
+      if (updateBookingDto.serviceIds.length > 0) {
+        const services = await this.databaseService.service.findMany({
+          where: { id: { in: updateBookingDto.serviceIds } },
+          select: { id: true, price: true },
+        });
+        data.services = {
+          create: updateBookingDto.serviceIds.map((svcId) => {
+            const svc = services.find((s) => s.id === svcId);
+            return {
+              serviceId: svcId,
+              price: svc?.price || 0,
+            };
+          }),
+        };
+      }
+    }
 
     return this.databaseService.booking.update({
       where: { id },
       data,
       include: {
         customer: true,
-        package: true,
+        packages: {
+          include: {
+            package: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+                price: true,
+              },
+            },
+          },
+        },
+        services: {
+          include: {
+            service: true,
+          },
+        },
       },
     });
   }
 
   async remove(id: string) {
-    await this.findOne(id);
+    const booking = await this.findOne(id);
+
+    // Check if booking status is PENDING - only PENDING bookings can be deleted
+    if (booking.status !== BookingStatus.PENDING) {
+      throw new BadRequestException(
+        `Only bookings with PENDING status can be deleted. Current status: ${booking.status}`,
+      );
+    }
+
     return this.databaseService.booking.update({
       where: { id },
       data: { deletedAt: new Date() },

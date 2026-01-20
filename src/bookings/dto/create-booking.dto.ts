@@ -1,8 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { BookingStatus } from 'generated/prisma';
 import {
+  IsArray,
   IsDateString,
-  IsEnum,
   IsNotEmpty,
   IsNumber,
   IsOptional,
@@ -16,10 +15,25 @@ export class CreateBookingDto {
   @IsNotEmpty()
   customerId: string;
 
-  @ApiProperty({ description: 'Package ID' })
-  @IsUUID()
-  @IsNotEmpty()
-  packageId: string;
+  @ApiPropertyOptional({
+    description: 'List of package IDs',
+    type: [String],
+    example: ['uuid-1', 'uuid-2'],
+  })
+  @IsArray()
+  @IsUUID('all', { each: true })
+  @IsOptional()
+  packageIds?: string[];
+
+  @ApiPropertyOptional({
+    description: 'List of service IDs',
+    type: [String],
+    example: ['uuid-1', 'uuid-2'],
+  })
+  @IsArray()
+  @IsUUID('all', { each: true })
+  @IsOptional()
+  serviceIds?: string[];
 
   @ApiPropertyOptional({ description: 'Booking notes' })
   @IsString()
@@ -35,13 +49,4 @@ export class CreateBookingDto {
   @IsNumber()
   @IsOptional()
   totalPrice?: number;
-
-  @ApiPropertyOptional({
-    description: 'Booking status',
-    enum: BookingStatus,
-    default: BookingStatus.PENDING,
-  })
-  @IsEnum(BookingStatus)
-  @IsOptional()
-  status?: BookingStatus;
 }

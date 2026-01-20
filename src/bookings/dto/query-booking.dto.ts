@@ -10,11 +10,6 @@ export class QueryBookingDto extends PaginationQueryDto {
   @IsOptional()
   customerId?: string;
 
-  @ApiPropertyOptional({ description: 'Filter by package ID' })
-  @IsUUID()
-  @IsOptional()
-  packageId?: string;
-
   @ApiPropertyOptional({
     description: 'Filter by booking status',
     enum: BookingStatus,
@@ -42,11 +37,20 @@ export class QueryBookingDto extends PaginationQueryDto {
   includePackage?: boolean;
 
   @ApiPropertyOptional({
-    description: 'Include sessions',
+    description: 'Include packages and services details',
     default: false,
   })
   @IsBoolean()
   @IsOptional()
   @Type(() => Boolean)
-  includeSessions?: boolean;
+  includePackages?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Include services',
+    default: false,
+  })
+  @IsBoolean()
+  @IsOptional()
+  @Type(() => Boolean)
+  includeServices?: boolean;
 }
