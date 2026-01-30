@@ -9,6 +9,7 @@ import {
 import { Request, Response } from 'express';
 import { AppException } from '../exceptions/app.exception';
 import { ErrorResponseDto } from '../exceptions/error-response.dto';
+import type { ClassValidatorError, GenericRecord } from '../types';
 
 /**
  * Global exception filter for handling all exceptions
@@ -40,24 +41,26 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     let statusCode = HttpStatus.INTERNAL_SERVER_ERROR;
     let code = 'INTERNAL_ERROR';
     let message = 'An unexpected error occurred';
-    let details: any = undefined;
-    let errors: any = undefined;
+    let details: GenericRecord<unknown> | undefined;
+    let errors: string[] | undefined;
 
     if (exception instanceof AppException) {
       // Custom application exceptions
-      const response = exception.getResponse() as any;
+      const response = exception.getResponse() as Record<string, unknown>;
       statusCode = exception.getStatus();
-      code = response.code || 'INTERNAL_ERROR';
-      message = response.message || message;
-      details = response.details;
-      errors = response.errors;
+      code = (response.code as string) || 'INTERNAL_ERROR';
+      message = (response.message as string) || message;
+      details = response.details as GenericRecord<unknown>;
     } else if (exception instanceof HttpException) {
       // Built-in NestJS HTTP exceptions
       statusCode = exception.getStatus();
-      const response = exception.getResponse() as any;
+      const response = exception.getResponse() as
+        | Record<string, unknown>
+        | string;
 
       if (typeof response === 'object') {
-        message = response.message || response.error || message;
+        message =
+          (response.message as string) || (response.error as string) || message;
         code = this.mapHttpStatusToCode(statusCode);
 
         // Handle validation errors from class-validator
@@ -66,7 +69,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
           Array.isArray(response.message)
         ) {
           const validationErrors = this.formatValidationErrors(
-            response.message,
+            response.message as ClassValidatorError[],
           );
           errors = validationErrors;
           message = 'Validation failed';
@@ -111,20 +114,23 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     return statusMap[statusCode] || 'INTERNAL_ERROR';
   }
 
-  private formatValidationErrors(errors: any[]): any[] {
+  private formatValidationErrors(errors: ClassValidatorError[]): string[] {
     if (!Array.isArray(errors)) {
       return [];
     }
 
     return errors
-      .map((error: any) => {
+      .map((error: ClassValidatorError | string) => {
         if (typeof error === 'string') {
           return error;
         }
         if (error.constraints) {
           return Object.values(error.constraints).join(', ');
         }
-        return error.message || error;
+        if (typeof error === 'object' && error !== null && 'message' in error) {
+          return (error as GenericRecord<unknown>).message as string;
+        }
+        return 'Unknown validation error';
       })
       .filter(Boolean);
   }

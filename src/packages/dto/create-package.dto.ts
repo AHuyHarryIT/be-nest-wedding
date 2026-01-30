@@ -42,7 +42,9 @@ export class CreatePackageDto {
   })
   @IsOptional()
   @IsString({ message: 'Package description must be a string' })
-  @MaxLength(1000, { message: 'Package description cannot exceed 1000 characters' })
+  @MaxLength(1000, {
+    message: 'Package description cannot exceed 1000 characters',
+  })
   description?: string;
 
   @ApiPropertyOptional({

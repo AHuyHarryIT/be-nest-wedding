@@ -39,7 +39,9 @@ export class RegisterDto {
     example: '+84981234567',
     format: 'phone',
   })
-  @IsPhoneNumber('VN', { message: 'Phone number must be a valid Vietnamese phone number' })
+  @IsPhoneNumber('VN', {
+    message: 'Phone number must be a valid Vietnamese phone number',
+  })
   @IsNotEmpty({ message: 'Phone number is required' })
   phoneNumber: string;
 

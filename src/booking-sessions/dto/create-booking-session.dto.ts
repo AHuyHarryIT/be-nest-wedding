@@ -55,7 +55,10 @@ export class CreateBookingSessionDto {
     example: '2024-12-31T10:00:00Z',
     format: 'date-time',
   })
-  @IsDateString({}, { message: 'Start time must be a valid ISO 8601 date string' })
+  @IsDateString(
+    {},
+    { message: 'Start time must be a valid ISO 8601 date string' },
+  )
   @IsNotEmpty({ message: 'Start time is required' })
   startsAt: string;
 
@@ -64,7 +67,10 @@ export class CreateBookingSessionDto {
     example: '2024-12-31T18:00:00Z',
     format: 'date-time',
   })
-  @IsDateString({}, { message: 'End time must be a valid ISO 8601 date string' })
+  @IsDateString(
+    {},
+    { message: 'End time must be a valid ISO 8601 date string' },
+  )
   @IsNotEmpty({ message: 'End time is required' })
   endsAt: string;
 

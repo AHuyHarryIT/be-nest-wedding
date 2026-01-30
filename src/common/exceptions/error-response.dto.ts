@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import type { GenericRecord } from '../types';
 
 /**
  * Validation error details for a single field
@@ -27,7 +28,7 @@ export class FieldErrorDto {
     example: 'invalid-email',
     required: false,
   })
-  value?: any;
+  value?: unknown;
 }
 
 /**
@@ -64,14 +65,14 @@ export class ErrorResponseDto {
     example: null,
     required: false,
   })
-  details?: any;
+  details?: GenericRecord<unknown>;
 
   @ApiProperty({
     description: 'Validation field errors (if validation error)',
     type: [FieldErrorDto],
     required: false,
   })
-  errors?: FieldErrorDto[];
+  errors?: FieldErrorDto[] | string[];
 
   @ApiProperty({
     description: 'Timestamp of error occurrence',

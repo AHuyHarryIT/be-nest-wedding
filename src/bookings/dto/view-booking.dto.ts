@@ -1,6 +1,13 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { BookingStatus } from 'generated/prisma';
-import { IsUUID, IsString, IsEnum, IsNumber, IsDate, IsOptional } from 'class-validator';
+import {
+  IsUUID,
+  IsString,
+  IsEnum,
+  IsNumber,
+  IsDate,
+  IsOptional,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class ViewBookingOrderDto {

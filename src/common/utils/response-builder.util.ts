@@ -2,6 +2,7 @@ import {
   ApiResponse,
   PaginatedResponse,
 } from '../interfaces/api-response.interface';
+import type { GenericRecord } from '../types';
 
 export class ResponseBuilder {
   private static generateMeta() {
@@ -82,7 +83,7 @@ export class ResponseBuilder {
   static error(
     message: string,
     code: string,
-    details?: any,
+    details?: GenericRecord<unknown>,
   ): ApiResponse<null> {
     return {
       success: false,
@@ -90,7 +91,6 @@ export class ResponseBuilder {
       data: null,
       error: {
         code,
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         details,
       },
       meta: this.generateMeta(),

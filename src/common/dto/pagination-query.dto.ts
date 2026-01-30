@@ -1,6 +1,13 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
-import { IsOptional, IsPositive, Min, Max, IsString, IsEnum } from 'class-validator';
+import {
+  IsOptional,
+  IsPositive,
+  Min,
+  Max,
+  IsString,
+  IsEnum,
+} from 'class-validator';
 
 export class PaginationQueryDto {
   @ApiPropertyOptional({
@@ -55,6 +62,8 @@ export class PaginationQueryDto {
     example: 'desc',
   })
   @IsOptional()
-  @IsEnum(['asc', 'desc'], { message: 'Sort order must be either "asc" or "desc"' })
+  @IsEnum(['asc', 'desc'], {
+    message: 'Sort order must be either "asc" or "desc"',
+  })
   sortOrder?: 'asc' | 'desc' = 'desc';
 }

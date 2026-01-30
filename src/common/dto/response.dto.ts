@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsNumber, IsOptional, Min } from 'class-validator';
 import { Type } from 'class-transformer';
+import type { GenericRecord } from '../types';
 
 export class ResponseMetaDto {
   @ApiProperty()
@@ -21,33 +22,39 @@ export class ErrorDto {
   message: string;
 
   @ApiProperty({ required: false })
-  details?: any;
+  details?: GenericRecord<unknown>;
 
   @ApiProperty({ required: false })
   stack?: string;
 }
 
 export class PaginationRequestDto {
-  @ApiPropertyOptional({ 
-    description: 'Page number (1-indexed)', 
+  @ApiPropertyOptional({
+    description: 'Page number (1-indexed)',
     default: 1,
     example: 1,
     minimum: 1,
   })
-  @IsNumber({ allowInfinity: false, allowNaN: false }, { message: 'Page must be a valid number' })
+  @IsNumber(
+    { allowInfinity: false, allowNaN: false },
+    { message: 'Page must be a valid number' },
+  )
   @Min(1, { message: 'Page must be at least 1' })
   @IsOptional()
   @Type(() => Number)
   page?: number;
 
-  @ApiPropertyOptional({ 
-    description: 'Number of items per page', 
+  @ApiPropertyOptional({
+    description: 'Number of items per page',
     default: 10,
     example: 10,
     minimum: 1,
     maximum: 100,
   })
-  @IsNumber({ allowInfinity: false, allowNaN: false }, { message: 'Limit must be a valid number' })
+  @IsNumber(
+    { allowInfinity: false, allowNaN: false },
+    { message: 'Limit must be a valid number' },
+  )
   @Min(1, { message: 'Limit must be at least 1' })
   @IsOptional()
   @Type(() => Number)

@@ -5,7 +5,7 @@ import { Type } from 'class-transformer';
 import { IsBoolean, IsEnum, IsOptional, IsUUID } from 'class-validator';
 
 export class QueryBookingDto extends PaginationQueryDto {
-  @ApiPropertyOptional({ 
+  @ApiPropertyOptional({
     description: 'Filter by customer ID (UUID format)',
     example: 'uuid-customer-1',
     format: 'uuid',

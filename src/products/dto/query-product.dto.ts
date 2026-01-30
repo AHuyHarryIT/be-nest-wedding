@@ -17,7 +17,10 @@ export class QueryProductDto extends PaginationQueryDto {
     minimum: 0,
   })
   @IsOptional()
-  @IsNumber({ allowInfinity: false, allowNaN: false }, { message: 'Minimum stock must be a valid number' })
+  @IsNumber(
+    { allowInfinity: false, allowNaN: false },
+    { message: 'Minimum stock must be a valid number' },
+  )
   @Min(0, { message: 'Minimum stock cannot be negative' })
   minStock?: number;
 
@@ -27,7 +30,10 @@ export class QueryProductDto extends PaginationQueryDto {
     minimum: 0,
   })
   @IsOptional()
-  @IsNumber({ allowInfinity: false, allowNaN: false }, { message: 'Maximum stock must be a valid number' })
+  @IsNumber(
+    { allowInfinity: false, allowNaN: false },
+    { message: 'Maximum stock must be a valid number' },
+  )
   @Min(0, { message: 'Maximum stock cannot be negative' })
   maxStock?: number;
 }

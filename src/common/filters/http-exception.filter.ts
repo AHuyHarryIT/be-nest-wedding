@@ -9,6 +9,7 @@ import {
 // import { ConfigService } from '@nestjs/config';
 import { Request, Response } from 'express';
 import { ErrorResponse } from '../interfaces/api-response.interface';
+import type { GenericRecord } from '../types';
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
@@ -45,7 +46,9 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const status = this.getHttpStatus(exception);
 
     if (exception instanceof HttpException) {
-      const response = exception.getResponse();
+      const response = exception.getResponse() as
+        | Record<string, unknown>
+        | string;
 
       return {
         success: false,
@@ -53,7 +56,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
         error: {
           code: this.getErrorCode(status),
           message: this.extractErrorMessage(response, exception),
-          details: typeof response === 'object' ? response : undefined,
+          details:
+            typeof response === 'object'
+              ? (response as GenericRecord<unknown>)
+              : undefined,
         },
         meta: {
           timestamp: new Date().toISOString(),

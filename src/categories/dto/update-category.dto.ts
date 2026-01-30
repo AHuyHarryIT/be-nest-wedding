@@ -19,7 +19,9 @@ export class UpdateCategoryDto {
   })
   @IsOptional()
   @IsString({ message: 'Category description must be a string' })
-  @MaxLength(1000, { message: 'Category description cannot exceed 1000 characters' })
+  @MaxLength(1000, {
+    message: 'Category description cannot exceed 1000 characters',
+  })
   description?: string;
 
   @ApiPropertyOptional({

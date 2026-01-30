@@ -1,5 +1,12 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsString, IsNumber, Min, MaxLength } from 'class-validator';
+import {
+  IsEnum,
+  IsOptional,
+  IsString,
+  IsNumber,
+  Min,
+  MaxLength,
+} from 'class-validator';
 import { VisibilityLevel } from 'generated/prisma';
 
 export class UploadImageToAlbumDto {
@@ -18,7 +25,10 @@ export class UploadImageToAlbumDto {
     example: 1,
     minimum: 0,
   })
-  @IsNumber({ allowInfinity: false, allowNaN: false }, { message: 'Sort order must be a valid number' })
+  @IsNumber(
+    { allowInfinity: false, allowNaN: false },
+    { message: 'Sort order must be a valid number' },
+  )
   @IsOptional()
   @Min(0, { message: 'Sort order must be at least 0' })
   sortOrder?: number;
@@ -27,7 +37,9 @@ export class UploadImageToAlbumDto {
     description: 'Image visibility level',
     enum: VisibilityLevel,
   })
-  @IsEnum(VisibilityLevel, { message: 'Visibility level must be a valid enum value' })
+  @IsEnum(VisibilityLevel, {
+    message: 'Visibility level must be a valid enum value',
+  })
   @IsOptional()
   visibility?: VisibilityLevel;
 

@@ -12,6 +12,7 @@ import {
   OrderResponseDto,
   BookingResponseDto,
 } from '../dtos';
+import type { SwaggerOperationSchema, SwaggerResponseSchema } from '../types';
 
 /**
  * Swagger documentation setup
@@ -68,17 +69,70 @@ export function setupSwagger(app: INestApplication): void {
 
   // Add global response schemas for common error scenarios
   Object.values(document.paths || {}).forEach((pathItem) => {
-    Object.values(pathItem || {}).forEach((operation: any) => {
-      if (!operation.responses) return;
+    Object.values(pathItem || {}).forEach(
+      (operation: SwaggerOperationSchema) => {
+        if (!operation.responses) return;
 
-      // Add 400 Bad Request with validation errors if POST/PATCH/PUT
-      if (
-        ['post', 'patch', 'put'].includes(
-          operation.operationId?.split('_')[0]?.toLowerCase(),
-        )
-      ) {
-        operation.responses['400'] = {
-          description: 'Bad Request - Validation failed',
+        // Add 400 Bad Request with validation errors if POST/PATCH/PUT
+        const method =
+          operation.operationId?.split('_')[0]?.toLowerCase() || '';
+        if (['post', 'patch', 'put'].includes(method)) {
+          operation.responses['400'] = {
+            description: 'Bad Request - Validation failed',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/ErrorResponseDto',
+                },
+              },
+            },
+          };
+        }
+
+        // Add 401 Unauthorized for protected routes
+        if (operation.security) {
+          operation.responses['401'] = {
+            description: 'Unauthorized - Invalid or missing JWT token',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/ErrorResponseDto',
+                },
+              },
+            },
+          };
+
+          operation.responses['403'] = {
+            description: 'Forbidden - Insufficient permissions',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/ErrorResponseDto',
+                },
+              },
+            },
+          };
+        }
+
+        // Add 404 Not Found
+        const method2 =
+          operation.operationId?.split('_')[0]?.toLowerCase() || '';
+        if (['get', 'patch', 'delete'].includes(method2)) {
+          operation.responses['404'] = {
+            description: 'Not Found - Resource does not exist',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/ErrorResponseDto',
+                },
+              },
+            },
+          };
+        }
+
+        // Add 500 Internal Server Error
+        operation.responses['500'] = {
+          description: 'Internal Server Error',
           content: {
             'application/json': {
               schema: {
@@ -87,63 +141,8 @@ export function setupSwagger(app: INestApplication): void {
             },
           },
         };
-      }
-
-      // Add 401 Unauthorized for protected routes
-      if (operation.security) {
-        operation.responses['401'] = {
-          description: 'Unauthorized - Invalid or missing JWT token',
-          content: {
-            'application/json': {
-              schema: {
-                $ref: '#/components/schemas/ErrorResponseDto',
-              },
-            },
-          },
-        };
-
-        operation.responses['403'] = {
-          description: 'Forbidden - Insufficient permissions',
-          content: {
-            'application/json': {
-              schema: {
-                $ref: '#/components/schemas/ErrorResponseDto',
-              },
-            },
-          },
-        };
-      }
-
-      // Add 404 Not Found
-      if (
-        ['get', 'patch', 'delete'].includes(
-          operation.operationId?.split('_')[0]?.toLowerCase(),
-        )
-      ) {
-        operation.responses['404'] = {
-          description: 'Not Found - Resource does not exist',
-          content: {
-            'application/json': {
-              schema: {
-                $ref: '#/components/schemas/ErrorResponseDto',
-              },
-            },
-          },
-        };
-      }
-
-      // Add 500 Internal Server Error
-      operation.responses['500'] = {
-        description: 'Internal Server Error',
-        content: {
-          'application/json': {
-            schema: {
-              $ref: '#/components/schemas/ErrorResponseDto',
-            },
-          },
-        },
-      };
-    });
+      },
+    );
   });
 
   SwaggerModule.setup('api/docs', app, document, {
@@ -179,7 +178,10 @@ export const SwaggerResponseSchemas = {
       },
     },
   },
-  successResponse: (description: string, schemaRef?: string) => ({
+  successResponse: (
+    description: string,
+    schemaRef?: string,
+  ): SwaggerResponseSchema => ({
     description,
     content: {
       'application/json': {
@@ -189,7 +191,10 @@ export const SwaggerResponseSchemas = {
       },
     },
   }),
-  paginatedResponse: (schemaRef: string, description: string) => ({
+  paginatedResponse: (
+    schemaRef: string,
+    description: string,
+  ): SwaggerResponseSchema => ({
     description,
     content: {
       'application/json': {

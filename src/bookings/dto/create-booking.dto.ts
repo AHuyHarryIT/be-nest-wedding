@@ -57,7 +57,10 @@ export class CreateBookingDto {
     example: '2024-12-31T10:00:00Z',
     format: 'date-time',
   })
-  @IsDateString({}, { message: 'Event date must be a valid ISO 8601 date string' })
+  @IsDateString(
+    {},
+    { message: 'Event date must be a valid ISO 8601 date string' },
+  )
   @IsNotEmpty({ message: 'Event date is required' })
   eventDate: string;
 
@@ -67,7 +70,10 @@ export class CreateBookingDto {
     default: 0,
     minimum: 0,
   })
-  @IsNumber({ maxDecimalPlaces: 2 }, { message: 'Total price must be a valid number' })
+  @IsNumber(
+    { maxDecimalPlaces: 2 },
+    { message: 'Total price must be a valid number' },
+  )
   @IsOptional()
   @Min(0, { message: 'Total price cannot be negative' })
   totalPrice?: number;

@@ -45,7 +45,9 @@ export class CreateAlbumDto {
   })
   @IsString({ message: 'Album description must be a string' })
   @IsOptional()
-  @MaxLength(1000, { message: 'Album description cannot exceed 1000 characters' })
+  @MaxLength(1000, {
+    message: 'Album description cannot exceed 1000 characters',
+  })
   description?: string;
 
   @ApiPropertyOptional({
@@ -72,7 +74,10 @@ export class CreateAlbumDto {
     example: '2024-12-31T23:59:59Z',
     format: 'date-time',
   })
-  @IsDateString({}, { message: 'Expiration date must be a valid ISO 8601 date string' })
+  @IsDateString(
+    {},
+    { message: 'Expiration date must be a valid ISO 8601 date string' },
+  )
   @IsOptional()
   expiresAt?: string;
 

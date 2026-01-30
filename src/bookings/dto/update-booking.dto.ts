@@ -5,8 +5,8 @@ import { BookingStatus } from 'generated/prisma';
 import { CreateBookingDto } from './create-booking.dto';
 
 export class UpdateBookingDto extends PartialType(CreateBookingDto) {
-  @ApiPropertyOptional({ 
-    enum: BookingStatus, 
+  @ApiPropertyOptional({
+    enum: BookingStatus,
     description: 'Updated booking status',
     example: BookingStatus.CONFIRMED,
   })

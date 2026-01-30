@@ -1,10 +1,12 @@
-export interface ApiResponse<T = any> {
+import type { GenericRecord } from '../types';
+
+export interface ApiResponse<T = GenericRecord<unknown>> {
   success: boolean;
   message: string;
   data?: T;
   error?: {
     code: string;
-    details?: any;
+    details?: GenericRecord<unknown>;
   };
   meta?: {
     timestamp: string;
@@ -13,7 +15,7 @@ export interface ApiResponse<T = any> {
   };
 }
 
-export interface PaginatedResponse<T = any> {
+export interface PaginatedResponse<T = GenericRecord<unknown>> {
   success: boolean;
   message: string;
   data: T[];
@@ -37,7 +39,7 @@ export interface ErrorResponse extends ApiResponse {
   error: {
     code: string;
     message: string;
-    details?: any;
+    details?: GenericRecord<unknown>;
     stack?: string;
   };
 }

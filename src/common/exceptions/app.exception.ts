@@ -1,17 +1,18 @@
 import { HttpException, HttpStatus } from '@nestjs/common';
+import type { GenericRecord } from '../types';
 
 export interface AppExceptionOptions {
   code?: string;
   message: string;
   statusCode?: HttpStatus;
-  details?: any;
+  details?: GenericRecord<unknown>;
   cause?: Error;
 }
 
 export interface AppExceptionResponse {
   code: string;
   message: string;
-  details?: any;
+  details?: GenericRecord<unknown>;
 }
 
 /**
@@ -20,7 +21,7 @@ export interface AppExceptionResponse {
  */
 export class AppException extends HttpException {
   public readonly code: string;
-  public readonly details?: any;
+  public readonly details?: GenericRecord<unknown>;
 
   constructor(options: AppExceptionOptions) {
     const {
@@ -37,7 +38,7 @@ export class AppException extends HttpException {
       ...(details && { details }),
     };
 
-    super(errorResponse, statusCode, { cause: cause as any });
+    super(errorResponse, statusCode, { cause });
 
     this.code = code;
     this.details = details;
@@ -50,7 +51,7 @@ export class AppException extends HttpException {
  * Validation exception for input validation failures
  */
 export class ValidationException extends AppException {
-  constructor(message: string, details?: any) {
+  constructor(message: string, details?: GenericRecord<unknown>) {
     super({
       code: 'VALIDATION_ERROR',
       message,
@@ -64,7 +65,7 @@ export class ValidationException extends AppException {
  * Not found exception for missing resources
  */
 export class ResourceNotFoundException extends AppException {
-  constructor(resource: string, identifier?: any) {
+  constructor(resource: string, identifier?: unknown) {
     super({
       code: 'RESOURCE_NOT_FOUND',
       message: `${resource} not found`,
@@ -78,7 +79,11 @@ export class ResourceNotFoundException extends AppException {
  * Conflict exception for business logic violations
  */
 export class ConflictException extends AppException {
-  constructor(message: string, code = 'CONFLICT', details?: any) {
+  constructor(
+    message: string,
+    code = 'CONFLICT',
+    details?: GenericRecord<unknown>,
+  ) {
     super({
       code,
       message,
@@ -92,7 +97,11 @@ export class ConflictException extends AppException {
  * Forbidden exception for authorization failures
  */
 export class ForbiddenException extends AppException {
-  constructor(message = 'Access denied', code = 'FORBIDDEN', details?: any) {
+  constructor(
+    message = 'Access denied',
+    code = 'FORBIDDEN',
+    details?: GenericRecord<unknown>,
+  ) {
     super({
       code,
       message,
@@ -106,7 +115,11 @@ export class ForbiddenException extends AppException {
  * Unprocessable entity exception for business logic violations
  */
 export class UnprocessableEntityException extends AppException {
-  constructor(message: string, code = 'UNPROCESSABLE_ENTITY', details?: any) {
+  constructor(
+    message: string,
+    code = 'UNPROCESSABLE_ENTITY',
+    details?: GenericRecord<unknown>,
+  ) {
     super({
       code,
       message,

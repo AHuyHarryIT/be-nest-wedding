@@ -1,5 +1,13 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsUUID, IsString, IsNumber, IsBoolean, IsDate, IsOptional, Min } from 'class-validator';
+import {
+  IsUUID,
+  IsString,
+  IsNumber,
+  IsBoolean,
+  IsDate,
+  IsOptional,
+  Min,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class ViewPackageDto {

@@ -1,5 +1,5 @@
 import { Injectable, PipeTransform, ArgumentMetadata } from '@nestjs/common';
-import { plainToInstance } from 'class-transformer';
+import { plainToInstance, ClassConstructor } from 'class-transformer';
 import { validate, ValidationError } from 'class-validator';
 import { ValidationException } from './app.exception';
 import { FieldErrorDto } from './error-response.dto';
@@ -10,15 +10,21 @@ import { FieldErrorDto } from './error-response.dto';
  */
 @Injectable()
 export class GlobalValidationPipe implements PipeTransform {
-  async transform(value: any, metadata: ArgumentMetadata): Promise<any> {
+  async transform(
+    value: unknown,
+    metadata: ArgumentMetadata,
+  ): Promise<unknown> {
     const { metatype } = metadata;
 
     if (!metatype || !this.toValidate(metatype)) {
       return value;
     }
 
-    const object = plainToInstance(metatype, value);
-    const errors = await validate(object, {
+    const object = plainToInstance(
+      metatype as ClassConstructor<unknown>,
+      value as Record<string, unknown>,
+    );
+    const errors = await validate(object as object, {
       skipMissingProperties: false,
       whitelist: true,
       forbidNonWhitelisted: true,
@@ -37,7 +43,10 @@ export class GlobalValidationPipe implements PipeTransform {
   private formatValidationErrors(errors: ValidationError[]): FieldErrorDto[] {
     const fieldErrors: FieldErrorDto[] = [];
 
-    const processError = (error: ValidationError, parentField: string = '') => {
+    const processError = (
+      error: ValidationError,
+      parentField: string = '',
+    ): void => {
       const field = parentField
         ? `${parentField}.${error.property}`
         : error.property;
@@ -54,18 +63,18 @@ export class GlobalValidationPipe implements PipeTransform {
       }
 
       if (error.children && error.children.length > 0) {
-        error.children.forEach((child) => {
+        error.children.forEach((child: ValidationError) => {
           processError(child, field);
         });
       }
     };
 
-    errors.forEach((error) => processError(error));
+    errors.forEach((error: ValidationError) => processError(error));
     return fieldErrors;
   }
 
-  private toValidate(metatype: any): boolean {
-    const types = [String, Boolean, Number, Array, Object];
-    return !types.includes(metatype);
+  private toValidate(metatype: unknown): metatype is object {
+    const types: unknown[] = [String, Boolean, Number, Array, Object];
+    return !(types as object[]).includes(metatype as object);
   }
 }
