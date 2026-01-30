@@ -2,6 +2,7 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ConfidentialClientApplication } from '@azure/msal-node';
 import axios from 'axios';
+import { GenericRecord } from '../common/types';
 
 // OneDrive API Response Types
 interface OneDriveFileResponse {
@@ -129,9 +130,13 @@ export class OneDriveService {
       const uploadedFile = response.data;
 
       return uploadedFile;
-    } catch (error) {
-      const errorMessage = error.response?.data?.error?.message;
-      const message = (errorMessage as string) || 'Unknown error';
+    } catch (error: unknown) {
+      const errorData = error as GenericRecord<unknown>;
+      const errorMessage = (errorData?.response as GenericRecord<unknown>)
+        ?.data as GenericRecord<unknown>;
+      const message =
+        ((errorMessage?.error as GenericRecord<unknown>)?.message as string) ||
+        'Unknown error';
       throw new BadRequestException(
         `Failed to upload file to OneDrive: ${message}`,
       );
@@ -496,18 +501,21 @@ export class OneDriveService {
         responseType: 'stream',
       });
 
-      return response.data;
-    } catch (error) {
+      return response.data as unknown;
+    } catch (error: unknown) {
       console.error(
         `[OneDrive.getFileStream] Error getting file stream:`,
         error,
       );
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment
-      const errorMessage = error.response?.data?.error?.message;
-      const status = error.response?.status;
+      const errorData = error as GenericRecord<unknown>;
+      const errorMessage = (errorData?.response as GenericRecord<unknown>)
+        ?.data as GenericRecord<unknown>;
       const message =
-        (errorMessage as string) ||
+        ((errorMessage?.error as GenericRecord<unknown>)?.message as string) ||
         (error instanceof Error ? error.message : 'Unknown error');
+      const statusValue = (errorData?.response as GenericRecord<unknown>)
+        ?.status;
+      const status = typeof statusValue === 'number' ? statusValue : 'Unknown';
       console.error(
         `[OneDrive.getFileStream] Status: ${status}, Message: ${message}`,
       );

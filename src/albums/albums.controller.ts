@@ -119,7 +119,10 @@ export class AlbumsController {
         'Content-Length': fileStream.byteSize,
         'Content-Disposition': `attachment; filename="${fileStream.name}"`,
       });
-      fileStream.stream.pipe(res);
+      const stream = fileStream.stream;
+      if (typeof stream === 'object' && stream !== null && 'pipe' in stream) {
+        (stream as { pipe: (res: unknown) => void }).pipe(res);
+      }
     } catch (error: unknown) {
       console.error(`[downloadFile] Error downloading file ${fileId}:`, error);
       const errorMessage =

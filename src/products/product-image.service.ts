@@ -30,9 +30,10 @@ export class ProductImageService {
       const folderId =
         await this.oneDriveService.getOrCreateProductFolder(folderName);
       return folderId;
-    } catch (error) {
+    } catch (error: unknown) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
       throw new BadRequestException(
-        `Failed to create product folder: ${error.message}`,
+        `Failed to create product folder: ${errorMsg}`,
       );
     }
   }
@@ -144,10 +145,9 @@ export class ProductImageService {
 
       // Use OneDrive thumbnail endpoint
       return await this.oneDriveService.getThumbnailUrl(file.storageKey);
-    } catch (error) {
-      throw new BadRequestException(
-        `Failed to get thumbnail: ${error.message}`,
-      );
+    } catch (error: unknown) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      throw new BadRequestException(`Failed to get thumbnail: ${errorMsg}`);
     }
   }
 
@@ -168,9 +168,10 @@ export class ProductImageService {
       await this.databaseService.file.delete({
         where: { id: fileId },
       });
-    } catch (error) {
+    } catch (error: unknown) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
       throw new BadRequestException(
-        `Failed to delete product image: ${error.message}`,
+        `Failed to delete product image: ${errorMsg}`,
       );
     }
   }

@@ -136,3 +136,62 @@ export interface PaginationMeta {
   hasNextPage: boolean;
   hasPreviousPage: boolean;
 }
+
+/**
+ * Payment status enum-like type
+ */
+export type PaymentStatus =
+  | 'PENDING'
+  | 'PARTIAL_PAID'
+  | 'SUCCESSFUL'
+  | 'FAILED'
+  | 'CANCELLED'
+  | 'ABANDONED';
+
+/**
+ * Payment statistics type
+ */
+export interface PaymentStatistics {
+  total: number;
+  successful: number;
+  failed: number;
+  pending: number;
+  totalAmount: number | null;
+  successfulAmount: number | null;
+}
+
+/**
+ * Payment with related data type
+ */
+export interface PaymentWithDetails {
+  [key: string]: unknown;
+}
+
+/**
+ * Find payment options with orderBy
+ */
+export interface FindPaymentOptions<T = GenericRecord<unknown>> {
+  skip?: number;
+  take?: number;
+  orderBy?: Record<string, 'asc' | 'desc'>;
+  where?: GenericRecord<unknown>;
+  include?: GenericRecord<boolean | GenericRecord<unknown>>;
+  select?: GenericRecord<boolean>;
+  data?: Partial<T>;
+}
+
+/**
+ * Error response with message property
+ */
+export interface ErrorWithMessage {
+  message?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * User context from decorator
+ */
+export interface UserContext {
+  user?: GenericRecord<unknown>;
+  [key: string]: unknown;
+}

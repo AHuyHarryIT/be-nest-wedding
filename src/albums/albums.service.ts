@@ -9,6 +9,7 @@ import sharp, { Metadata } from 'sharp';
 import { PaginationHelper } from '../common/utils/pagination.helper';
 import { DatabaseService } from '../database/database.service';
 import { OneDriveService } from '../storage/onedrive.service';
+import { GenericRecord } from '../common/types';
 import {
   AddFilesToAlbumDto,
   CreateAlbumDto,
@@ -433,7 +434,7 @@ export class AlbumsService {
 
     // Upload all files
 
-    const uploadedFiles: any[] = [];
+    const uploadedFiles: GenericRecord<unknown>[] = [];
     for (const file of files) {
       try {
         // Get image metadata using sharp
