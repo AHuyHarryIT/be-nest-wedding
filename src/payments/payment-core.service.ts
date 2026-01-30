@@ -14,6 +14,7 @@ import { DatabaseService } from '../database/database.service';
 import { PaymentRepository } from '../common/repositories';
 import { PaymentAttemptService } from './payment-attempt.service';
 import { PaymentGatewayTransactionService } from './payment-gateway-transaction.service';
+import { GenericRecord } from '../common/types';
 
 export interface CreatePaymentDto {
   orderId: string;
@@ -32,6 +33,34 @@ export interface UpdatePaymentDto {
   notes?: string;
 }
 
+/**
+ * Response types for payment service methods
+ */
+export type PaymentDetailsResponse = GenericRecord<unknown>;
+export type PaymentAttemptResponse = GenericRecord<unknown>;
+export type CompletePaymentAttemptResponse = {
+  attempt: GenericRecord<unknown>;
+  payment: GenericRecord<unknown>;
+};
+export type OrderBalanceResponse = {
+  totalPrice: number;
+  totalPaid: number;
+  balanceRemaining: number;
+  isFullyPaid: boolean;
+  isPartiallPaid: boolean;
+};
+
+export interface PaymentTimelineEntry {
+  timestamp: Date;
+  event: string;
+  details: GenericRecord<unknown>;
+}
+
+export type PaymentHistoryResponse = {
+  payment: GenericRecord<unknown>;
+  timeline: PaymentTimelineEntry[];
+};
+
 @Injectable()
 export class PaymentService {
   constructor(
@@ -46,7 +75,7 @@ export class PaymentService {
    * NOTE: For E-WALLET, payment record is created immediately but no attempt is made
    * Attempt is created only when user initiates payment
    */
-  async createPayment(dto: CreatePaymentDto) {
+  async createPayment(dto: CreatePaymentDto): Promise<GenericRecord<unknown>> {
     // Verify order exists
     const order = await this.databaseService.order.findUnique({
       where: { id: dto.orderId },
@@ -62,7 +91,7 @@ export class PaymentService {
       dto.orderId,
     );
 
-    const payment = await this.paymentRepository.create({
+    const payment = (await this.paymentRepository.create({
       order: { connect: { id: dto.orderId } },
       paymentSequence,
       amount: dto.amount,
@@ -74,7 +103,7 @@ export class PaymentService {
         `Payment ${paymentSequence} (${dto.paymentType ?? 'REMAINING'})`,
       dueDate: dto.dueDate,
       notes: dto.notes,
-    });
+    })) as unknown as GenericRecord<unknown>;
 
     return payment;
   }
@@ -89,7 +118,7 @@ export class PaymentService {
     userAgent?: string,
     ipAddress?: string,
     createdBy?: string,
-  ) {
+  ): Promise<PaymentAttemptResponse> {
     // Use repository for better query composition
     const payment = await this.paymentRepository.findByIdWithDetails(paymentId);
 
@@ -133,7 +162,7 @@ export class PaymentService {
     resultCode?: string,
     resultMessage?: string,
     errorReason?: string,
-  ) {
+  ): Promise<CompletePaymentAttemptResponse> {
     const attempt = await this.databaseService.paymentAttempt.findUnique({
       where: { id: attemptId },
       include: { payment: true },
@@ -189,7 +218,10 @@ export class PaymentService {
   /**
    * Retry a failed payment
    */
-  async retryPayment(paymentId: string, maxRetries: number = 3) {
+  async retryPayment(
+    paymentId: string,
+    maxRetries: number = 3,
+  ): Promise<PaymentAttemptResponse> {
     // Use repository to find due for retry
     const payments = await this.paymentRepository.findDueForRetry(maxRetries, {
       take: 1,
@@ -228,25 +260,32 @@ export class PaymentService {
   /**
    * Update payment
    */
-  async updatePayment(paymentId: string, dto: UpdatePaymentDto) {
-    const payment = await this.paymentRepository.findById(paymentId);
+  async updatePayment(
+    paymentId: string,
+    dto: UpdatePaymentDto,
+  ): Promise<GenericRecord<unknown>> {
+    const payment = (await this.paymentRepository.findById(
+      paymentId,
+    )) as unknown as GenericRecord<unknown>;
 
     if (!payment) {
       throw new NotFoundException(`Payment ${paymentId} not found`);
     }
 
-    return this.paymentRepository.update(paymentId, {
+    return (await this.paymentRepository.update(paymentId, {
       status: dto.status,
       description: dto.description,
       dueDate: dto.dueDate,
       notes: dto.notes,
-    });
+    })) as unknown as GenericRecord<unknown>;
   }
 
   /**
    * Get payment with all details
    */
-  async getPaymentDetails(paymentId: string) {
+  async getPaymentDetails(
+    paymentId: string,
+  ): Promise<PaymentDetailsResponse | null> {
     return this.databaseService.payment.findUnique({
       where: { id: paymentId },
       include: {
@@ -267,7 +306,7 @@ export class PaymentService {
   /**
    * Get all payments for order
    */
-  async getOrderPayments(orderId: string) {
+  async getOrderPayments(orderId: string): Promise<GenericRecord<unknown>[]> {
     return this.databaseService.payment.findMany({
       where: { orderId },
       include: {
@@ -281,7 +320,7 @@ export class PaymentService {
   /**
    * Calculate order balance
    */
-  async calculateOrderBalance(orderId: string) {
+  async calculateOrderBalance(orderId: string): Promise<OrderBalanceResponse> {
     const order = await this.databaseService.order.findUnique({
       where: { id: orderId },
       include: {
@@ -312,7 +351,7 @@ export class PaymentService {
   /**
    * Update order status based on payment status
    */
-  async updateOrderStatus(orderId: string) {
+  async updateOrderStatus(orderId: string): Promise<GenericRecord<unknown>> {
     const order = await this.databaseService.order.findUnique({
       where: { id: orderId },
       include: {
@@ -353,7 +392,10 @@ export class PaymentService {
   /**
    * Cancel payment
    */
-  async cancelPayment(paymentId: string, reason?: string) {
+  async cancelPayment(
+    paymentId: string,
+    reason?: string,
+  ): Promise<GenericRecord<unknown>> {
     const payment = await this.databaseService.payment.findUnique({
       where: { id: paymentId },
       include: { attempts: true },
@@ -393,7 +435,7 @@ export class PaymentService {
   /**
    * Get payment history for audit
    */
-  async getPaymentHistory(paymentId: string) {
+  async getPaymentHistory(paymentId: string): Promise<PaymentHistoryResponse> {
     const payment = await this.getPaymentDetails(paymentId);
 
     if (!payment) {
@@ -401,62 +443,63 @@ export class PaymentService {
     }
 
     // Build timeline
-    const timeline: Array<{
-      timestamp: Date;
-      event: string;
-      details: Record<string, any>;
-    }> = [];
+    const timeline: PaymentTimelineEntry[] = [];
 
     // Payment created
+    const paymentData = payment as GenericRecord<unknown>;
     timeline.push({
-      timestamp: payment.createdAt,
+      timestamp: paymentData.createdAt as Date,
       event: 'PAYMENT_CREATED',
       details: {
-        amount: payment.amount,
-        method: payment.method,
-        type: payment.paymentType,
+        amount: paymentData.amount,
+        method: paymentData.method,
+        type: paymentData.paymentType,
       },
     });
 
     // Attempts
-    for (const attempt of payment.attempts) {
+    const attempts = (paymentData.attempts as GenericRecord<unknown>[]) || [];
+    for (const attempt of attempts) {
+      const attemptData = attempt;
       timeline.push({
-        timestamp: attempt.requestedAt,
+        timestamp: attemptData.requestedAt as Date,
         event: 'ATTEMPT_INITIATED',
         details: {
-          attemptNumber: attempt.attemptNumber,
-          amount: attempt.attemptedAmount,
+          attemptNumber: attemptData.attemptNumber,
+          amount: attemptData.attemptedAmount,
         },
       });
 
-      if (attempt.respondedAt) {
+      if (attemptData.respondedAt) {
         timeline.push({
-          timestamp: attempt.respondedAt,
+          timestamp: attemptData.respondedAt as unknown as Date,
           event: 'ATTEMPT_RESPONDED',
           details: {
-            attemptNumber: attempt.attemptNumber,
-            status: attempt.status,
-            resultCode: attempt.resultCode,
+            attemptNumber: attemptData.attemptNumber,
+            status: attemptData.status,
+            resultCode: attemptData.resultCode,
           },
         });
       }
 
-      if (attempt.gatewayTransaction) {
+      const gatewayTx =
+        attemptData.gatewayTransaction as GenericRecord<unknown>;
+      if (gatewayTx) {
         timeline.push({
-          timestamp: attempt.gatewayTransaction.createdAt,
+          timestamp: gatewayTx.createdAt as Date,
           event: 'GATEWAY_TRANSACTION_RECORDED',
           details: {
-            gateway: attempt.gatewayTransaction.gatewayProvider,
-            transactionId: attempt.gatewayTransaction.gatewayTransactionId,
+            gateway: gatewayTx.gatewayProvider,
+            transactionId: gatewayTx.gatewayTransactionId,
           },
         });
 
-        if (attempt.gatewayTransaction.settledAt) {
+        if (gatewayTx.settledAt) {
           timeline.push({
-            timestamp: attempt.gatewayTransaction.settledAt,
+            timestamp: gatewayTx.settledAt as unknown as Date,
             event: 'GATEWAY_SETTLED',
             details: {
-              gateway: attempt.gatewayTransaction.gatewayProvider,
+              gateway: gatewayTx.gatewayProvider,
             },
           });
         }
@@ -464,7 +507,7 @@ export class PaymentService {
     }
 
     return {
-      payment,
+      payment: paymentData,
       timeline: timeline.sort(
         (a, b) =>
           new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
