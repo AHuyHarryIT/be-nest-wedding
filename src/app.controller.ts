@@ -1,8 +1,8 @@
 import { Controller, Get, UseGuards } from '@nestjs/common';
-import type { GenericRecord } from './common/types';
 import { AppService } from './app.service';
-import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { GetUser } from './auth/get-user.decorator';
+import { JwtAuthGuard } from './auth/jwt-auth.guard';
+import type { UserContext } from './common/types';
 
 @Controller()
 export class AppController {
@@ -15,9 +15,7 @@ export class AppController {
 
   @Get('protected')
   @UseGuards(JwtAuthGuard)
-  getProtected(
-    @GetUser() user: GenericRecord<unknown>,
-  ): GenericRecord<unknown> {
+  getProtected(@GetUser() user: UserContext): UserContext {
     return {
       message: 'This is a protected route',
       user: user,

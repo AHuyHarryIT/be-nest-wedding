@@ -434,7 +434,7 @@ export class AlbumsService {
 
     // Upload all files
 
-    const uploadedFiles: GenericRecord<unknown>[] = [];
+    const uploadedFiles: GenericRecord[] = [];
     for (const file of files) {
       try {
         // Get image metadata using sharp

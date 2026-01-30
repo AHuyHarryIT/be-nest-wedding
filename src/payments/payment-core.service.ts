@@ -103,7 +103,7 @@ export class PaymentService {
         `Payment ${paymentSequence} (${dto.paymentType ?? 'REMAINING'})`,
       dueDate: dto.dueDate,
       notes: dto.notes,
-    })) as unknown as GenericRecord<unknown>;
+    })) as GenericRecord<unknown>;
 
     return payment;
   }
@@ -266,7 +266,7 @@ export class PaymentService {
   ): Promise<GenericRecord<unknown>> {
     const payment = (await this.paymentRepository.findById(
       paymentId,
-    )) as unknown as GenericRecord<unknown>;
+    )) as GenericRecord<unknown>;
 
     if (!payment) {
       throw new NotFoundException(`Payment ${paymentId} not found`);
@@ -277,7 +277,7 @@ export class PaymentService {
       description: dto.description,
       dueDate: dto.dueDate,
       notes: dto.notes,
-    })) as unknown as GenericRecord<unknown>;
+    })) as GenericRecord<unknown>;
   }
 
   /**
