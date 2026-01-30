@@ -32,6 +32,11 @@ import {
 import { GetUser, type AuthenticatedUser } from './get-user.decorator';
 import { JwtAuthGuard } from './jwt-auth.guard';
 
+interface AuthServiceResponse extends AuthResponseDto {
+  accessToken: string;
+  refreshToken: string;
+}
+
 @ApiTags('Authentication')
 @Controller('auth')
 export class AuthController {
@@ -55,14 +60,12 @@ export class AuthController {
     @Body() registerDto: RegisterDto,
     @Res({ passthrough: true }) response: Response,
   ): Promise<AuthResponseDto> {
-    const result = await this.authService.register(registerDto);
+    const result = (await this.authService.register(
+      registerDto,
+    )) as AuthServiceResponse;
 
     // Set cookies
-    this.setCookies(
-      response,
-      (result as any).accessToken,
-      (result as any).refreshToken,
-    );
+    this.setCookies(response, result.accessToken, result.refreshToken);
 
     // Return response without tokens in body
     return {
@@ -86,14 +89,12 @@ export class AuthController {
     @Body() loginDto: LoginDto,
     @Res({ passthrough: true }) response: Response,
   ): Promise<AuthResponseDto> {
-    const result = await this.authService.login(loginDto);
+    const result = (await this.authService.login(
+      loginDto,
+    )) as AuthServiceResponse;
 
     // Set cookies
-    this.setCookies(
-      response,
-      (result as any).accessToken,
-      (result as any).refreshToken,
-    );
+    this.setCookies(response, result.accessToken, result.refreshToken);
 
     // Return response without tokens in body
     return {

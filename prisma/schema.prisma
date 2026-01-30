@@ -39,9 +39,82 @@ enum PaymentMethod {
 
 enum PaymentStatus {
   PENDING
+  PARTIAL_PAID
   SUCCESSFUL
   FAILED
+  CANCELLED
+  ABANDONED
   REFUNDED
+}
+
+enum PaymentType {
+  DEPOSIT
+  REMAINING
+  INSTALLMENT
+  FULL
+  ADJUSTMENT
+}
+
+enum PaymentAttemptStatus {
+  INITIATED
+  IN_PROGRESS
+  SUCCESS
+  FAILED
+  TIMEOUT
+  CANCELLED
+}
+
+enum RefundReason {
+  CUSTOMER_REQUEST
+  OVERPAYMENT
+  CANCELLATION
+  ERROR
+  DUPLICATE
+  FRAUD_SUSPECTED
+  OTHER
+}
+
+enum RefundStatus {
+  INITIATED
+  PROCESSING
+  SUCCESSFUL
+  FAILED
+  REJECTED
+  PENDING_REVERIFICATION
+}
+
+enum RefundAttemptStatus {
+  INITIATED
+  PROCESSING
+  SUCCESS
+  FAILED
+  TIMEOUT
+}
+
+enum PaymentPlanType {
+  ONE_TIME
+  INSTALLMENT_2
+  INSTALLMENT_3
+  INSTALLMENT_6
+  INSTALLMENT_12
+  CUSTOM
+}
+
+enum PaymentPlanStatus {
+  PENDING
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  SUSPENDED
+}
+
+enum PaymentScheduleStatus {
+  PENDING
+  DUE
+  OVERDUE
+  PAID
+  CANCELLED
+  SKIPPED
 }
 
 enum VisibilityLevel {
@@ -163,9 +236,9 @@ model Service {
   isActive    Boolean @default(false)
 
   // relation
-  packages   PackageService[]
-  sessions   SessionService[]
-  bookings   BookingService[]
+  packages PackageService[]
+  sessions SessionService[]
+  bookings BookingService[]
 
   // timestamps
   createdAt DateTime  @default(now())
@@ -182,7 +255,7 @@ model Package {
   isActive    Boolean @default(false)
 
   // relation
-  services   PackageService[]
+  services        PackageService[]
   bookingPackages BookingPackage[]
 
   // timestamps
@@ -216,11 +289,11 @@ model Booking {
   services    BookingService[]
   sessions    BookingSession[]
   albums      Album[]
+  orders      Order[]
   // timestamps
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @default(now())
   deletedAt   DateTime?
-  Payment     Payment[]
 
   @@index([customerId, status, createdAt])
 }
@@ -228,7 +301,7 @@ model Booking {
 model BookingPackage {
   bookingId String
   packageId String
-  price     Float   @default(0)  // Price at time of booking
+  price     Float   @default(0) // Price at time of booking
   quantity  Int     @default(1)
   // relation
   booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
@@ -241,7 +314,7 @@ model BookingPackage {
 model BookingService {
   bookingId String
   serviceId String
-  price     Float   @default(0)  // Price at time of booking
+  price     Float   @default(0) // Price at time of booking
   quantity  Int     @default(1)
   // relation
   booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
@@ -313,33 +386,241 @@ model InventoryReservation {
   @@index([productId])
 }
 
-model Payment {
-  id          String  @id @default(uuid())
-  bookingId   String?
-  totalAmount Float   @default(0)
-
-  // deposit payments
-  depositTxnId  String?
-  depositMethod PaymentMethod?
-  depositStatus PaymentStatus  @default(PENDING)
-  depositAmount Float          @default(0)
-  depositNote   String?
-  depositAt     DateTime?
-
-  // remaining balance payments
-  remainingTxnId  String?
-  remainingMethod PaymentMethod?
-  remainingStatus PaymentStatus  @default(PENDING)
-  remainingAmount Float          @default(0)
-  remainingNote   String?
-  remainingAt     DateTime?
+model Order {
+  id                  String      @id @default(uuid())
+  bookingId           String
+  referenceNumber     String      @unique
+  totalPrice          Float       @default(0)
+  totalPaid           Float       @default(0)
+  totalRefunded       Float       @default(0)
+  balanceRemaining    Float       @default(0)
+  status              OrderStatus @default(UNPAID)
+  notes               String?
+  internalNotes       String?
+  cancellationReason  String?
+  cancelledAt         DateTime?
 
   // relation
-  booking Booking? @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  booking      Booking         @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  payments     Payment[]
+  paymentPlans PaymentPlan[]
+  refunds      Refund[]
+
+  // timestamps
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@unique([bookingId])
+  @@index([status])
+  @@index([referenceNumber])
+  @@index([createdAt])
+}
+
+model Payment {
+  id                  String         @id @default(uuid())
+  orderId             String
+  paymentSequence     Int            @default(1)
+  paymentType         PaymentType    @default(REMAINING)
+  amount              Float          @default(0)
+  method              PaymentMethod
+  status              PaymentStatus  @default(PENDING)
+  description         String?
+  dueDate             DateTime?
+  attemptCount        Int            @default(0)
+  lastAttemptAt       DateTime?
+  successfulAttemptId String?
+  notes               String?
+  internalNotes       String?
+  cancelledAt         DateTime?
+  cancellationReason  String?
+
+  // relation
+  order                    Order                        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  attempts                 PaymentAttempt[]
+  gatewayTransactions      PaymentGatewayTransaction[]
+
+  // timestamps
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([orderId, paymentSequence])
+  @@index([orderId])
+  @@index([status])
+  @@index([dueDate])
+  @@index([method])
+}
+
+model PaymentAttempt {
+  id                      String                   @id @default(uuid())
+  paymentId               String
+  attemptNumber           Int
+  status                  PaymentAttemptStatus     @default(INITIATED)
+  resultCode              String?
+  resultMessage           String?
+  errorReason             String?
+  attemptedAmount         Float                    @default(0)
+  gatewayTransactionId    String?                  @unique
+  idempotencyKey          String                   @unique
+  userAgent               String?
+  ipAddress               String?
+  deviceInfo              String?
+  createdBy               String?
+  notes                   String?
+  requestedAt             DateTime                 @default(now())
+  respondedAt             DateTime?
+  duration                Int?
+
+  // relation
+  payment                 Payment                  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  gatewayTransaction      PaymentGatewayTransaction? @relation(fields: [gatewayTransactionId], references: [id], onDelete: SetNull)
+
+  // timestamps
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([paymentId, attemptNumber])
+  @@index([paymentId])
+  @@index([status])
+  @@index([gatewayTransactionId])
+  @@index([requestedAt])
+}
+
+model PaymentGatewayTransaction {
+  id                      String   @id @default(uuid())
+  paymentId               String
+  paymentAttemptId        String?
+  gatewayProvider         String // "momo", "zalo", "stripe", etc.
+  gatewayName             String?
+  gatewayTransactionId    String?
+  gatewayOrderId          String?
+  gatewayCorrelationId    String?
+  amount                  Float
+  currency                String   @default("VND")
+  gatewayStatus           String?
+  requestedAt             DateTime @default(now())
+  respondedAt             DateTime?
+  settledAt               DateTime?
+  webhookReceivedAt       DateTime?
+  webhookId               String?
+  webhookStatus           String?
+  gatewayRequest          Json?
+  gatewayResponse         Json?
+  notes                   String?
+  internalNotes           String?
+
+  // relation
+  payment                 Payment            @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  attempts                PaymentAttempt[]
+
+  // timestamps
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([paymentId])
+  @@index([gatewayProvider])
+  @@index([gatewayTransactionId])
+  @@index([gatewayOrderId])
+  @@index([settledAt])
+  @@index([webhookReceivedAt])
+}
+
+model Refund {
+  id              String       @id @default(uuid())
+  orderId         String
+  refundSequence  Int          @default(1)
+  referenceNumber String       @unique
+  originalPaymentId String?
+  amount          Float        @default(0)
+  reason          RefundReason @default(CUSTOMER_REQUEST)
+  description     String?
+  status          RefundStatus @default(INITIATED)
+  processedAt     DateTime?
+  completedAt     DateTime?
+  authorizedBy    String?
+  notes           String?
+  internalNotes   String?
+
+  // relation
+  order            Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  attempts         RefundAttempt[]
+
+  // timestamps
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([orderId, refundSequence])
+  @@index([orderId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model RefundAttempt {
+  id              String              @id @default(uuid())
+  refundId        String
+  attemptNumber   Int
+  amount          Float               @default(0)
+  status          RefundAttemptStatus @default(INITIATED)
+  resultCode      String?
+  resultMessage   String?
+  gatewayRefundId String?
+  notes           String?
+  processedBy     String?
+  requestedAt     DateTime            @default(now())
+  respondedAt     DateTime?
+
+  // relation
+  refund Refund @relation(fields: [refundId], references: [id], onDelete: Cascade)
 
   // timestamps
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+
+  @@unique([refundId, attemptNumber])
+  @@index([refundId])
+  @@index([status])
+}
+
+model PaymentPlan {
+  id               String           @id @default(uuid())
+  orderId          String
+  planType         PaymentPlanType  @default(ONE_TIME)
+  installmentCount Int              @default(1)
+  status           PaymentPlanStatus @default(PENDING)
+
+  // relation
+  order     Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  schedules PaymentSchedule[]
+
+  // timestamps
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([orderId])
+  @@index([status])
+}
+
+model PaymentSchedule {
+  id                String                @id @default(uuid())
+  paymentPlanId     String
+  scheduleNumber    Int
+  dueDate           DateTime
+  amount            Float
+  status            PaymentScheduleStatus @default(PENDING)
+  paidDate          DateTime?
+  reminderSentAt    DateTime?
+  overdueReminderSentAt DateTime?
+
+  // relation
+  paymentPlan PaymentPlan @relation(fields: [paymentPlanId], references: [id], onDelete: Cascade)
+
+  // timestamps
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([paymentPlanId, scheduleNumber])
+  @@index([paymentPlanId])
+  @@index([dueDate])
+  @@index([status])
 }
 
 // Media and Albums

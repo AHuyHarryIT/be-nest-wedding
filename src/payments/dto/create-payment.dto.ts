@@ -15,37 +15,32 @@ export class CreatePaymentDto {
   @IsNotEmpty()
   bookingId: string;
 
-  @ApiProperty({ description: 'Total payment amount' })
+  @ApiProperty({ description: 'Payment amount' })
   @IsNumber()
   @IsNotEmpty()
-  totalAmount: number;
+  amount: number;
 
-  @ApiProperty({ description: 'Deposit payment method', enum: PaymentMethod })
+  @ApiProperty({ description: 'Payment method', enum: PaymentMethod })
   @IsEnum(PaymentMethod)
   @IsNotEmpty()
-  depositMethod: PaymentMethod;
-
-  @ApiProperty({ description: 'Deposit payment amount' })
-  @IsNumber()
-  @IsNotEmpty()
-  depositAmount: number;
+  method: PaymentMethod;
 
   @ApiPropertyOptional({
-    description: 'Deposit payment status',
+    description: 'Payment status',
     enum: PaymentStatus,
     default: PaymentStatus.PENDING,
   })
   @IsEnum(PaymentStatus)
   @IsOptional()
-  depositStatus?: PaymentStatus;
+  status?: PaymentStatus;
 
-  @ApiPropertyOptional({ description: 'Deposit payment note' })
+  @ApiPropertyOptional({ description: 'Payment note' })
   @IsString()
   @IsOptional()
-  depositNote?: string;
+  note?: string;
 
-  @ApiPropertyOptional({ description: 'Deposit transaction ID' })
+  @ApiPropertyOptional({ description: 'Transaction ID' })
   @IsString()
   @IsOptional()
-  depositTxnId?: string;
+  txnId?: string;
 }

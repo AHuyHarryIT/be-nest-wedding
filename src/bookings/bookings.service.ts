@@ -3,10 +3,34 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { Prisma, BookingStatus } from 'generated/prisma';
+import {
+  Prisma,
+  BookingStatus,
+  Booking,
+  Order,
+  Payment,
+} from 'generated/prisma';
 import { PaginationHelper } from '../common/utils/pagination.helper';
 import { DatabaseService } from '../database/database.service';
 import { CreateBookingDto, QueryBookingDto, UpdateBookingDto } from './dto';
+
+export interface BookingWithOrderSummary extends Booking {
+  orders?: Array<Order & { payments: Payment[] }>;
+  order?: Order & {
+    payments: Payment[];
+    summary: {
+      totalPrice: number;
+      totalPaid: number;
+      balanceRemaining: number;
+      isPaid: boolean;
+      isPartiallyPaid: boolean;
+    };
+  };
+  customer?: any;
+  packages?: any;
+  services?: any;
+  albums?: any;
+}
 
 @Injectable()
 export class BookingsService {
@@ -218,7 +242,7 @@ export class BookingsService {
     );
   }
 
-  async findOne(id: string) {
+  async findOne(id: string): Promise<BookingWithOrderSummary> {
     const booking = await this.databaseService.booking.findFirst({
       where: { id, deletedAt: null },
       include: {
@@ -241,6 +265,11 @@ export class BookingsService {
           },
         },
         albums: true,
+        orders: {
+          include: {
+            payments: true,
+          },
+        },
       },
     });
 
@@ -248,14 +277,48 @@ export class BookingsService {
       throw new NotFoundException(`Booking with ID ${id} not found`);
     }
 
-    return booking;
+    // Add order summary if order exists
+    const response: BookingWithOrderSummary = { ...booking };
+    if (booking.orders && booking.orders.length > 0) {
+      const order = booking.orders[0]; // Get first (latest) order
+
+      // Calculate totals from payments
+      const totalPaid = order.payments
+        .filter((p: Payment) => p.status === 'SUCCESSFUL')
+        .reduce((sum: number, p: Payment) => sum + p.amount, 0);
+
+      const balanceRemaining = order.totalPrice - totalPaid;
+
+      response.order = {
+        ...order,
+        summary: {
+          totalPrice: order.totalPrice,
+          totalPaid,
+          balanceRemaining,
+          isPaid: balanceRemaining === 0,
+          isPartiallyPaid: totalPaid > 0 && balanceRemaining > 0,
+        },
+      };
+    }
+
+    return response;
   }
 
   async update(id: string, updateBookingDto: UpdateBookingDto) {
     const booking = await this.findOne(id);
 
-    // Check if booking status is PENDING - only PENDING bookings can be edited
-    if (booking.status !== BookingStatus.PENDING) {
+    // Hide edit and delete when status is 'COMPLETED'
+    if (booking.status === BookingStatus.COMPLETED) {
+      throw new BadRequestException(
+        `Cannot edit completed bookings. Current status: ${booking.status}`,
+      );
+    }
+
+    // Only allow status updates or other edits if booking is PENDING
+    // (unless only status is being updated)
+    const isOnlyStatusUpdate =
+      Object.keys(updateBookingDto).length === 1 && updateBookingDto.status;
+    if (!isOnlyStatusUpdate && booking.status !== BookingStatus.PENDING) {
       throw new BadRequestException(
         `Only bookings with PENDING status can be edited. Current status: ${booking.status}`,
       );
@@ -300,6 +363,8 @@ export class BookingsService {
     }
 
     const data: Prisma.BookingUpdateInput = {};
+    if (updateBookingDto.status !== undefined)
+      data.status = updateBookingDto.status;
     if (updateBookingDto.customerId)
       data.customer = { connect: { id: updateBookingDto.customerId } };
     if (updateBookingDto.notes !== undefined)
@@ -387,6 +452,13 @@ export class BookingsService {
 
   async remove(id: string) {
     const booking = await this.findOne(id);
+
+    // Hide edit and delete when status is 'COMPLETED'
+    if (booking.status === BookingStatus.COMPLETED) {
+      throw new BadRequestException(
+        `Cannot delete completed bookings. Current status: ${booking.status}`,
+      );
+    }
 
     // Check if booking status is PENDING - only PENDING bookings can be deleted
     if (booking.status !== BookingStatus.PENDING) {

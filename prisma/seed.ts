@@ -359,6 +359,220 @@ async function seedAdminUser(adminRoleId: string) {
 }
 
 /**
+ * Seed services
+ */
+async function seedServices() {
+  console.log('🎯 Seeding services...');
+
+  const servicesData = [
+    {
+      name: 'Photography',
+      slug: 'photography',
+      description:
+        'Professional wedding photography service capturing your special moments',
+      price: 5000000,
+      isActive: true,
+    },
+    {
+      name: 'Videography',
+      slug: 'videography',
+      description: 'Professional wedding video production and editing',
+      price: 8000000,
+      isActive: true,
+    },
+    {
+      name: 'Catering',
+      slug: 'catering',
+      description: 'Complete catering service with menu options',
+      price: 3000000,
+      isActive: true,
+    },
+    {
+      name: 'Decoration',
+      slug: 'decoration',
+      description: 'Venue decoration and arrangement service',
+      price: 4000000,
+      isActive: true,
+    },
+    {
+      name: 'Sound & Lighting',
+      slug: 'sound-lighting',
+      description: 'Professional sound system and lighting setup',
+      price: 2500000,
+      isActive: true,
+    },
+    {
+      name: 'Master of Ceremony',
+      slug: 'master-of-ceremony',
+      description: 'Professional MC to host your wedding event',
+      price: 2000000,
+      isActive: true,
+    },
+    {
+      name: 'Hair & Makeup',
+      slug: 'hair-makeup',
+      description: 'Bridal and guest hair and makeup services',
+      price: 1500000,
+      isActive: true,
+    },
+    {
+      name: 'Transportation',
+      slug: 'transportation',
+      description: 'Wedding day transportation for bride and groom',
+      price: 1000000,
+      isActive: true,
+    },
+  ];
+
+  const createdServices: Array<{
+    id: string;
+    name: string;
+    slug: string | null;
+    description: string | null;
+    price: number;
+    isActive: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+    deletedAt: Date | null;
+  }> = [];
+  for (const serviceData of servicesData) {
+    const service = await prisma.service.upsert({
+      where: { slug: serviceData.slug },
+      update: serviceData,
+      create: serviceData,
+    });
+    createdServices.push(service);
+  }
+
+  console.log(`  ✓ Created ${createdServices.length} services`);
+  return createdServices;
+}
+
+/**
+ * Seed packages
+ */
+async function seedPackages(
+  services: Array<{
+    id: string;
+    name: string;
+    slug: string | null;
+    description: string | null;
+    price: number;
+    isActive: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+    deletedAt: Date | null;
+  }>,
+) {
+  console.log('📦 Seeding packages...');
+
+  const packagesData = [
+    {
+      name: 'Gold Package',
+      slug: 'gold-package',
+      description: 'Premium package with all essential services included',
+      price: 25000000,
+      isActive: true,
+      serviceIds: services
+        .filter(
+          (s) =>
+            s.slug &&
+            [
+              'photography',
+              'catering',
+              'decoration',
+              'sound-lighting',
+            ].includes(s.slug),
+        )
+        .map((s) => s.id),
+    },
+    {
+      name: 'Platinum Package',
+      slug: 'platinum-package',
+      description: 'Complete package with all services for the perfect wedding',
+      price: 40000000,
+      isActive: true,
+      serviceIds: services.map((s) => s.id),
+    },
+    {
+      name: 'Silver Package',
+      slug: 'silver-package',
+      description: 'Essential package with basic services',
+      price: 15000000,
+      isActive: true,
+      serviceIds: services
+        .filter(
+          (s) =>
+            s.slug &&
+            [
+              'photography',
+              'catering',
+              'sound-lighting',
+              'master-of-ceremony',
+            ].includes(s.slug),
+        )
+        .map((s) => s.id),
+    },
+    {
+      name: 'Bronze Package',
+      slug: 'bronze-package',
+      description: 'Budget-friendly package with core services',
+      price: 10000000,
+      isActive: true,
+      serviceIds: services
+        .filter(
+          (s) =>
+            s.slug &&
+            ['photography', 'catering', 'master-of-ceremony'].includes(s.slug),
+        )
+        .map((s) => s.id),
+    },
+  ];
+
+  const createdPackages: Array<{
+    id: string;
+    name: string;
+    slug: string | null;
+    description: string | null;
+    price: number;
+    isActive: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+    deletedAt: Date | null;
+  }> = [];
+  for (const packageData of packagesData) {
+    const { serviceIds, ...packageCreateData } = packageData;
+
+    const pkg = await prisma.package.upsert({
+      where: { slug: packageData.slug },
+      update: packageCreateData,
+      create: packageCreateData,
+    });
+
+    // Clear existing services for this package
+    await prisma.packageService.deleteMany({
+      where: { packageId: pkg.id },
+    });
+
+    // Add services to package
+    if (serviceIds.length > 0) {
+      await prisma.packageService.createMany({
+        data: serviceIds.map((serviceId) => ({
+          packageId: pkg.id,
+          serviceId: serviceId,
+        })),
+        skipDuplicates: true,
+      });
+    }
+
+    createdPackages.push(pkg);
+  }
+
+  console.log(`  ✓ Created ${createdPackages.length} packages`);
+  return createdPackages;
+}
+
+/**
  * Main seed function
  */
 async function main() {
@@ -373,6 +587,12 @@ async function main() {
 
     // Seed admin user with admin role
     await seedAdminUser(roles.adminRole.id);
+
+    // Seed services
+    const services = await seedServices();
+
+    // Seed packages
+    await seedPackages(services);
 
     console.log('\n✅ Database seeding completed successfully!');
   } catch (error) {

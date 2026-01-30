@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DatabaseService } from './database/database.service';
@@ -15,6 +16,7 @@ import { AuthModule } from './auth/auth.module';
 import { BookingsModule } from './bookings/bookings.module';
 import { BookingSessionsModule } from './booking-sessions/booking-sessions.module';
 import { PaymentsModule } from './payments/payments.module';
+import { OrdersModule } from './orders/orders.module';
 import { AlbumsModule } from './albums/albums.module';
 import { InventoryReservationsModule } from './inventory-reservations/inventory-reservations.module';
 import { UsersModule } from './users/users.module';
@@ -24,6 +26,7 @@ import { UsersModule } from './users/users.module';
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+    EventEmitterModule.forRoot(),
     DatabaseModule,
     CommonModule,
     AuthModule,
@@ -37,6 +40,7 @@ import { UsersModule } from './users/users.module';
     BookingsModule,
     BookingSessionsModule,
     PaymentsModule,
+    OrdersModule,
     AlbumsModule,
     InventoryReservationsModule,
   ],

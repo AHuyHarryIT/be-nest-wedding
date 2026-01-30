@@ -8,36 +8,33 @@ export class PaymentsService {
   constructor(private readonly databaseService: DatabaseService) {}
 
   async create(createPaymentDto: CreatePaymentDto) {
-    // Validate booking exists
-    const booking = await this.databaseService.booking.findUnique({
-      where: { id: createPaymentDto.bookingId },
+    // Validate order exists
+    const order = await this.databaseService.order.findUnique({
+      where: { bookingId: createPaymentDto.bookingId },
     });
-    if (!booking) {
+    if (!order) {
       throw new NotFoundException(
-        `Booking with ID ${createPaymentDto.bookingId} not found`,
+        `Order for booking ${createPaymentDto.bookingId} not found`,
       );
     }
 
     const data: Prisma.PaymentCreateInput = {
-      booking: { connect: { id: createPaymentDto.bookingId } },
-      totalAmount: createPaymentDto.totalAmount,
-      depositMethod: createPaymentDto.depositMethod,
-      depositStatus: createPaymentDto.depositStatus ?? 'PENDING',
-      depositAmount: createPaymentDto.depositAmount,
-      depositNote: createPaymentDto.depositNote,
-      depositTxnId: createPaymentDto.depositTxnId,
-      depositAt: new Date(),
+      order: { connect: { id: order.id } },
+      amount: createPaymentDto.amount,
+      method: createPaymentDto.method,
+      status: createPaymentDto.status ?? 'PENDING',
+      notes: createPaymentDto.note,
     };
 
     return this.databaseService.payment.create({
       data,
-      include: { booking: true },
+      include: { order: true },
     });
   }
 
   async findAll() {
     return this.databaseService.payment.findMany({
-      include: { booking: true },
+      include: { order: true },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -45,7 +42,7 @@ export class PaymentsService {
   async findOne(id: string) {
     const payment = await this.databaseService.payment.findUnique({
       where: { id },
-      include: { booking: true },
+      include: { order: true },
     });
 
     if (!payment) {
@@ -60,36 +57,121 @@ export class PaymentsService {
 
     const data: Prisma.PaymentUpdateInput = {};
     if (updatePaymentDto.bookingId) {
-      data.booking = { connect: { id: updatePaymentDto.bookingId } };
+      data.order = { connect: { bookingId: updatePaymentDto.bookingId } };
     }
-    if (updatePaymentDto.totalAmount !== undefined) {
-      data.totalAmount = updatePaymentDto.totalAmount;
+    if (updatePaymentDto.amount !== undefined) {
+      data.amount = updatePaymentDto.amount;
     }
-    if (updatePaymentDto.depositMethod) {
-      data.depositMethod = updatePaymentDto.depositMethod;
+    if (updatePaymentDto.method) {
+      data.method = updatePaymentDto.method;
     }
-    if (updatePaymentDto.depositStatus) {
-      data.depositStatus = updatePaymentDto.depositStatus;
+    if (updatePaymentDto.status) {
+      data.status = updatePaymentDto.status;
     }
-    if (updatePaymentDto.depositAmount !== undefined) {
-      data.depositAmount = updatePaymentDto.depositAmount;
-    }
-    if (updatePaymentDto.depositNote !== undefined) {
-      data.depositNote = updatePaymentDto.depositNote;
-    }
-    if (updatePaymentDto.depositTxnId !== undefined) {
-      data.depositTxnId = updatePaymentDto.depositTxnId;
+    if (updatePaymentDto.note !== undefined) {
+      data.notes = updatePaymentDto.note;
     }
 
     return this.databaseService.payment.update({
       where: { id },
       data,
-      include: { booking: true },
+      include: { order: true },
     });
   }
 
   async remove(id: string) {
     await this.findOne(id);
     return this.databaseService.payment.delete({ where: { id } });
+  }
+
+  /**
+   * Find payment by transaction ID (for idempotency checking)
+   * NOTE: This now needs to check payment attempts + gateway transactions
+   */
+  async findByTransactionId(txnId: string) {
+    // First try to find the gateway transaction
+    const gatewayTransaction =
+      await this.databaseService.paymentGatewayTransaction.findFirst({
+        where: { gatewayTransactionId: txnId },
+        include: {
+          payment: {
+            include: { order: true },
+          },
+        },
+      });
+
+    if (gatewayTransaction?.payment) {
+      return gatewayTransaction.payment;
+    }
+
+    return null;
+  }
+
+  /**
+   * Get payment status for polling (simplified response)
+   */
+  async getPaymentStatus(id: string) {
+    const payment = await this.findOne(id);
+    return {
+      paymentId: payment.id,
+      status: payment.status,
+      amount: payment.amount,
+      createdAt: payment.createdAt,
+      updatedAt: payment.updatedAt,
+    };
+  }
+
+  /**
+   * Get detailed payment information with attempts
+   */
+  async getPaymentDetails(id: string) {
+    const payment = await this.databaseService.payment.findUnique({
+      where: { id },
+      include: {
+        order: true,
+        attempts: {
+          include: { gatewayTransaction: true },
+        },
+        gatewayTransactions: true,
+      },
+    });
+
+    if (!payment) {
+      throw new NotFoundException(`Payment with ID ${id} not found`);
+    }
+
+    return payment;
+  }
+
+  /**
+   * Get payment attempts history
+   */
+  async getPaymentAttempts(id: string) {
+    await this.findOne(id);
+
+    const attempts = await this.databaseService.paymentAttempt.findMany({
+      where: { paymentId: id },
+      include: { gatewayTransaction: true },
+      orderBy: { attemptNumber: 'asc' },
+    });
+
+    return attempts;
+  }
+
+  /**
+   * Cancel a payment
+   */
+  async cancel(id: string, reason?: string) {
+    await this.findOne(id);
+
+    return this.databaseService.payment.update({
+      where: { id },
+      data: {
+        status: 'CANCELLED',
+        cancelledAt: new Date(),
+        cancellationReason: reason,
+      },
+      include: { order: true },
+    });
   }
 }
