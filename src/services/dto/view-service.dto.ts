@@ -1,57 +1,81 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { Service } from 'generated/prisma';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsUUID, IsString, IsNumber, IsBoolean, IsDate, IsOptional, Min } from 'class-validator';
+import { Type } from 'class-transformer';
 
-export class ViewServiceDto implements Service {
+export class ViewServiceDto {
   @ApiProperty({
+    description: 'Service ID',
     example: 'uuid-1234',
   })
+  @IsUUID('4')
   id: string;
 
   @ApiProperty({
+    description: 'Service name',
     example: 'Wedding Photography',
   })
+  @IsString()
   name: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
+    description: 'Service slug',
     example: 'wedding-photography',
-    required: false,
     nullable: true,
   })
+  @IsOptional()
+  @IsString()
   slug: string | null;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
+    description: 'Service description',
     example: 'Professional wedding photography service',
-    required: false,
     nullable: true,
   })
+  @IsOptional()
+  @IsString()
   description: string | null;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
+    description: 'Service price',
     example: 1500,
-    required: false,
+    minimum: 0,
   })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
   price: number;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
+    description: 'Is service active',
     example: true,
-    required: false,
   })
-  isActive: boolean;
+  @IsOptional()
+  @IsBoolean()
+  is_active: boolean;
 
   @ApiProperty({
+    description: 'Creation date',
     example: '2025-01-01T00:00:00.000Z',
   })
-  createdAt: Date;
+  @IsDate()
+  @Type(() => Date)
+  created_at: Date;
 
   @ApiProperty({
+    description: 'Update date',
     example: '2025-01-01T00:00:00.000Z',
   })
-  updatedAt: Date;
+  @IsDate()
+  @Type(() => Date)
+  updated_at: Date;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
+    description: 'Deletion date',
     example: null,
-    required: false,
     nullable: true,
   })
-  deletedAt: Date | null;
+  @IsOptional()
+  @IsDate()
+  @Type(() => Date)
+  deleted_at: Date | null;
 }

@@ -211,7 +211,7 @@ export class AuthController {
     }
 
     const tokens = await this.authService.refreshTokens({
-      refresh_token: refreshToken,
+      refreshToken: refreshToken,
     });
 
     // Set new cookies

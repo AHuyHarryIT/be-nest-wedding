@@ -4,27 +4,30 @@ import { IsBoolean, IsNumber, IsOptional, Min } from 'class-validator';
 
 export class QueryProductDto extends PaginationQueryDto {
   @ApiPropertyOptional({
-    description: 'The active status of the product',
+    description: 'Filter by product active status',
+    example: true,
   })
   @IsOptional()
-  @IsBoolean()
+  @IsBoolean({ message: 'isActive must be a boolean value' })
   isActive?: boolean;
 
   @ApiPropertyOptional({
-    description: 'Minimum stock quantity of the product',
+    description: 'Minimum stock quantity filter (minimum 0)',
     example: 10,
+    minimum: 0,
   })
   @IsOptional()
-  @IsNumber()
-  @Min(0)
+  @IsNumber({ allowInfinity: false, allowNaN: false }, { message: 'Minimum stock must be a valid number' })
+  @Min(0, { message: 'Minimum stock cannot be negative' })
   minStock?: number;
 
   @ApiPropertyOptional({
-    description: 'Maximum stock quantity of the product',
+    description: 'Maximum stock quantity filter (minimum 0)',
     example: 100,
+    minimum: 0,
   })
   @IsOptional()
-  @IsNumber()
-  @Min(0)
+  @IsNumber({ allowInfinity: false, allowNaN: false }, { message: 'Maximum stock must be a valid number' })
+  @Min(0, { message: 'Maximum stock cannot be negative' })
   maxStock?: number;
 }

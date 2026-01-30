@@ -1,19 +1,21 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsBoolean,
   IsNumber,
   IsOptional,
   IsString,
+  IsUUID,
+  IsDate,
   Min,
 } from 'class-validator';
-import { Product } from 'generated/prisma';
+import { Type } from 'class-transformer';
 
-export class ViewProductDto implements Product {
+export class ViewProductDto {
   @ApiProperty({
     description: 'The unique identifier of the product',
     example: 'uuid-1234',
   })
-  @IsString()
+  @IsUUID('4')
   id: string;
 
   @ApiProperty({
@@ -23,48 +25,45 @@ export class ViewProductDto implements Product {
   @IsString()
   name: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'The description of the product',
     example: 'This is a sample product',
-    required: false,
+    nullable: true,
   })
   @IsOptional()
   @IsString()
   description: string | null;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'The price of the product',
     example: 100,
-    required: false,
   })
   @IsOptional()
   @IsNumber()
   @Min(0)
-  price: number = 0;
+  price: number;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'The stock quantity of the product',
     example: 50,
-    required: false,
   })
   @IsOptional()
   @IsNumber()
   @Min(0)
-  stockQty: number = 0;
+  stockQty: number;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'Whether the product is active',
     example: true,
-    required: false,
   })
   @IsOptional()
   @IsBoolean()
-  isActive: boolean = false;
+  isActive: boolean;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'The category ID of the product',
     example: 'uuid-category-123',
-    required: false,
+    nullable: true,
   })
   @IsOptional()
   @IsString()
@@ -74,35 +73,41 @@ export class ViewProductDto implements Product {
     description: 'The creation timestamp of the product',
     example: '2023-10-01T12:00:00Z',
   })
+  @IsDate()
+  @Type(() => Date)
   createdAt: Date;
 
   @ApiProperty({
     description: 'The last update timestamp of the product',
     example: '2023-10-01T12:00:00Z',
   })
+  @IsDate()
+  @Type(() => Date)
   updatedAt: Date;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'The deletion timestamp of the product, if deleted',
     example: null,
-    required: false,
+    nullable: true,
   })
   @IsOptional()
+  @IsDate()
+  @Type(() => Date)
   deletedAt: Date | null;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'The file ID of the product image',
     example: 'uuid-file-id',
-    required: false,
+    nullable: true,
   })
   @IsOptional()
   @IsString()
   imageFileId: string | null;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'The OneDrive folder ID for product images',
     example: 'uuid-folder-id',
-    required: false,
+    nullable: true,
   })
   @IsOptional()
   @IsString()

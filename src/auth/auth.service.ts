@@ -251,12 +251,12 @@ export class AuthService {
   async refreshTokens(
     refreshTokenDto: RefreshTokenDto,
   ): Promise<{ accessToken: string; refreshToken: string }> {
-    const { refresh_token } = refreshTokenDto;
+    const { refreshToken } = refreshTokenDto;
 
     // Find user with this refresh token
     const user = await this.databaseService.user.findFirst({
       where: {
-        refreshToken: refresh_token,
+        refreshToken: refreshToken,
         refreshTokenExpiry: {
           gt: new Date(), // Token not expired
         },

@@ -1,17 +1,20 @@
-import { ApiProperty } from '@nestjs/swagger';
-import type { Permission, Role } from 'generated/prisma';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsString, IsUUID, IsArray, IsDate, IsOptional } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class ViewRolePermissionDto {
   @ApiProperty({
     description: 'Role ID',
     example: 'uuid-role-1',
   })
+  @IsUUID('4')
   roleId: string;
 
   @ApiProperty({
     description: 'Permission ID',
     example: 'uuid-permission-1',
   })
+  @IsUUID('4')
   permissionId: string;
 
   @ApiProperty({
@@ -20,47 +23,58 @@ export class ViewRolePermissionDto {
       id: 'uuid-permission-1',
       key: 'user:read',
       description: 'Allows reading user data',
-      createdAt: new Date('2023-01-01T00:00:00.000Z'),
-      updatedAt: new Date('2023-01-01T00:00:00.000Z'),
+      created_at: '2023-01-01T00:00:00.000Z',
+      updated_at: '2023-01-01T00:00:00.000Z',
     },
   })
-  permission: Permission;
+  permission: Record<string, any>;
 }
 
-export class ViewRoleDto implements Role {
+export class ViewRoleDto {
   @ApiProperty({
     description: 'Unique identifier of the role',
     example: 'uuid-role-1',
   })
+  @IsUUID('4')
   id: string;
 
   @ApiProperty({
     description: 'Name of the role',
     example: 'Admin',
   })
+  @IsString()
   name: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'Description of the role',
     example: 'Administrator role with full access',
+    nullable: true,
   })
+  @IsString()
+  @IsOptional()
   description: string | null;
 
   @ApiProperty({
     description: 'Creation date of the role',
     example: '2023-01-01T00:00:00Z',
   })
+  @IsDate()
+  @Type(() => Date)
   createdAt: Date;
 
   @ApiProperty({
     description: 'Last update date of the role',
     example: '2023-01-01T00:00:00Z',
   })
+  @IsDate()
+  @Type(() => Date)
   updatedAt: Date;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'List of permissions associated with the role',
     type: [ViewRolePermissionDto],
   })
-  permissions: ViewRolePermissionDto[];
+  @IsArray()
+  @IsOptional()
+  permissions?: ViewRolePermissionDto[];
 }

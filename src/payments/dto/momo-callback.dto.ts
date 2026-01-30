@@ -2,49 +2,74 @@ import { IsOptional, IsNumber, IsString } from 'class-validator';
 import { ApiPropertyOptional, ApiProperty } from '@nestjs/swagger';
 
 export class MomoCallbackDto {
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description: 'Partner code from Momo',
+    example: 'MOMO',
+  })
   @IsOptional()
   @IsString()
   partnerCode?: string;
 
   @ApiPropertyOptional({
     description: 'Booking ID from MOMO response (links to Order.bookingId)',
+    example: 'uuid-1234',
   })
   @IsOptional()
   @IsString()
   bookingId?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description: 'Payment amount in VND',
+    example: 500000,
+  })
   @IsOptional()
   @IsNumber()
   amount?: number;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description: 'Result code: 0=success, others=failure',
+    example: 0,
+  })
   @IsOptional()
   @IsNumber()
   resultCode?: number;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description: 'Response message',
+    example: 'Successful',
+  })
   @IsOptional()
   @IsString()
   message?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description: 'Momo transaction ID',
+    example: 1234567890,
+  })
   @IsOptional()
   @IsNumber()
   transId?: number;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description: 'Digital signature for verification',
+    example: 'signature_hash',
+  })
   @IsOptional()
   @IsString()
   signature?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description: 'Extra data from payment request',
+    example: '{}',
+  })
   @IsOptional()
   @IsString()
   extraData?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description: 'Response time in milliseconds',
+    example: 1000,
+  })
   @IsOptional()
   @IsNumber()
   responseTime?: number;

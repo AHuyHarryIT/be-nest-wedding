@@ -5,51 +5,56 @@ import { Type } from 'class-transformer';
 import { IsBoolean, IsEnum, IsOptional, IsUUID } from 'class-validator';
 
 export class QueryBookingDto extends PaginationQueryDto {
-  @ApiPropertyOptional({ description: 'Filter by customer ID' })
-  @IsUUID()
+  @ApiPropertyOptional({ 
+    description: 'Filter by customer ID (UUID format)',
+    example: 'uuid-customer-1',
+    format: 'uuid',
+  })
+  @IsUUID('4', { message: 'Customer ID must be a valid UUID' })
   @IsOptional()
   customerId?: string;
 
   @ApiPropertyOptional({
     description: 'Filter by booking status',
     enum: BookingStatus,
+    example: BookingStatus.CONFIRMED,
   })
-  @IsEnum(BookingStatus)
+  @IsEnum(BookingStatus, { message: 'Status must be a valid booking status' })
   @IsOptional()
   status?: BookingStatus;
 
   @ApiPropertyOptional({
-    description: 'Include customer details',
+    description: 'Include customer details in response',
     default: false,
   })
-  @IsBoolean()
+  @IsBoolean({ message: 'includeCustomer must be a boolean value' })
   @IsOptional()
   @Type(() => Boolean)
   includeCustomer?: boolean;
 
   @ApiPropertyOptional({
-    description: 'Include package details',
+    description: 'Include main package details in response',
     default: false,
   })
-  @IsBoolean()
+  @IsBoolean({ message: 'includePackage must be a boolean value' })
   @IsOptional()
   @Type(() => Boolean)
   includePackage?: boolean;
 
   @ApiPropertyOptional({
-    description: 'Include packages and services details',
+    description: 'Include all packages and services details in response',
     default: false,
   })
-  @IsBoolean()
+  @IsBoolean({ message: 'includePackages must be a boolean value' })
   @IsOptional()
   @Type(() => Boolean)
   includePackages?: boolean;
 
   @ApiPropertyOptional({
-    description: 'Include services',
+    description: 'Include services details in response',
     default: false,
   })
-  @IsBoolean()
+  @IsBoolean({ message: 'includeServices must be a boolean value' })
   @IsOptional()
   @Type(() => Boolean)
   includeServices?: boolean;

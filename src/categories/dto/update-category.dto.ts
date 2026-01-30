@@ -1,31 +1,32 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsBoolean, IsOptional, IsString } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsBoolean, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class UpdateCategoryDto {
-  @ApiProperty({
-    description: 'The name of the category',
+  @ApiPropertyOptional({
+    description: 'Category name (max 255 characters)',
     example: 'Flowers',
-    required: false,
+    maxLength: 255,
   })
   @IsOptional()
-  @IsString()
+  @IsString({ message: 'Category name must be a string' })
+  @MaxLength(255, { message: 'Category name cannot exceed 255 characters' })
   name?: string;
 
-  @ApiProperty({
-    description: 'The description of the category',
+  @ApiPropertyOptional({
+    description: 'Category description (max 1000 characters)',
     example: 'Beautiful flowers for weddings',
-    required: false,
+    maxLength: 1000,
   })
   @IsOptional()
-  @IsString()
+  @IsString({ message: 'Category description must be a string' })
+  @MaxLength(1000, { message: 'Category description cannot exceed 1000 characters' })
   description?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'Whether the category is active',
     example: true,
-    required: false,
   })
   @IsOptional()
-  @IsBoolean()
-  isActive?: boolean;
+  @IsBoolean({ message: 'is_active must be a boolean value' })
+  is_active?: boolean;
 }

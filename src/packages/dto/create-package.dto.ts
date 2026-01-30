@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsBoolean,
   IsNumber,
@@ -9,46 +9,45 @@ import {
   Min,
   IsArray,
   IsUUID,
+  ArrayMinSize,
 } from 'class-validator';
-import { Prisma, Package } from 'generated/prisma';
 import { Transform } from 'class-transformer';
 
-export class CreatePackageDto implements Prisma.PackageCreateInput {
+export class CreatePackageDto {
   @ApiProperty({
     description: 'The name of the package',
     example: 'Premium Wedding Package',
     maxLength: 255,
   })
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(255)
+  @IsString({ message: 'Package name must be a string' })
+  @IsNotEmpty({ message: 'Package name is required' })
+  @MaxLength(255, { message: 'Package name cannot exceed 255 characters' })
   name: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'The slug of the package',
     example: 'premium-wedding-package',
-    required: false,
     maxLength: 255,
   })
   @IsOptional()
-  @IsString()
-  @MaxLength(255)
+  @IsString({ message: 'Package slug must be a string' })
+  @MaxLength(255, { message: 'Package slug cannot exceed 255 characters' })
   slug?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'The description of the package',
     example:
       'Comprehensive wedding package with photography, videography, and more',
-    required: false,
+    maxLength: 1000,
   })
   @IsOptional()
-  @IsString()
+  @IsString({ message: 'Package description must be a string' })
+  @MaxLength(1000, { message: 'Package description cannot exceed 1000 characters' })
   description?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'The price of the package',
     example: 5000,
-    required: false,
     default: 0,
     minimum: 0,
   })
@@ -63,10 +62,9 @@ export class CreatePackageDto implements Prisma.PackageCreateInput {
   })
   price?: number;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'Whether the package is active',
     example: true,
-    required: false,
     default: false,
   })
   @IsOptional()
@@ -79,71 +77,74 @@ export class CreatePackageDto implements Prisma.PackageCreateInput {
   })
   isActive?: boolean;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'Array of service IDs to associate with this package',
     example: ['service-id-1', 'service-id-2'],
-    required: false,
-    isArray: true,
-    type: 'string',
+    type: [String],
   })
   @IsOptional()
   @IsArray()
+  @ArrayMinSize(1)
   @IsUUID('4', { each: true })
   serviceIds?: string[];
 }
 
-export class CreatePackageResponseDto implements Package {
+export class CreatePackageResponseDto {
   @ApiProperty({
+    description: 'Package ID',
     example: 'uuid-1234',
   })
   id: string;
 
   @ApiProperty({
+    description: 'Package name',
     example: 'Premium Wedding Package',
   })
   name: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
+    description: 'Package slug',
     example: 'premium-wedding-package',
-    required: false,
     nullable: true,
   })
   slug: string | null;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
+    description: 'Package description',
     example:
       'Comprehensive wedding package with photography, videography, and more',
-    required: false,
     nullable: true,
   })
   description: string | null;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
+    description: 'Package price',
     example: 5000,
-    required: false,
   })
   price: number;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
+    description: 'Is package active',
     example: true,
-    required: false,
   })
   isActive: boolean;
 
   @ApiProperty({
+    description: 'Creation date',
     example: '2025-01-01T00:00:00.000Z',
   })
-  createdAt: Date;
+  created_at: Date;
 
   @ApiProperty({
+    description: 'Update date',
     example: '2025-01-01T00:00:00.000Z',
   })
-  updatedAt: Date;
+  updated_at: Date;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
+    description: 'Deletion date',
     example: null,
-    required: false,
     nullable: true,
   })
-  deletedAt: Date | null;
+  deleted_at: Date | null;
 }

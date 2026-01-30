@@ -28,16 +28,27 @@ export class ErrorDto {
 }
 
 export class PaginationRequestDto {
-  @ApiPropertyOptional({ description: 'Page number (1-indexed)', default: 1 })
-  @IsNumber()
-  @Min(1)
+  @ApiPropertyOptional({ 
+    description: 'Page number (1-indexed)', 
+    default: 1,
+    example: 1,
+    minimum: 1,
+  })
+  @IsNumber({ allowInfinity: false, allowNaN: false }, { message: 'Page must be a valid number' })
+  @Min(1, { message: 'Page must be at least 1' })
   @IsOptional()
   @Type(() => Number)
   page?: number;
 
-  @ApiPropertyOptional({ description: 'Number of items per page', default: 10 })
-  @IsNumber()
-  @Min(1)
+  @ApiPropertyOptional({ 
+    description: 'Number of items per page', 
+    default: 10,
+    example: 10,
+    minimum: 1,
+    maximum: 100,
+  })
+  @IsNumber({ allowInfinity: false, allowNaN: false }, { message: 'Limit must be a valid number' })
+  @Min(1, { message: 'Limit must be at least 1' })
   @IsOptional()
   @Type(() => Number)
   limit?: number;

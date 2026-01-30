@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import {
   IsBoolean,
@@ -9,44 +9,43 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { Prisma } from 'generated/prisma';
 
-export class CreateServiceDto implements Prisma.ServiceCreateInput {
+export class CreateServiceDto {
   @ApiProperty({
     description: 'The name of the service',
     example: 'Wedding Photography',
     maxLength: 255,
   })
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(255)
+  @IsString({ message: 'Service name must be a string' })
+  @IsNotEmpty({ message: 'Service name is required' })
+  @MaxLength(255, { message: 'Service name cannot exceed 255 characters' })
   name: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'The slug of the service',
     example: 'wedding-photography',
-    required: false,
     maxLength: 255,
   })
   @IsOptional()
-  @IsString()
-  @MaxLength(255)
+  @IsString({ message: 'Service slug must be a string' })
+  @MaxLength(255, { message: 'Service slug cannot exceed 255 characters' })
   slug?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'The description of the service',
     example: 'Professional wedding photography service',
-    required: false,
+    maxLength: 1000,
   })
   @IsOptional()
-  @IsString()
+  @IsString({ message: 'Service description must be a string' })
+  @MaxLength(1000, { message: 'Service description cannot exceed 1000 characters' })
   description?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'The price of the service',
     example: 1500,
-    required: false,
     default: 0,
+    minimum: 0,
   })
   @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })
@@ -59,10 +58,9 @@ export class CreateServiceDto implements Prisma.ServiceCreateInput {
   })
   price?: number;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'Whether the service is active',
     example: true,
-    required: false,
     default: false,
   })
   @IsOptional()

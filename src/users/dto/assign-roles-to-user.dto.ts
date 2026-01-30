@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsArray, IsUUID } from 'class-validator';
+import { IsArray, IsUUID, ArrayMinSize } from 'class-validator';
 
 export class AssignRolesToUserDto {
   @ApiProperty({
@@ -7,7 +7,8 @@ export class AssignRolesToUserDto {
     example: ['uuid-1', 'uuid-2'],
     type: [String],
   })
-  @IsArray()
-  @IsUUID('4', { each: true })
+  @IsArray({ message: 'Role IDs must be an array' })
+  @ArrayMinSize(1, { message: 'At least one role ID is required' })
+  @IsUUID('4', { each: true, message: 'Each role ID must be a valid UUID' })
   roleIds: string[];
 }

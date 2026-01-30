@@ -10,11 +10,11 @@ export class PaymentsService {
   async create(createPaymentDto: CreatePaymentDto) {
     // Validate order exists
     const order = await this.databaseService.order.findUnique({
-      where: { bookingId: createPaymentDto.bookingId },
+      where: { id: createPaymentDto.orderId },
     });
     if (!order) {
       throw new NotFoundException(
-        `Order for booking ${createPaymentDto.bookingId} not found`,
+        `Order ${createPaymentDto.orderId} not found`,
       );
     }
 
@@ -22,8 +22,8 @@ export class PaymentsService {
       order: { connect: { id: order.id } },
       amount: createPaymentDto.amount,
       method: createPaymentDto.method,
-      status: createPaymentDto.status ?? 'PENDING',
-      notes: createPaymentDto.note,
+      status: 'PENDING',
+      notes: createPaymentDto.notes,
     };
 
     return this.databaseService.payment.create({
@@ -56,20 +56,18 @@ export class PaymentsService {
     await this.findOne(id);
 
     const data: Prisma.PaymentUpdateInput = {};
-    if (updatePaymentDto.bookingId) {
-      data.order = { connect: { bookingId: updatePaymentDto.bookingId } };
-    }
-    if (updatePaymentDto.amount !== undefined) {
-      data.amount = updatePaymentDto.amount;
-    }
-    if (updatePaymentDto.method) {
-      data.method = updatePaymentDto.method;
-    }
+
     if (updatePaymentDto.status) {
       data.status = updatePaymentDto.status;
     }
-    if (updatePaymentDto.note !== undefined) {
-      data.notes = updatePaymentDto.note;
+    if (updatePaymentDto.description) {
+      data.description = updatePaymentDto.description;
+    }
+    if (updatePaymentDto.dueDate) {
+      data.dueDate = updatePaymentDto.dueDate;
+    }
+    if (updatePaymentDto.notes !== undefined) {
+      data.notes = updatePaymentDto.notes;
     }
 
     return this.databaseService.payment.update({

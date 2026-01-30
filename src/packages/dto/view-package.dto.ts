@@ -1,58 +1,82 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { Package } from 'generated/prisma';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsUUID, IsString, IsNumber, IsBoolean, IsDate, IsOptional, Min } from 'class-validator';
+import { Type } from 'class-transformer';
 
-export class ViewPackageDto implements Package {
+export class ViewPackageDto {
   @ApiProperty({
+    description: 'Package ID',
     example: 'uuid-1234',
   })
+  @IsUUID('4')
   id: string;
 
   @ApiProperty({
+    description: 'Package name',
     example: 'Premium Wedding Package',
   })
+  @IsString()
   name: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
+    description: 'Package slug',
     example: 'premium-wedding-package',
-    required: false,
     nullable: true,
   })
+  @IsOptional()
+  @IsString()
   slug: string | null;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
+    description: 'Package description',
     example:
       'Comprehensive wedding package with photography, videography, and more',
-    required: false,
     nullable: true,
   })
+  @IsOptional()
+  @IsString()
   description: string | null;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
+    description: 'Package price',
     example: 5000,
-    required: false,
+    minimum: 0,
   })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
   price: number;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
+    description: 'Is package active',
     example: true,
-    required: false,
   })
+  @IsOptional()
+  @IsBoolean()
   isActive: boolean;
 
   @ApiProperty({
+    description: 'Creation date',
     example: '2025-01-01T00:00:00.000Z',
   })
+  @IsDate()
+  @Type(() => Date)
   createdAt: Date;
 
   @ApiProperty({
+    description: 'Update date',
     example: '2025-01-01T00:00:00.000Z',
   })
+  @IsDate()
+  @Type(() => Date)
   updatedAt: Date;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
+    description: 'Deletion date',
     example: null,
-    required: false,
     nullable: true,
   })
+  @IsOptional()
+  @IsDate()
+  @Type(() => Date)
   deletedAt: Date | null;
 }

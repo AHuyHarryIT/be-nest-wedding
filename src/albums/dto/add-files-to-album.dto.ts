@@ -9,21 +9,34 @@ import {
   IsUUID,
   Min,
   ValidateNested,
+  ArrayMinSize,
 } from 'class-validator';
 
 class AlbumFileDto {
-  @ApiProperty({ description: 'File ID to add to album' })
-  @IsUUID()
+  @ApiProperty({
+    description: 'File ID to add to album',
+    example: 'uuid-1234',
+  })
+  @IsUUID('4')
   @IsNotEmpty()
   fileId: string;
 
-  @ApiPropertyOptional({ description: 'Sort order', default: 0 })
+  @ApiPropertyOptional({
+    description: 'Sort order',
+    example: 0,
+    default: 0,
+    minimum: 0,
+  })
   @IsInt()
   @Min(0)
   @IsOptional()
   sortOrder?: number;
 
-  @ApiPropertyOptional({ description: 'Caption for the file' })
+  @ApiPropertyOptional({
+    description: 'Caption for the file (max 500 characters)',
+    example: 'Wedding moment',
+    maxLength: 500,
+  })
   @IsString()
   @IsOptional()
   caption?: string;
@@ -35,7 +48,9 @@ export class AddFilesToAlbumDto {
     type: [AlbumFileDto],
   })
   @IsArray()
+  @ArrayMinSize(1)
   @ValidateNested({ each: true })
   @Type(() => AlbumFileDto)
+  @IsNotEmpty()
   files: AlbumFileDto[];
 }

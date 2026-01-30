@@ -125,15 +125,15 @@ enum VisibilityLevel {
 
 model User {
   id                 String         @id @default(uuid())
-  phoneNumber        String         @unique
-  passwordHash       String
-  firstName          String?
-  lastName           String?
+  phoneNumber        String         @unique @map("phone_number")
+  passwordHash       String         @map("password_hash")
+  firstName          String?        @map("first_name")
+  lastName           String?        @map("last_name")
   email              String?
-  avatarUrl          String?
-  isActive           Boolean        @default(true)
-  refreshToken       String?
-  refreshTokenExpiry DateTime?
+  avatarUrl          String?        @map("avatar_url")
+  isActive           Boolean        @default(true) @map("is_active")
+  refreshToken       String?        @map("refresh_token")
+  refreshTokenExpiry DateTime?      @map("refresh_token_expiry")
   // relation
   roles              UserRole[]
   bookings           Booking[]
@@ -141,9 +141,11 @@ model User {
   files              File[]
   albums             Album[]
   // timestamps
-  createdAt          DateTime       @default(now())
-  updatedAt          DateTime       @updatedAt
-  deletedAt          DateTime?
+  createdAt          DateTime       @default(now()) @map("created_at")
+  updatedAt          DateTime       @updatedAt @map("updated_at")
+  deletedAt          DateTime?      @map("deleted_at")
+
+  @@map("users")
 }
 
 model Role {
@@ -154,8 +156,10 @@ model Role {
   users       UserRole[]
   permissions RolePermission[]
   // timestamps
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  @@map("roles")
 }
 
 model Permission {
@@ -165,30 +169,34 @@ model Permission {
   // relation
   roles       RolePermission[]
   // timestamps
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  @@map("permissions")
 }
 
 model UserRole {
-  userId String
-  roleId String
+  userId String @map("user_id")
+  roleId String @map("role_id")
   // relation
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
 
   @@id([userId, roleId])
   @@index([roleId])
+  @@map("user_roles")
 }
 
 model RolePermission {
-  roleId       String
-  permissionId String
+  roleId       String     @map("role_id")
+  permissionId String     @map("permission_id")
   // relation
   role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
   permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
 
   @@id([roleId, permissionId])
   @@index([permissionId])
+  @@map("role_permissions")
 }
 
 model Product {
@@ -196,35 +204,39 @@ model Product {
   name             String
   description      String?
   price            Float   @default(0)
-  stockQty         Int     @default(0)
-  isActive         Boolean @default(false)
-  categoryId       String?
-  imageFileId      String?
-  oneDriveFolderId String?
+  stockQty         Int     @default(0) @map("stock_qty")
+  isActive         Boolean @default(false) @map("is_active")
+  categoryId       String? @map("category_id")
+  imageFileId      String? @map("image_file_id")
+  oneDriveFolderId String? @map("one_drive_folder_id")
 
   // relation
   category              Category?              @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   inventoryReservations InventoryReservation[]
 
   // timestamps
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @default(now())
-  deletedAt DateTime?
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @default(now()) @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@map("products")
 }
 
 model Category {
   id          String  @id @default(uuid())
   name        String  @unique
   description String?
-  isActive    Boolean @default(true)
+  isActive    Boolean @default(true) @map("is_active")
 
   // relation
   products Product[]
 
   // timestamps
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @default(now())
-  deletedAt DateTime?
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @default(now()) @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@map("categories")
 }
 
 model Service {
@@ -233,7 +245,7 @@ model Service {
   slug        String? @unique
   description String?
   price       Float   @default(0)
-  isActive    Boolean @default(false)
+  isActive    Boolean @default(false) @map("is_active")
 
   // relation
   packages PackageService[]
@@ -241,9 +253,11 @@ model Service {
   bookings BookingService[]
 
   // timestamps
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @default(now())
-  deletedAt DateTime?
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @default(now()) @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@map("services")
 }
 
 model Package {
@@ -252,37 +266,40 @@ model Package {
   slug        String? @unique
   description String?
   price       Float   @default(0)
-  isActive    Boolean @default(false)
+  isActive    Boolean @default(false) @map("is_active")
 
   // relation
   services        PackageService[]
   bookingPackages BookingPackage[]
 
   // timestamps
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @default(now())
-  deletedAt DateTime?
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @default(now()) @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@map("packages")
 }
 
 model PackageService {
-  packageId String
-  serviceId String
+  packageId String  @map("package_id")
+  serviceId String  @map("service_id")
   // relation
   package   Package @relation(fields: [packageId], references: [id], onDelete: Cascade)
   service   Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
 
   @@id([packageId, serviceId])
   @@index([serviceId])
+  @@map("package_services")
 }
 
 model Booking {
   id          String           @id @default(uuid())
-  customerId  String
+  customerId  String           @map("customer_id")
   notes       String?
   status      BookingStatus    @default(PENDING)
-  eventDate   DateTime
-  totalPrice  Float            @default(0)
-  cancelledAt DateTime?
+  eventDate   DateTime         @map("event_date")
+  totalPrice  Float            @default(0) @map("total_price")
+  cancelledAt DateTime?        @map("cancelled_at")
   // relation
   customer    User             @relation(fields: [customerId], references: [id], onDelete: Cascade)
   packages    BookingPackage[]
@@ -291,16 +308,17 @@ model Booking {
   albums      Album[]
   orders      Order[]
   // timestamps
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @default(now())
-  deletedAt   DateTime?
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @default(now()) @map("updated_at")
+  deletedAt   DateTime?        @map("deleted_at")
 
   @@index([customerId, status, createdAt])
+  @@map("bookings")
 }
 
 model BookingPackage {
-  bookingId String
-  packageId String
+  bookingId String  @map("booking_id")
+  packageId String  @map("package_id")
   price     Float   @default(0) // Price at time of booking
   quantity  Int     @default(1)
   // relation
@@ -309,11 +327,12 @@ model BookingPackage {
 
   @@id([bookingId, packageId])
   @@index([packageId])
+  @@map("booking_packages")
 }
 
 model BookingService {
-  bookingId String
-  serviceId String
+  bookingId String  @map("booking_id")
+  serviceId String  @map("service_id")
   price     Float   @default(0) // Price at time of booking
   quantity  Int     @default(1)
   // relation
@@ -322,16 +341,17 @@ model BookingService {
 
   @@id([bookingId, serviceId])
   @@index([serviceId])
+  @@map("booking_services")
 }
 
 model BookingSession {
   id           String        @id @default(uuid())
-  bookingId    String
+  bookingId    String        @map("booking_id")
   title        String
-  locationName String?
+  locationName String?       @map("location_name")
   address      String?
-  startsAt     DateTime
-  endsAt       DateTime
+  startsAt     DateTime      @map("starts_at")
+  endsAt       DateTime      @map("ends_at")
   status       BookingStatus @default(PENDING)
 
   // relation
@@ -341,28 +361,30 @@ model BookingSession {
   inventoryReservations InventoryReservation[]
 
   // timestamps
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @map("updated_at")
 
   @@index([bookingId])
   @@index([startsAt, endsAt])
   @@index([status])
+  @@map("booking_sessions")
 }
 
 model SessionStaff {
-  sessionId String
-  staffId   String
+  sessionId String @map("session_id")
+  staffId   String @map("staff_id")
 
   // relation
   session BookingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   staff   User           @relation(fields: [staffId], references: [id], onDelete: Cascade)
 
   @@id([sessionId, staffId])
+  @@map("session_staffs")
 }
 
 model SessionService {
-  sessionId String
-  serviceId String
+  sessionId String @map("session_id")
+  serviceId String @map("service_id")
   price     Float  @default(0)
 
   // relation
@@ -370,152 +392,157 @@ model SessionService {
   service Service        @relation(fields: [serviceId], references: [id], onDelete: Cascade)
 
   @@id([sessionId, serviceId])
+  @@map("session_services")
 }
 
 model InventoryReservation {
   id         String   @id @default(uuid())
-  productId  String
-  sessionId  String
+  productId  String   @map("product_id")
+  sessionId  String   @map("session_id")
   quantity   Int
-  reservedAt DateTime @default(now())
+  reservedAt DateTime @default(now()) @map("reserved_at")
 
   // relation
   product Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
   session BookingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([productId])
+  @@map("inventory_reservations")
 }
 
 model Order {
-  id                  String      @id @default(uuid())
-  bookingId           String
-  referenceNumber     String      @unique
-  totalPrice          Float       @default(0)
-  totalPaid           Float       @default(0)
-  totalRefunded       Float       @default(0)
-  balanceRemaining    Float       @default(0)
-  status              OrderStatus @default(UNPAID)
-  notes               String?
-  internalNotes       String?
-  cancellationReason  String?
-  cancelledAt         DateTime?
+  id                 String      @id @default(uuid())
+  bookingId          String      @map("booking_id")
+  referenceNumber    String      @unique @map("reference_number")
+  totalPrice         Float       @default(0) @map("total_price")
+  totalPaid          Float       @default(0) @map("total_paid")
+  totalRefunded      Float       @default(0) @map("total_refunded")
+  balanceRemaining   Float       @default(0) @map("balance_remaining")
+  status             OrderStatus @default(UNPAID)
+  notes              String?
+  internalNotes      String?     @map("internal_notes")
+  cancellationReason String?     @map("cancellation_reason")
+  cancelledAt        DateTime?   @map("cancelled_at")
 
   // relation
-  booking      Booking         @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  booking      Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   payments     Payment[]
   paymentPlans PaymentPlan[]
   refunds      Refund[]
 
   // timestamps
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
 
   @@unique([bookingId])
   @@index([status])
   @@index([referenceNumber])
   @@index([createdAt])
+  @@map("orders")
 }
 
 model Payment {
-  id                  String         @id @default(uuid())
-  orderId             String
-  paymentSequence     Int            @default(1)
-  paymentType         PaymentType    @default(REMAINING)
-  amount              Float          @default(0)
+  id                  String        @id @default(uuid())
+  orderId             String        @map("order_id")
+  paymentSequence     Int           @default(1) @map("payment_sequence")
+  paymentType         PaymentType   @default(REMAINING) @map("payment_type")
+  amount              Float         @default(0)
   method              PaymentMethod
-  status              PaymentStatus  @default(PENDING)
+  status              PaymentStatus @default(PENDING)
   description         String?
-  dueDate             DateTime?
-  attemptCount        Int            @default(0)
-  lastAttemptAt       DateTime?
-  successfulAttemptId String?
+  dueDate             DateTime?     @map("due_date")
+  attemptCount        Int           @default(0) @map("attempt_count")
+  lastAttemptAt       DateTime?     @map("last_attempt_at")
+  successfulAttemptId String?       @map("successful_attempt_id")
   notes               String?
-  internalNotes       String?
-  cancelledAt         DateTime?
-  cancellationReason  String?
+  internalNotes       String?       @map("internal_notes")
+  cancelledAt         DateTime?     @map("cancelled_at")
+  cancellationReason  String?       @map("cancellation_reason")
 
   // relation
-  order                    Order                        @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  attempts                 PaymentAttempt[]
-  gatewayTransactions      PaymentGatewayTransaction[]
+  order               Order                       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  attempts            PaymentAttempt[]
+  gatewayTransactions PaymentGatewayTransaction[]
 
   // timestamps
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@unique([orderId, paymentSequence])
   @@index([orderId])
   @@index([status])
   @@index([dueDate])
   @@index([method])
+  @@map("payments")
 }
 
 model PaymentAttempt {
-  id                      String                   @id @default(uuid())
-  paymentId               String
-  attemptNumber           Int
-  status                  PaymentAttemptStatus     @default(INITIATED)
-  resultCode              String?
-  resultMessage           String?
-  errorReason             String?
-  attemptedAmount         Float                    @default(0)
-  gatewayTransactionId    String?                  @unique
-  idempotencyKey          String                   @unique
-  userAgent               String?
-  ipAddress               String?
-  deviceInfo              String?
-  createdBy               String?
-  notes                   String?
-  requestedAt             DateTime                 @default(now())
-  respondedAt             DateTime?
-  duration                Int?
+  id                   String               @id @default(uuid())
+  paymentId            String               @map("payment_id")
+  attemptNumber        Int                  @map("attempt_number")
+  status               PaymentAttemptStatus @default(INITIATED)
+  resultCode           String?              @map("result_code")
+  resultMessage        String?              @map("result_message")
+  errorReason          String?              @map("error_reason")
+  attemptedAmount      Float                @default(0) @map("attempted_amount")
+  gatewayTransactionId String?              @unique @map("gateway_transaction_id")
+  idempotencyKey       String               @unique @map("idempotency_key")
+  userAgent            String?              @map("user_agent")
+  ipAddress            String?              @map("ip_address")
+  deviceInfo           String?              @map("device_info")
+  createdBy            String?              @map("created_by")
+  notes                String?
+  requestedAt          DateTime             @default(now()) @map("requested_at")
+  respondedAt          DateTime?            @map("responded_at")
+  duration             Int?
 
   // relation
-  payment                 Payment                  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
-  gatewayTransaction      PaymentGatewayTransaction? @relation(fields: [gatewayTransactionId], references: [id], onDelete: SetNull)
+  payment            Payment                    @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  gatewayTransaction PaymentGatewayTransaction? @relation(fields: [gatewayTransactionId], references: [id], onDelete: SetNull)
 
   // timestamps
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@unique([paymentId, attemptNumber])
   @@index([paymentId])
   @@index([status])
   @@index([gatewayTransactionId])
   @@index([requestedAt])
+  @@map("payment_attempts")
 }
 
 model PaymentGatewayTransaction {
-  id                      String   @id @default(uuid())
-  paymentId               String
-  paymentAttemptId        String?
-  gatewayProvider         String // "momo", "zalo", "stripe", etc.
-  gatewayName             String?
-  gatewayTransactionId    String?
-  gatewayOrderId          String?
-  gatewayCorrelationId    String?
-  amount                  Float
-  currency                String   @default("VND")
-  gatewayStatus           String?
-  requestedAt             DateTime @default(now())
-  respondedAt             DateTime?
-  settledAt               DateTime?
-  webhookReceivedAt       DateTime?
-  webhookId               String?
-  webhookStatus           String?
-  gatewayRequest          Json?
-  gatewayResponse         Json?
-  notes                   String?
-  internalNotes           String?
+  id                   String    @id @default(uuid())
+  paymentId            String    @map("payment_id")
+  paymentAttemptId     String?   @map("payment_attempt_id")
+  gatewayProvider      String    @map("gateway_provider") // "momo", "zalo", "stripe", etc.
+  gatewayName          String?   @map("gateway_name")
+  gatewayTransactionId String?   @map("gateway_transaction_id")
+  gatewayOrderId       String?   @map("gateway_order_id")
+  gatewayCorrelationId String?   @map("gateway_correlation_id")
+  amount               Float
+  currency             String    @default("VND")
+  gatewayStatus        String?   @map("gateway_status")
+  requestedAt          DateTime  @default(now()) @map("requested_at")
+  respondedAt          DateTime? @map("responded_at")
+  settledAt            DateTime? @map("settled_at")
+  webhookReceivedAt    DateTime? @map("webhook_received_at")
+  webhookId            String?   @map("webhook_id")
+  webhookStatus        String?   @map("webhook_status")
+  gatewayRequest       Json?     @map("gateway_request")
+  gatewayResponse      Json?     @map("gateway_response")
+  notes                String?
+  internalNotes        String?   @map("internal_notes")
 
   // relation
-  payment                 Payment            @relation(fields: [paymentId], references: [id], onDelete: Cascade)
-  attempts                PaymentAttempt[]
+  payment  Payment          @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  attempts PaymentAttempt[]
 
   // timestamps
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([paymentId])
   @@index([gatewayProvider])
@@ -523,118 +550,123 @@ model PaymentGatewayTransaction {
   @@index([gatewayOrderId])
   @@index([settledAt])
   @@index([webhookReceivedAt])
+  @@map("payment_gateway_transactions")
 }
 
 model Refund {
-  id              String       @id @default(uuid())
-  orderId         String
-  refundSequence  Int          @default(1)
-  referenceNumber String       @unique
-  originalPaymentId String?
-  amount          Float        @default(0)
-  reason          RefundReason @default(CUSTOMER_REQUEST)
-  description     String?
-  status          RefundStatus @default(INITIATED)
-  processedAt     DateTime?
-  completedAt     DateTime?
-  authorizedBy    String?
-  notes           String?
-  internalNotes   String?
+  id                String       @id @default(uuid())
+  orderId           String       @map("order_id")
+  refundSequence    Int          @default(1) @map("refund_sequence")
+  referenceNumber   String       @unique @map("reference_number")
+  originalPaymentId String?      @map("original_payment_id")
+  amount            Float        @default(0)
+  reason            RefundReason @default(CUSTOMER_REQUEST)
+  description       String?
+  status            RefundStatus @default(INITIATED)
+  processedAt       DateTime?    @map("processed_at")
+  completedAt       DateTime?    @map("completed_at")
+  authorizedBy      String?      @map("authorized_by")
+  notes             String?
+  internalNotes     String?      @map("internal_notes")
 
   // relation
-  order            Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  attempts         RefundAttempt[]
+  order    Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  attempts RefundAttempt[]
 
   // timestamps
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@unique([orderId, refundSequence])
   @@index([orderId])
   @@index([status])
   @@index([createdAt])
+  @@map("refunds")
 }
 
 model RefundAttempt {
   id              String              @id @default(uuid())
-  refundId        String
-  attemptNumber   Int
+  refundId        String              @map("refund_id")
+  attemptNumber   Int                 @map("attempt_number")
   amount          Float               @default(0)
   status          RefundAttemptStatus @default(INITIATED)
-  resultCode      String?
-  resultMessage   String?
-  gatewayRefundId String?
+  resultCode      String?             @map("result_code")
+  resultMessage   String?             @map("result_message")
+  gatewayRefundId String?             @map("gateway_refund_id")
   notes           String?
-  processedBy     String?
-  requestedAt     DateTime            @default(now())
-  respondedAt     DateTime?
+  processedBy     String?             @map("processed_by")
+  requestedAt     DateTime            @default(now()) @map("requested_at")
+  respondedAt     DateTime?           @map("responded_at")
 
   // relation
   refund Refund @relation(fields: [refundId], references: [id], onDelete: Cascade)
 
   // timestamps
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @map("created_at")
 
   @@unique([refundId, attemptNumber])
   @@index([refundId])
   @@index([status])
+  @@map("refund_attempts")
 }
 
 model PaymentPlan {
-  id               String           @id @default(uuid())
-  orderId          String
-  planType         PaymentPlanType  @default(ONE_TIME)
-  installmentCount Int              @default(1)
+  id               String            @id @default(uuid())
+  orderId          String            @map("order_id")
+  planType         PaymentPlanType   @default(ONE_TIME) @map("plan_type")
+  installmentCount Int               @default(1) @map("installment_count")
   status           PaymentPlanStatus @default(PENDING)
 
   // relation
-  order     Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order     Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
   schedules PaymentSchedule[]
 
   // timestamps
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([orderId])
   @@index([status])
+  @@map("payment_plans")
 }
 
 model PaymentSchedule {
-  id                String                @id @default(uuid())
-  paymentPlanId     String
-  scheduleNumber    Int
-  dueDate           DateTime
-  amount            Float
-  status            PaymentScheduleStatus @default(PENDING)
-  paidDate          DateTime?
-  reminderSentAt    DateTime?
-  overdueReminderSentAt DateTime?
+  id                    String                @id @default(uuid())
+  paymentPlanId         String                @map("payment_plan_id")
+  scheduleNumber        Int                   @map("schedule_number")
+  dueDate               DateTime              @map("due_date")
+  amount                Float
+  status                PaymentScheduleStatus @default(PENDING)
+  paidDate              DateTime?             @map("paid_date")
+  reminderSentAt        DateTime?             @map("reminder_sent_at")
+  overdueReminderSentAt DateTime?             @map("overdue_reminder_sent_at")
 
   // relation
   paymentPlan PaymentPlan @relation(fields: [paymentPlanId], references: [id], onDelete: Cascade)
 
   // timestamps
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@unique([paymentPlanId, scheduleNumber])
   @@index([paymentPlanId])
   @@index([dueDate])
   @@index([status])
+  @@map("payment_schedules")
 }
 
 // Media and Albums
 model File {
   id         String          @id @default(uuid())
-  uploaderId String
+  uploaderId String          @map("uploader_id")
   name       String
-  storageKey String
-  storageUrl String
-  mimeType   String
-  byteSize   Int
+  storageKey String          @map("storage_key")
+  storageUrl String          @map("storage_url")
+  mimeType   String          @map("mime_type")
+  byteSize   Int             @map("byte_size")
   width      Int?
   height     Int?
-  usageType  String
+  usageType  String          @map("usage_type")
   visibility VisibilityLevel @default(PRIVATE)
 
   // relation
@@ -643,21 +675,23 @@ model File {
   coverAlbums Album[]
 
   // timestamps
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@map("files")
 }
 
 model Album {
   id          String    @id @default(uuid())
-  ownerUserId String?
-  bookingId   String?
+  ownerUserId String?   @map("owner_user_id")
+  bookingId   String?   @map("booking_id")
   title       String
   description String?
-  isPublic    Boolean   @default(false)
-  share_token String?   @unique
-  expiresAt   DateTime?
-  coverFileId String?
+  isPublic    Boolean   @default(false) @map("is_public")
+  share_token String?   @unique @map("share_token")
+  expiresAt   DateTime? @map("expires_at")
+  coverFileId String?   @map("cover_file_id")
 
   // relation
   owner     User?       @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
@@ -666,15 +700,17 @@ model Album {
   files     AlbumFile[]
 
   // timestamps
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@map("albums")
 }
 
 model AlbumFile {
-  albumId   String
-  fileId    String
-  sortOrder Int     @default(0)
+  albumId   String  @map("album_id")
+  fileId    String  @map("file_id")
+  sortOrder Int     @default(0) @map("sort_order")
   caption   String?
 
   // relation
@@ -682,10 +718,11 @@ model AlbumFile {
   album Album @relation(fields: [albumId], references: [id])
 
   // timestamps
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @map("created_at")
 
   @@id([albumId, fileId])
   @@index([fileId])
+  @@map("album_files")
 }
 
 // Audit Logs

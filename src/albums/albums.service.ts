@@ -94,7 +94,7 @@ export class AlbumsService {
       title: createAlbumDto.title,
       description: createAlbumDto.description,
       isPublic: createAlbumDto.isPublic ?? false,
-      share_token: createAlbumDto.share_token,
+      share_token: createAlbumDto.shareToken,
       expiresAt: createAlbumDto.expiresAt
         ? new Date(createAlbumDto.expiresAt)
         : null,
@@ -265,8 +265,8 @@ export class AlbumsService {
       data.description = updateAlbumDto.description;
     if (updateAlbumDto.isPublic !== undefined)
       data.isPublic = updateAlbumDto.isPublic;
-    if (updateAlbumDto.share_token !== undefined)
-      data.share_token = updateAlbumDto.share_token;
+    if (updateAlbumDto.shareToken !== undefined)
+      data.share_token = updateAlbumDto.shareToken;
     if (updateAlbumDto.expiresAt !== undefined) {
       data.expiresAt = updateAlbumDto.expiresAt
         ? new Date(updateAlbumDto.expiresAt)

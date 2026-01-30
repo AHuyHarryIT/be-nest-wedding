@@ -1,88 +1,101 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsBoolean,
   IsNumber,
   IsOptional,
   IsString,
+  IsNotEmpty,
+  IsUUID,
+  MaxLength,
   Min,
 } from 'class-validator';
-import { Prisma, Product } from 'generated/prisma';
 
-export class CreateProductDto implements Prisma.ProductCreateInput {
+export class CreateProductDto {
   @ApiProperty({
     description: 'The name of the product',
     example: 'Product 12',
+    maxLength: 255,
   })
-  @IsString()
+  @IsString({ message: 'Product name must be a string' })
+  @IsNotEmpty({ message: 'Product name is required' })
+  @MaxLength(255, { message: 'Product name cannot exceed 255 characters' })
   name: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'The description of the product',
     example: 'This is a sample product',
-    required: false,
+    maxLength: 1000,
   })
   @IsOptional()
-  @IsString()
+  @IsString({ message: 'Product description must be a string' })
+  @MaxLength(1000, {
+    message: 'Product description cannot exceed 1000 characters',
+  })
   description?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'The price of the product',
     example: 100,
-    required: false,
+    default: 0,
+    minimum: 0,
   })
   @IsOptional()
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
-  price: number = 0;
+  price?: number;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'The stock quantity of the product',
     example: 50,
-    required: false,
+    default: 0,
+    minimum: 0,
   })
   @IsOptional()
   @IsNumber()
   @Min(0)
-  stockQty: number = 0;
+  stockQty?: number;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'Whether the product is active',
     example: true,
-    required: false,
+    default: false,
   })
   @IsOptional()
   @IsBoolean()
-  isActive: boolean = false;
+  isActive?: boolean;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'The category ID of the product',
     example: 'uuid-category-123',
-    required: false,
+    format: 'uuid',
   })
   @IsOptional()
-  @IsString()
+  @IsUUID('4', { message: 'Category ID must be a valid UUID' })
   categoryId?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'The product image file ID (stored in File storage)',
     example: 'uuid-file-123',
-    required: false,
+    format: 'uuid',
   })
   @IsOptional()
-  @IsString()
+  @IsUUID('4', { message: 'Image file ID must be a valid UUID' })
   imageFileId?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'The OneDrive folder ID for storing product images',
     example: 'folder-id-123',
-    required: false,
+    maxLength: 255,
   })
   @IsOptional()
-  @IsString()
+  @IsString({ message: 'OneDrive folder ID must be a string' })
+  @MaxLength(255, {
+    message: 'OneDrive folder ID cannot exceed 255 characters',
+  })
   oneDriveFolderId?: string;
 }
 
-export class CreateProductResponseDto implements Product {
+export class CreateProductResponseDto {
   @ApiProperty({
     description: 'The unique identifier of the product',
     example: 'uuid-1234',
@@ -97,66 +110,63 @@ export class CreateProductResponseDto implements Product {
   @IsString()
   name: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'The description of the product',
     example: 'This is a sample product',
-    required: false,
+    nullable: true,
   })
   @IsOptional()
   @IsString()
-  description: string;
+  description: string | null;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'The price of the product',
     example: 100,
-    required: false,
   })
   @IsOptional()
   @IsNumber()
   @Min(0)
-  price: number = 0;
+  price: number;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'The stock quantity of the product',
     example: 50,
-    required: false,
   })
   @IsOptional()
   @IsNumber()
   @Min(0)
-  stockQty: number = 0;
+  stockQty: number;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'Whether the product is active',
     example: true,
-    required: false,
   })
   @IsOptional()
   @IsBoolean()
-  isActive: boolean = false;
+  isActive: boolean;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'The category ID of the product',
     example: 'uuid-category-123',
-    required: false,
+    nullable: true,
   })
   @IsOptional()
   @IsString()
   categoryId: string | null;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'The file ID of the product image',
     example: 'uuid-file-id',
-    required: false,
+    nullable: true,
   })
   @IsOptional()
   @IsString()
   imageFileId: string | null;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'The OneDrive folder ID for product images',
     example: 'uuid-folder-id',
-    required: false,
+    nullable: true,
   })
   @IsOptional()
   @IsString()
@@ -174,10 +184,10 @@ export class CreateProductResponseDto implements Product {
   })
   updatedAt: Date;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'The deletion timestamp of the product, if deleted',
     example: null,
-    required: false,
+    nullable: true,
   })
   @IsOptional()
   deletedAt: Date | null;

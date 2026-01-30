@@ -11,6 +11,7 @@ import {
   OrderStatus,
 } from 'generated/prisma';
 import { DatabaseService } from '../database/database.service';
+import { PaymentRepository } from '../common/repositories';
 import { PaymentAttemptService } from './payment-attempt.service';
 import { PaymentGatewayTransactionService } from './payment-gateway-transaction.service';
 
@@ -35,6 +36,7 @@ export interface UpdatePaymentDto {
 export class PaymentService {
   constructor(
     private readonly databaseService: DatabaseService,
+    private readonly paymentRepository: PaymentRepository,
     private readonly paymentAttemptService: PaymentAttemptService,
     private readonly gatewayTransactionService: PaymentGatewayTransactionService,
   ) {}
@@ -55,24 +57,23 @@ export class PaymentService {
       throw new BadRequestException(`Order ${dto.orderId} not found`);
     }
 
-    // Generate payment sequence
-    const paymentSequence = (order.payments?.length ?? 0) + 1;
+    // Generate payment sequence using repository
+    const paymentSequence = await this.paymentRepository.getNextPaymentSequence(
+      dto.orderId,
+    );
 
-    const payment = await this.databaseService.payment.create({
-      data: {
-        order: { connect: { id: dto.orderId } },
-        paymentSequence,
-        amount: dto.amount,
-        method: dto.method,
-        paymentType: dto.paymentType ?? 'REMAINING',
-        status: 'PENDING',
-        description:
-          dto.description ||
-          `Payment ${paymentSequence} (${dto.paymentType ?? 'REMAINING'})`,
-        dueDate: dto.dueDate,
-        notes: dto.notes,
-      },
-      include: { order: true },
+    const payment = await this.paymentRepository.create({
+      order: { connect: { id: dto.orderId } },
+      paymentSequence,
+      amount: dto.amount,
+      method: dto.method,
+      paymentType: dto.paymentType ?? 'REMAINING',
+      status: 'PENDING',
+      description:
+        dto.description ||
+        `Payment ${paymentSequence} (${dto.paymentType ?? 'REMAINING'})`,
+      dueDate: dto.dueDate,
+      notes: dto.notes,
     });
 
     return payment;
@@ -89,13 +90,8 @@ export class PaymentService {
     ipAddress?: string,
     createdBy?: string,
   ) {
-    const payment = await this.databaseService.payment.findUnique({
-      where: { id: paymentId },
-      include: {
-        attempts: true,
-        order: true,
-      },
-    });
+    // Use repository for better query composition
+    const payment = await this.paymentRepository.findByIdWithDetails(paymentId);
 
     if (!payment) {
       throw new NotFoundException(`Payment ${paymentId} not found`);
@@ -120,6 +116,9 @@ export class PaymentService {
       ipAddress,
       createdBy,
     });
+
+    // Increment attempt count using repository
+    await this.paymentRepository.incrementAttemptCount(paymentId);
 
     return attempt;
   }
@@ -167,14 +166,12 @@ export class PaymentService {
       paymentStatus = 'ABANDONED';
     }
 
-    const updatedPayment = await this.databaseService.payment.update({
-      where: { id: attempt.payment.id },
-      data: {
-        status: paymentStatus,
-        successfulAttemptId: status === 'SUCCESS' ? attemptId : undefined,
-      },
-      include: { order: true },
-    });
+    // Use repository to update payment status
+    const updatedPayment = await this.paymentRepository.updateStatus(
+      attempt.payment.id,
+      paymentStatus,
+      { successfulAttemptId: status === 'SUCCESS' ? attemptId : undefined },
+    );
 
     // Update order if payment successful
     if (status === 'SUCCESS') {
@@ -193,10 +190,12 @@ export class PaymentService {
    * Retry a failed payment
    */
   async retryPayment(paymentId: string, maxRetries: number = 3) {
-    const payment = await this.databaseService.payment.findUnique({
-      where: { id: paymentId },
-      include: { attempts: true },
+    // Use repository to find due for retry
+    const payments = await this.paymentRepository.findDueForRetry(maxRetries, {
+      take: 1,
     });
+
+    const payment = payments.find((p) => p.id === paymentId);
 
     if (!payment) {
       throw new NotFoundException(`Payment ${paymentId} not found`);
@@ -230,22 +229,17 @@ export class PaymentService {
    * Update payment
    */
   async updatePayment(paymentId: string, dto: UpdatePaymentDto) {
-    const payment = await this.databaseService.payment.findUnique({
-      where: { id: paymentId },
-    });
+    const payment = await this.paymentRepository.findById(paymentId);
 
     if (!payment) {
       throw new NotFoundException(`Payment ${paymentId} not found`);
     }
 
-    return this.databaseService.payment.update({
-      where: { id: paymentId },
-      data: {
-        status: dto.status,
-        description: dto.description,
-        dueDate: dto.dueDate,
-        notes: dto.notes,
-      },
+    return this.paymentRepository.update(paymentId, {
+      status: dto.status,
+      description: dto.description,
+      dueDate: dto.dueDate,
+      notes: dto.notes,
     });
   }
 
