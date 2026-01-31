@@ -36,6 +36,6 @@ export class CreateCategoryDto {
     default: false,
   })
   @IsOptional()
-  @IsBoolean({ message: 'is_active must be a boolean value' })
-  is_active?: boolean;
+  @IsBoolean({ message: 'isActive must be a boolean value' })
+  isActive?: boolean;
 }

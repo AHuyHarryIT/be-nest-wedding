@@ -93,8 +93,8 @@ export class MomoIPNCallbackDto {
   requestId: string;
 
   @ApiProperty({ description: 'Payment amount in VND' })
-  @IsString()
-  amount: string;
+  @IsNumber()
+  amount: number;
 
   @ApiProperty({ description: 'Order information' })
   @IsString()
@@ -105,8 +105,8 @@ export class MomoIPNCallbackDto {
   orderType: string;
 
   @ApiProperty({ description: 'Momo transaction ID' })
-  @IsString()
-  transId: string;
+  @IsNumber()
+  transId: number;
 
   @ApiProperty({ description: 'Result code: 0=success, others=failure' })
   @IsNumber()

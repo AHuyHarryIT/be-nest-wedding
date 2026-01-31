@@ -496,7 +496,7 @@ export class OrdersService {
             this.paymentEventsService.emitPaymentFailed({
               bookingId,
               transId: callbackData.transId?.toString() || '',
-              amount: parseInt(callbackData.amount as string) || 0,
+              amount: callbackData.amount || 0,
               method: 'E_WALLET',
               timestamp: new Date(),
               message: callbackData.message,
@@ -528,7 +528,7 @@ export class OrdersService {
       }
 
       // Record gateway transaction and mark payment as successful
-      const amount = parseInt(callbackData.amount as string);
+      const amount = callbackData.amount || 0;
 
       // Create attempt
       const attempt = await this.paymentAttemptService.createAttempt({

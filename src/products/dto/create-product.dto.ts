@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import {
   IsBoolean,
   IsNumber,
@@ -42,6 +43,12 @@ export class CreateProductDto {
   @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return parseFloat(value);
+    }
+    return typeof value === 'number' ? value : 0;
+  })
   price?: number;
 
   @ApiPropertyOptional({
@@ -53,6 +60,12 @@ export class CreateProductDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return parseFloat(value);
+    }
+    return typeof value === 'number' ? value : 0;
+  })
   stockQty?: number;
 
   @ApiPropertyOptional({
@@ -62,6 +75,12 @@ export class CreateProductDto {
   })
   @IsOptional()
   @IsBoolean()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value.toLowerCase() === 'true';
+    }
+    return value as boolean;
+  })
   isActive?: boolean;
 
   @ApiPropertyOptional({

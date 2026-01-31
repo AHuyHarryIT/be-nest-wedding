@@ -33,15 +33,15 @@ export interface MomoIPNCallback {
   partnerCode: string;
   orderId: string;
   requestId: string;
-  amount: string;
+  amount: number;
   orderInfo: string;
   orderType: string;
-  transId: string;
+  transId: number;
   resultCode: number;
   message: string;
   payType: string;
   responseTime: number;
-  extraData: string;
+  extraData?: string;
   signature: string;
 }
 

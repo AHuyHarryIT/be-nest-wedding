@@ -1,5 +1,5 @@
 // Pagination & Response DTOs
-export { PaginationQueryDto } from './pagination-query.dto';
+export { PaginationQueryDto } from '../dto/pagination-query.dto';
 export { PaginatedResponseDto, SingleResponseDto } from './response.dto';
 
 // Payment DTOs

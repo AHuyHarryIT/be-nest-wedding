@@ -7,8 +7,8 @@ import { UpdateCategoryDto } from './dto/update-category.dto';
 export class CategoriesService {
   constructor(private db: DatabaseService) {}
 
-  create(createCategoryDto: CreateCategoryDto) {
-    return this.db.category.create({
+  async create(createCategoryDto: CreateCategoryDto) {
+    return await this.db.category.create({
       data: createCategoryDto,
     });
   }

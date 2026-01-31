@@ -11,6 +11,7 @@ import {
   PrismaClientExceptionFilter,
 } from './common/filters/prisma-exception';
 import { setupSwagger } from './common/config/swagger.config';
+import { ValidationPipe } from '@nestjs/common';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -30,7 +31,10 @@ async function bootstrap() {
   app.use(cookieParser());
 
   // Global pipes - Custom validation pipe with enhanced error formatting
-  app.useGlobalPipes(new GlobalValidationPipe());
+  app.useGlobalPipes(
+    new GlobalValidationPipe(),
+    new ValidationPipe({ transform: true }),
+  );
 
   // Global interceptors
   app.useGlobalInterceptors(new ResponseInterceptor());

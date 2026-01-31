@@ -75,7 +75,7 @@ export class PaymentService {
    * NOTE: For E-WALLET, payment record is created immediately but no attempt is made
    * Attempt is created only when user initiates payment
    */
-  async createPayment(dto: CreatePaymentDto): Promise<GenericRecord<unknown>> {
+  async createPayment(dto: CreatePaymentDto): Promise<any> {
     // Verify order exists
     const order = await this.databaseService.order.findUnique({
       where: { id: dto.orderId },
@@ -91,7 +91,7 @@ export class PaymentService {
       dto.orderId,
     );
 
-    const payment = (await this.paymentRepository.create({
+    const payment = await this.paymentRepository.create({
       order: { connect: { id: dto.orderId } },
       paymentSequence,
       amount: dto.amount,
@@ -103,7 +103,7 @@ export class PaymentService {
         `Payment ${paymentSequence} (${dto.paymentType ?? 'REMAINING'})`,
       dueDate: dto.dueDate,
       notes: dto.notes,
-    })) as GenericRecord<unknown>;
+    });
 
     return payment;
   }

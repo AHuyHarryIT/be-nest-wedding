@@ -20,26 +20,7 @@ export class ProductsService {
     const product = await this.databaseService.product.create({
       data: createProductDto,
     });
-
-    // Create OneDrive folder for this product
-    try {
-      const folderName = `${product.name}_${product.id}`;
-      const oneDriveFolderId =
-        await this.productImageService.createProductFolder(
-          product.id,
-          folderName,
-        );
-
-      // Update product with OneDrive folder ID
-      return await this.databaseService.product.update({
-        where: { id: product.id },
-        data: { oneDriveFolderId },
-      });
-    } catch (error) {
-      console.error('Failed to create OneDrive folder for product:', error);
-      // Still return the product even if folder creation fails
-      return product;
-    }
+    return product;
   }
 
   /**

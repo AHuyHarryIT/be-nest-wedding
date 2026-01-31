@@ -1,5 +1,6 @@
 import { PaginationQueryDto } from '@/common';
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import { IsBoolean, IsNumber, IsOptional, Min } from 'class-validator';
 
 export class QueryServiceDto extends PaginationQueryDto {
@@ -9,6 +10,12 @@ export class QueryServiceDto extends PaginationQueryDto {
   })
   @IsOptional()
   @IsBoolean({ message: 'isActive must be a boolean value' })
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value.toLowerCase() === 'true';
+    }
+    return value as boolean;
+  })
   isActive?: boolean;
 
   @ApiPropertyOptional({
