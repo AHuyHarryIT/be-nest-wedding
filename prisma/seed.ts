@@ -1,5 +1,6 @@
 import * as bcrypt from 'bcryptjs';
 import { PrismaClient } from '../generated/prisma';
+import { faker } from '@faker-js/faker/locale/vi';
 
 const prisma = new PrismaClient();
 
@@ -573,6 +574,72 @@ async function seedPackages(
 }
 
 /**
+ * Seed customer users
+ */
+async function seedCustomerUsers(customerRoleId: string) {
+  console.log('👥 Seeding customer users...');
+
+  const saltRounds = process.env.HASH_SALT
+    ? parseInt(process.env.HASH_SALT, 10)
+    : 10;
+  const passwordHash = await bcrypt.hash('123456', saltRounds);
+
+  const createdCustomers: Array<{
+    id: string;
+    phoneNumber: string;
+    passwordHash: string;
+    firstName: string | null;
+    lastName: string | null;
+    email: string | null;
+    avatarUrl: string | null;
+    isActive: boolean;
+    refreshToken: string | null;
+    refreshTokenExpiry: Date | null;
+    createdAt: Date;
+    updatedAt: Date;
+    deletedAt: Date | null;
+  }> = [];
+
+  for (let i = 1; i <= 20; i++) {
+    const firstName = faker.person.firstName();
+    const lastName = faker.person.lastName();
+    const phoneNumber = `09${faker.string.numeric('########')}`;
+    const email = faker.internet.email({ firstName, lastName });
+
+    const customer = await prisma.user.upsert({
+      where: { phoneNumber },
+      update: {},
+      create: {
+        phoneNumber,
+        email,
+        firstName,
+        lastName,
+        passwordHash,
+      },
+    });
+
+    await prisma.userRole.upsert({
+      where: {
+        userId_roleId: {
+          userId: customer.id,
+          roleId: customerRoleId,
+        },
+      },
+      update: {},
+      create: {
+        userId: customer.id,
+        roleId: customerRoleId,
+      },
+    });
+
+    createdCustomers.push(customer);
+  }
+
+  console.log(`  ✓ Created ${createdCustomers.length} customer users`);
+  return createdCustomers;
+}
+
+/**
  * Main seed function
  */
 async function main() {
@@ -587,6 +654,9 @@ async function main() {
 
     // Seed admin user with admin role
     await seedAdminUser(roles.adminRole.id);
+
+    // Seed customer users
+    await seedCustomerUsers(roles.customerRole.id);
 
     // Seed services
     const services = await seedServices();

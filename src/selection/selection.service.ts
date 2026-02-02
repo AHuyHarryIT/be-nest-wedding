@@ -1,7 +1,8 @@
 import { DatabaseService } from '@/database/database.service';
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { SelectionQueryDto } from './dto/selection-query.dto';
+import { SelectionQueryDto } from './dto/query-selection.dto';
 import { SelectionRegistry } from './selection.registry';
+import { PaginationHelper } from '@/common';
 
 @Injectable()
 export class SelectionService {
@@ -32,28 +33,12 @@ export class SelectionService {
       where,
       take,
       skip,
-      select: {
-        [config.value]: true,
-        [config.label]: true,
-        ...(config.extra
-          ? Object.fromEntries(config.extra.map((f) => [f, true]))
-          : {}),
-      },
+      select: config.select
+        ? Object.fromEntries(config.select.map((f) => [f, true]))
+        : {},
     });
 
-    return {
-      items: rows.map((r) => ({
-        value: r[config.value],
-        label: r[config.label],
-        extra: config.extra
-          ? Object.fromEntries(config.extra.map((f) => [f, r[f]]))
-          : undefined,
-      })),
-      pagination: {
-        page,
-        limit: take,
-        hasNext: rows.length === take,
-      },
-    };
+    const total = await config.model(this.prisma).count({ where });
+    return PaginationHelper.createPaginatedResponse(rows, page, limit, total);
   }
 }

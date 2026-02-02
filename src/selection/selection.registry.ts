@@ -1,22 +1,15 @@
 import { DatabaseService } from '@/database/database.service';
 import { ServiceSelection } from './registry/service.selection';
 import { PackageSelection } from './registry/package.selection';
+import { UserSelection } from './registry/user.selection';
 
 export const SelectionRegistry = {
   ...ServiceSelection,
   ...PackageSelection,
-  users: {
-    model: (prisma: DatabaseService) => prisma.user,
-    value: 'id',
-    label: 'name',
-    searchable: ['name', 'email'],
-    extra: ['email', 'code'],
-  },
-
+  ...UserSelection,
   roles: {
     model: (prisma: DatabaseService) => prisma.role,
-    value: 'id',
-    label: 'name',
-    searchable: ['name'],
+    searchable: ['name', 'id'],
+    extra: ['name', 'id'],
   },
 } as const;

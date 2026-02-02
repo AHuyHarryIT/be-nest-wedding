@@ -1,12 +1,11 @@
 import { DatabaseService } from '@/database/database.service';
+import { SelectionRegistry } from '../types/selection-config.types';
 
-export const ServiceSelection = {
+export const ServiceSelection: SelectionRegistry = {
   services: {
     model: (prisma: DatabaseService) => prisma.service,
-    value: 'id',
-    label: 'name',
     searchable: ['name', 'id'],
-    extra: ['price'],
-    where: { isActive: true },
+    select: ['id', 'name', 'price'],
+    where: { isActive: true, deletedAt: null },
   },
 };
