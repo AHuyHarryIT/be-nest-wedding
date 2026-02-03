@@ -233,7 +233,7 @@ export class OrdersService {
    * Get all orders
    */
   async findAll() {
-    return this.databaseService.order.findMany({
+    const orders = await this.databaseService.order.findMany({
       include: {
         booking: {
           include: {
@@ -246,6 +246,29 @@ export class OrdersService {
         },
       },
       orderBy: { createdAt: 'desc' },
+    });
+
+    // Calculate summary for each order
+    return orders.map((order) => {
+      const totalPaid = order.payments
+        .filter((p) => p.status === 'SUCCESSFUL')
+        .reduce((sum, p) => sum + p.amount, 0);
+
+      const remainingAmount = Math.max(0, order.totalPrice - totalPaid);
+
+      return {
+        ...order,
+        summary: {
+          totalPrice: order.totalPrice,
+          depositAmount: 0,
+          remainingAmount,
+          depositPaid: 0,
+          remainingPaid: 0,
+          totalPaid,
+          isPaid: remainingAmount === 0,
+          pendingAmount: remainingAmount,
+        },
+      };
     });
   }
 
@@ -291,11 +314,13 @@ export class OrdersService {
       ...order,
       summary: {
         totalPrice: order.totalPrice,
+        depositAmount: 0,
+        remainingAmount: balanceRemaining,
+        depositPaid: 0,
+        remainingPaid: 0,
         totalPaid,
-        balanceRemaining,
-        totalRefunded: order.totalRefunded,
         isPaid: balanceRemaining === 0,
-        isPartiallyPaid: totalPaid > 0 && balanceRemaining > 0,
+        pendingAmount: balanceRemaining,
       },
     };
   }
