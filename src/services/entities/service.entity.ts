@@ -13,13 +13,6 @@ export class ServiceEntity implements Service {
   name: string;
 
   @ApiProperty({
-    example: 'wedding-photography',
-    required: false,
-    nullable: true,
-  })
-  slug: string | null;
-
-  @ApiProperty({
     example: 'Professional wedding photography service',
     required: false,
     nullable: true,

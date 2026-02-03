@@ -14,13 +14,6 @@ export class Package {
   name: string;
 
   @ApiProperty({
-    description: 'The slug for the package URL',
-    example: 'wedding-photography-package',
-    required: false,
-  })
-  slug?: string;
-
-  @ApiProperty({
     description: 'The description of the package',
     example:
       'Comprehensive wedding photography package including ceremony and reception coverage',

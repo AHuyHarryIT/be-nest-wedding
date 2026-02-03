@@ -365,70 +365,63 @@ async function seedAdminUser(adminRoleId: string) {
 async function seedServices() {
   console.log('🎯 Seeding services...');
 
-  const servicesData = [
-    {
-      name: 'Photography',
-      slug: 'photography',
-      description:
-        'Professional wedding photography service capturing your special moments',
-      price: 5000000,
-      isActive: true,
-    },
-    {
-      name: 'Videography',
-      slug: 'videography',
-      description: 'Professional wedding video production and editing',
-      price: 8000000,
-      isActive: true,
-    },
-    {
-      name: 'Catering',
-      slug: 'catering',
-      description: 'Complete catering service with menu options',
-      price: 3000000,
-      isActive: true,
-    },
-    {
-      name: 'Decoration',
-      slug: 'decoration',
-      description: 'Venue decoration and arrangement service',
-      price: 4000000,
-      isActive: true,
-    },
-    {
-      name: 'Sound & Lighting',
-      slug: 'sound-lighting',
-      description: 'Professional sound system and lighting setup',
-      price: 2500000,
-      isActive: true,
-    },
-    {
-      name: 'Master of Ceremony',
-      slug: 'master-of-ceremony',
-      description: 'Professional MC to host your wedding event',
-      price: 2000000,
-      isActive: true,
-    },
-    {
-      name: 'Hair & Makeup',
-      slug: 'hair-makeup',
-      description: 'Bridal and guest hair and makeup services',
-      price: 1500000,
-      isActive: true,
-    },
-    {
-      name: 'Transportation',
-      slug: 'transportation',
-      description: 'Wedding day transportation for bride and groom',
-      price: 1000000,
-      isActive: true,
-    },
+  const serviceNames = [
+    'Photography',
+    'Videography',
+    'Catering',
+    'Decoration',
+    'Sound & Lighting',
+    'Master of Ceremony',
+    'Hair & Makeup',
+    'Transportation',
+    'Floral Arrangements',
+    'Invitation Design',
+    'Event Planning',
+    'Rentals',
+    'Guest Book Service',
+    'Photography Album',
+    'Pre-wedding Shoot',
+    'Drone Photography',
+    'Live Streaming',
+    'DJ Services',
+    'Band Performance',
+    'Cake Design',
+    'Dessert Table',
+    'Beverage Service',
+    'Bar Service',
+    'Coat Check',
+    'Valet Parking',
+    'Security Services',
+    'Cleanup Service',
+    'Ceremony Music',
+    'Reception Lighting',
+    'Tent Rental',
+    'Table & Chair Rental',
+    'Linens & Decor',
+    'Centerpiece Design',
+    'Ceremony Arch',
+    'Aisle Runner',
+    'Wedding Favors',
+    'Bridesmaid Gifts',
+    'Groomsmen Gifts',
+    'Guest Accommodations',
+    'Welcome Bags',
+    'Seating Arrangements',
+    'Menu Design',
+    'Wine Pairing',
+    'Cocktail Service',
+    'Food Stations',
+    'Late Night Snacks',
+    'Breakfast Catering',
+    'Rehearsal Dinner',
+    'Bridal Shower',
+    'Bachelorette Party',
+    'Bachelor Party',
   ];
 
   const createdServices: Array<{
     id: string;
     name: string;
-    slug: string | null;
     description: string | null;
     price: number;
     isActive: boolean;
@@ -436,11 +429,23 @@ async function seedServices() {
     updatedAt: Date;
     deletedAt: Date | null;
   }> = [];
-  for (const serviceData of servicesData) {
-    const service = await prisma.service.upsert({
-      where: { slug: serviceData.slug },
-      update: serviceData,
-      create: serviceData,
+
+  for (let i = 0; i < 50; i++) {
+    const serviceName = serviceNames[i % serviceNames.length];
+    const uniqueName =
+      i > serviceNames.length - 1
+        ? `${serviceName} ${Math.floor(i / serviceNames.length)}`
+        : serviceName;
+    const basePrice = 10000;
+    const price = basePrice + i * 5000; // Price increases by 5000 for each service
+
+    const service = await prisma.service.create({
+      data: {
+        name: uniqueName,
+        description: `Professional ${uniqueName.toLowerCase()} service for your wedding`,
+        price: price,
+        isActive: true,
+      },
     });
     createdServices.push(service);
   }
@@ -456,7 +461,6 @@ async function seedPackages(
   services: Array<{
     id: string;
     name: string;
-    slug: string | null;
     description: string | null;
     price: number;
     isActive: boolean;
@@ -467,73 +471,42 @@ async function seedPackages(
 ) {
   console.log('📦 Seeding packages...');
 
-  const packagesData = [
-    {
-      name: 'Gold Package',
-      slug: 'gold-package',
-      description: 'Premium package with all essential services included',
-      price: 25000000,
-      isActive: true,
-      serviceIds: services
-        .filter(
-          (s) =>
-            s.slug &&
-            [
-              'photography',
-              'catering',
-              'decoration',
-              'sound-lighting',
-            ].includes(s.slug),
-        )
-        .map((s) => s.id),
-    },
-    {
-      name: 'Platinum Package',
-      slug: 'platinum-package',
-      description: 'Complete package with all services for the perfect wedding',
-      price: 40000000,
-      isActive: true,
-      serviceIds: services.map((s) => s.id),
-    },
-    {
-      name: 'Silver Package',
-      slug: 'silver-package',
-      description: 'Essential package with basic services',
-      price: 15000000,
-      isActive: true,
-      serviceIds: services
-        .filter(
-          (s) =>
-            s.slug &&
-            [
-              'photography',
-              'catering',
-              'sound-lighting',
-              'master-of-ceremony',
-            ].includes(s.slug),
-        )
-        .map((s) => s.id),
-    },
-    {
-      name: 'Bronze Package',
-      slug: 'bronze-package',
-      description: 'Budget-friendly package with core services',
-      price: 10000000,
-      isActive: true,
-      serviceIds: services
-        .filter(
-          (s) =>
-            s.slug &&
-            ['photography', 'catering', 'master-of-ceremony'].includes(s.slug),
-        )
-        .map((s) => s.id),
-    },
+  const packageNames = [
+    'Essential',
+    'Basic',
+    'Standard',
+    'Premium',
+    'Platinum',
+    'Gold',
+    'Silver',
+    'Bronze',
+    'Diamond',
+    'Ruby',
+    'Sapphire',
+    'Emerald',
+    'Pearl',
+    'Crystal',
+    'Deluxe',
+    'Luxury',
+    'Elegance',
+    'Romance',
+    'Bliss',
+    'Harmony',
+    'Grace',
+    'Charm',
+    'Splendor',
+    'Radiance',
+    'Brilliance',
+    'Majesty',
+    'Opulence',
+    'Excellence',
+    'Prestige',
+    'Ultimate',
   ];
 
   const createdPackages: Array<{
     id: string;
     name: string;
-    slug: string | null;
     description: string | null;
     price: number;
     isActive: boolean;
@@ -541,26 +514,33 @@ async function seedPackages(
     updatedAt: Date;
     deletedAt: Date | null;
   }> = [];
-  for (const packageData of packagesData) {
-    const { serviceIds, ...packageCreateData } = packageData;
 
-    const pkg = await prisma.package.upsert({
-      where: { slug: packageData.slug },
-      update: packageCreateData,
-      create: packageCreateData,
+  for (let i = 0; i < 30; i++) {
+    const packageName = `${packageNames[i]} Package`;
+    const basePrice = 10000;
+    const price = basePrice + i * 15000; // Price increases by 15000 for each package
+
+    const pkg = await prisma.package.create({
+      data: {
+        name: packageName,
+        description: `Complete wedding package with ${2 + Math.floor(i / 6)} services included`,
+        price: price,
+        isActive: true,
+      },
     });
 
-    // Clear existing services for this package
-    await prisma.packageService.deleteMany({
-      where: { packageId: pkg.id },
-    });
+    // Add a subset of services to each package
+    const servicesPerPackage = Math.min(2 + Math.floor(i / 5), services.length);
+    const selectedServices = services.slice(
+      (i * servicesPerPackage) % services.length,
+      ((i * servicesPerPackage) % services.length) + servicesPerPackage,
+    );
 
-    // Add services to package
-    if (serviceIds.length > 0) {
+    if (selectedServices.length > 0) {
       await prisma.packageService.createMany({
-        data: serviceIds.map((serviceId) => ({
+        data: selectedServices.map((service) => ({
           packageId: pkg.id,
-          serviceId: serviceId,
+          serviceId: service.id,
         })),
         skipDuplicates: true,
       });

@@ -10,25 +10,9 @@ export class PackagesService {
   constructor(private readonly databaseService: DatabaseService) {}
 
   async create(createPackageDto: CreatePackageDto) {
-    // Generate slug if not provided
-    let slug = createPackageDto.slug;
-    if (!slug) {
-      slug = await this.generateUniqueSlug(createPackageDto.name);
-    } else {
-      // Check if provided slug is unique
-      const existingPackage = await this.databaseService.package.findFirst({
-        where: { slug, deletedAt: null },
-      });
-      if (existingPackage) {
-        // Generate a unique slug based on the provided one
-        slug = await this.generateUniqueSlug(slug);
-      }
-    }
-
     // Set default values if not provided
     const data: Prisma.PackageCreateInput = {
       name: createPackageDto.name,
-      slug,
       description: createPackageDto.description || null,
       price: createPackageDto.price || 0,
       isActive: createPackageDto.isActive ?? false,
@@ -155,28 +139,6 @@ export class PackagesService {
     return packageItem;
   }
 
-  async findBySlug(slug: string) {
-    const packageItem = await this.databaseService.package.findFirst({
-      where: {
-        slug,
-        deletedAt: null,
-      },
-      include: {
-        services: {
-          include: {
-            service: true,
-          },
-        },
-      },
-    });
-
-    if (!packageItem) {
-      throw new NotFoundException(`Package with slug ${slug} not found`);
-    }
-
-    return packageItem;
-  }
-
   async update(id: string, updatePackageDto: UpdatePackageDto) {
     // First check if package exists
     await this.findOne(id);
@@ -184,27 +146,7 @@ export class PackagesService {
     // Separate serviceIds from other update data
     const { serviceIds, ...updateData } = updatePackageDto;
 
-    // Handle slug updates
     const data: Prisma.PackageUpdateInput = { ...updateData };
-
-    if (updateData.slug !== undefined) {
-      if (updateData.slug) {
-        // Check if the new slug conflicts with existing packages (excluding current one)
-        const existingPackage = await this.databaseService.package.findFirst({
-          where: {
-            slug: updateData.slug,
-            deletedAt: null,
-            NOT: { id },
-          },
-        });
-
-        if (existingPackage) {
-          // Generate a unique slug based on the provided one
-          data.slug = await this.generateUniqueSlug(updateData.slug);
-        }
-      }
-      // If slug is empty string or null, allow it
-    }
 
     // Handle service associations if provided
     if (serviceIds !== undefined) {
@@ -455,47 +397,5 @@ export class PackagesService {
         },
       });
     });
-  }
-
-  /**
-   * Generate a unique slug from a given text
-   */
-  private async generateUniqueSlug(text: string): Promise<string> {
-    // Convert to slug format
-    let baseSlug = text
-      .toLowerCase()
-      .replace(/[^a-z0-9\s-]/g, '') // Remove special characters
-      .replace(/\s+/g, '-') // Replace spaces with hyphens
-      .replace(/-+/g, '-') // Replace multiple hyphens with single hyphen
-      .replace(/^-|-$/g, ''); // Remove leading/trailing hyphens
-
-    // If baseSlug is empty, use a default
-    if (!baseSlug) {
-      baseSlug = 'package';
-    }
-
-    let slug = baseSlug;
-    let counter = 1;
-
-    // Check if slug exists and increment counter until unique
-    while (await this.slugExists(slug)) {
-      slug = `${baseSlug}-${counter}`;
-      counter++;
-    }
-
-    return slug;
-  }
-
-  /**
-   * Check if a slug already exists
-   */
-  private async slugExists(slug: string): Promise<boolean> {
-    const existing = await this.databaseService.package.findFirst({
-      where: {
-        slug,
-        deletedAt: null,
-      },
-    });
-    return !!existing;
   }
 }

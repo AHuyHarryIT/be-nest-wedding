@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  ArrayMinSize,
   IsArray,
   IsDateString,
   IsNotEmpty,
@@ -7,8 +8,8 @@ import {
   IsOptional,
   IsString,
   IsUUID,
-  ArrayMinSize,
   Min,
+  ValidateIf,
 } from 'class-validator';
 
 export class CreateBookingDto {
@@ -27,7 +28,10 @@ export class CreateBookingDto {
     example: ['uuid-1', 'uuid-2'],
   })
   @IsArray({ message: 'Package IDs must be an array' })
-  @ArrayMinSize(1, { message: 'At least one package ID is required' })
+  @ValidateIf((o) => o.packageIds !== undefined && o.packageIds?.length > 0)
+  @ArrayMinSize(1, {
+    message: 'If packages are provided, at least one is required',
+  })
   @IsUUID('4', { each: true, message: 'Each package ID must be a valid UUID' })
   @IsOptional()
   packageIds?: string[];
@@ -38,7 +42,10 @@ export class CreateBookingDto {
     example: ['uuid-1', 'uuid-2'],
   })
   @IsArray({ message: 'Service IDs must be an array' })
-  @ArrayMinSize(1, { message: 'At least one service ID is required' })
+  @ValidateIf((o) => o.serviceIds !== undefined && o.serviceIds?.length > 0)
+  @ArrayMinSize(1, {
+    message: 'If services are provided, at least one is required',
+  })
   @IsUUID('4', { each: true, message: 'Each service ID must be a valid UUID' })
   @IsOptional()
   serviceIds?: string[];

@@ -26,15 +26,6 @@ export class ViewServiceDto {
   name: string;
 
   @ApiPropertyOptional({
-    description: 'Service slug',
-    example: 'wedding-photography',
-    nullable: true,
-  })
-  @IsOptional()
-  @IsString()
-  slug: string | null;
-
-  @ApiPropertyOptional({
     description: 'Service description',
     example: 'Professional wedding photography service',
     nullable: true,

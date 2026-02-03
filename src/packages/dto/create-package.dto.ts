@@ -25,16 +25,6 @@ export class CreatePackageDto {
   name: string;
 
   @ApiPropertyOptional({
-    description: 'The slug of the package',
-    example: 'premium-wedding-package',
-    maxLength: 255,
-  })
-  @IsOptional()
-  @IsString({ message: 'Package slug must be a string' })
-  @MaxLength(255, { message: 'Package slug cannot exceed 255 characters' })
-  slug?: string;
-
-  @ApiPropertyOptional({
     description: 'The description of the package',
     example:
       'Comprehensive wedding package with photography, videography, and more',
@@ -97,13 +87,6 @@ export class CreatePackageResponseDto {
     example: 'Premium Wedding Package',
   })
   name: string;
-
-  @ApiPropertyOptional({
-    description: 'Package slug',
-    example: 'premium-wedding-package',
-    nullable: true,
-  })
-  slug: string | null;
 
   @ApiPropertyOptional({
     description: 'Package description',

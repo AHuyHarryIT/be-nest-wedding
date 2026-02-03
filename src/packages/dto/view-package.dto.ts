@@ -26,15 +26,6 @@ export class ViewPackageDto {
   name: string;
 
   @ApiPropertyOptional({
-    description: 'Package slug',
-    example: 'premium-wedding-package',
-    nullable: true,
-  })
-  @IsOptional()
-  @IsString()
-  slug: string | null;
-
-  @ApiPropertyOptional({
     description: 'Package description',
     example:
       'Comprehensive wedding package with photography, videography, and more',

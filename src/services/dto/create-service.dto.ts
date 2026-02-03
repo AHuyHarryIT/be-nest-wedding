@@ -22,16 +22,6 @@ export class CreateServiceDto {
   name: string;
 
   @ApiPropertyOptional({
-    description: 'The slug of the service',
-    example: 'wedding-photography',
-    maxLength: 255,
-  })
-  @IsOptional()
-  @IsString({ message: 'Service slug must be a string' })
-  @MaxLength(255, { message: 'Service slug cannot exceed 255 characters' })
-  slug?: string;
-
-  @ApiPropertyOptional({
     description: 'The description of the service',
     example: 'Professional wedding photography service',
     maxLength: 1000,
