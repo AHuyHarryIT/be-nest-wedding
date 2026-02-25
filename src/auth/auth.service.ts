@@ -17,7 +17,9 @@ import {
   RefreshTokenDto,
   MessageResponseDto,
 } from './dto/auth.dto';
-import { JwtPayload } from './jwt-cookie.strategy';
+import { JWT_ACCESS_CONFIG } from './config/jwt.config';
+import { REFRESH_JWT_CONFIG } from './config/refresh-jwt.config';
+import { JwtPayload } from './types/jwt';
 
 @Injectable()
 export class AuthService {
@@ -35,12 +37,14 @@ export class AuthService {
     const payload: JwtPayload = { sub: userId, phoneNumber };
 
     const accessToken = await this.jwtService.signAsync(payload, {
-      expiresIn: this.configService.get('JWT_ACCESS_EXPIRES_IN', '15m'),
+      expiresIn: JWT_ACCESS_CONFIG.expiresIn,
     });
 
     const refreshToken = this.generateRefreshToken();
     const refreshTokenExpiry = new Date();
-    refreshTokenExpiry.setDate(refreshTokenExpiry.getDate() + 7); // 7 days
+    refreshTokenExpiry.setDate(
+      refreshTokenExpiry.getDate() + REFRESH_JWT_CONFIG.expiresIn,
+    );
 
     // Store refresh token in database
     await this.databaseService.user.update({

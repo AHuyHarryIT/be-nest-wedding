@@ -23,6 +23,21 @@ export class UsersService {
     private readonly configService: ConfigService,
   ) {}
 
+  async updateHashRefreshToken({
+    userId,
+    hashRefreshToken,
+  }: {
+    userId: string;
+    hashRefreshToken: string | null;
+  }) {
+    return await this.databaseService.user.update({
+      where: { id: userId },
+      data: {
+        refreshToken: hashRefreshToken,
+      },
+    });
+  }
+
   /**
    * Create a new user with optional roles
    */
@@ -246,6 +261,38 @@ export class UsersService {
       ...user,
       roles: user.roles.map((ur) => ur.role),
     };
+  }
+
+  async findByPhoneNumber(phoneNumber: string) {
+    return await this.databaseService.user.findUnique({
+      where: { phoneNumber },
+      select: {
+        id: true,
+        phoneNumber: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        refreshToken: true,
+        isActive: true,
+        createdAt: true,
+      },
+    });
+  }
+
+  async findById(id: string) {
+    return await this.databaseService.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        phoneNumber: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        refreshToken: true,
+        isActive: true,
+        createdAt: true,
+      },
+    });
   }
 
   /**

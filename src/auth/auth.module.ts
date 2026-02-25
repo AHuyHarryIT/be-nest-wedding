@@ -1,25 +1,27 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
-import { ConfigModule, ConfigService } from '@nestjs/config';
+import { DatabaseModule } from '../database/database.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
-import { JwtCookieStrategy } from './jwt-cookie.strategy';
-import { DatabaseModule } from '../database/database.module';
+import { JWT_ACCESS_CONFIG } from './config/jwt.config';
+import { JwtCookieStrategy } from './strategies/jwt-cookie.strategy';
+import { UsersModule } from '@/users/users.module';
 
 @Module({
   imports: [
     DatabaseModule,
     PassportModule,
+    UsersModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET') || 'fallback-secret',
+      useFactory: () => ({
+        secret: JWT_ACCESS_CONFIG.secret,
         signOptions: {
-          expiresIn: '15m',
+          expiresIn: JWT_ACCESS_CONFIG.expiresIn,
         },
       }),
-      inject: [ConfigService],
     }),
   ],
   controllers: [AuthController],

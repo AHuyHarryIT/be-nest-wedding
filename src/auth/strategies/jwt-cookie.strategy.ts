@@ -1,17 +1,10 @@
+import { UsersService } from '@/users/users.service';
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
-import { ExtractJwt, Strategy } from 'passport-jwt';
-import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
-import { JwtService } from '@nestjs/jwt';
-import { AuthService } from './auth.service';
-
-export interface JwtPayload {
-  sub: string;
-  phoneNumber: string;
-  iat?: number;
-  exp?: number;
-}
+import { ExtractJwt, Strategy } from 'passport-jwt';
+import { JWT_ACCESS_CONFIG } from '../config/jwt.config';
+import { JwtPayload } from '../types/jwt';
 
 export interface AuthenticatedUser {
   userId: string;
@@ -23,11 +16,7 @@ export class JwtCookieStrategy extends PassportStrategy(
   Strategy,
   'jwt-cookie',
 ) {
-  constructor(
-    private configService: ConfigService,
-    private jwtService: JwtService,
-    private authService: AuthService,
-  ) {
+  constructor(private userService: UsersService) {
     super({
       jwtFromRequest: ExtractJwt.fromExtractors([
         (request: Request) => {
@@ -49,15 +38,12 @@ export class JwtCookieStrategy extends PassportStrategy(
         },
       ]),
       ignoreExpiration: false,
-      secretOrKey: configService.get<string>(
-        'JWT_SECRET',
-        'fallback-secret-key',
-      ),
+      secretOrKey: JWT_ACCESS_CONFIG.secret,
     });
   }
 
   async validate(payload: JwtPayload): Promise<AuthenticatedUser> {
-    const user = await this.authService.validateUser(payload.sub);
+    const user = await this.userService.findById(payload.sub);
 
     if (!user) {
       throw new UnauthorizedException('User not found');
