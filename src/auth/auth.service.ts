@@ -41,9 +41,12 @@ export class AuthService {
     });
 
     const refreshToken = this.generateRefreshToken();
+    // Convert milliseconds to days for expiry calculation
+    const refreshExpiryDays =
+      REFRESH_JWT_CONFIG.expiresIn / (1000 * 60 * 60 * 24);
     const refreshTokenExpiry = new Date();
     refreshTokenExpiry.setDate(
-      refreshTokenExpiry.getDate() + REFRESH_JWT_CONFIG.expiresIn,
+      refreshTokenExpiry.getDate() + refreshExpiryDays,
     );
 
     // Store refresh token in database
