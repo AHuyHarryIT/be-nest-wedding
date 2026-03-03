@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { AppController } from './app.controller';
@@ -21,6 +21,7 @@ import { AlbumsModule } from './albums/albums.module';
 import { InventoryReservationsModule } from './inventory-reservations/inventory-reservations.module';
 import { UsersModule } from './users/users.module';
 import { SelectionModule } from './selection/selection.module';
+import { AutoRefreshMiddleware } from './auth/auto-refresh.middleware';
 
 @Module({
   imports: [
@@ -49,4 +50,8 @@ import { SelectionModule } from './selection/selection.module';
   controllers: [AppController],
   providers: [AppService, DatabaseService],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(AutoRefreshMiddleware).forRoutes('*');
+  }
+}

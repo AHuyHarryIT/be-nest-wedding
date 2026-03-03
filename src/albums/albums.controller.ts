@@ -14,6 +14,7 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import {
   ApiBearerAuth,
@@ -22,7 +23,6 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import type { Response } from 'express';
 import { GetUser, type AuthenticatedUser } from '../auth/get-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import {
@@ -98,6 +98,20 @@ export class AlbumsController {
     );
   }
 
+  @Get('deleted')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions('albums:read')
+  @ApiOperation({ summary: 'Get all deleted albums (trash)' })
+  @ApiPaginatedResponse(ViewAlbumDto)
+  async findDeleted(@Query() query: QueryAlbumDto) {
+    const result = await this.albumsService.findDeleted(query);
+    return ResponseBuilder.paginated(
+      result.data,
+      result.pagination,
+      'Deleted albums retrieved successfully',
+    );
+  }
+
   @Get('share/:token')
   @ApiOperation({
     summary: 'Get album by share token (no authentication required)',
@@ -108,44 +122,48 @@ export class AlbumsController {
     return ResponseBuilder.success(album, 'Album retrieved successfully');
   }
 
-  @Get('file/:fileId/download')
-  @UseGuards(JwtAuthGuard)
-  @ApiOperation({ summary: 'Download/stream file from OneDrive' })
-  async downloadFile(@Param('fileId') fileId: string, @Res() res: Response) {
-    try {
-      const fileStream = await this.albumsService.getFileStream(fileId);
-      res.set({
-        'Content-Type': fileStream.mimeType,
-        'Content-Length': fileStream.byteSize,
-        'Content-Disposition': `attachment; filename="${fileStream.name}"`,
-      });
-      const stream = fileStream.stream;
-      if (typeof stream === 'object' && stream !== null && 'pipe' in stream) {
-        (stream as { pipe: (res: unknown) => void }).pipe(res);
-      }
-    } catch (error: unknown) {
-      console.error(`[downloadFile] Error downloading file ${fileId}:`, error);
-      const errorMessage =
-        error instanceof Error ? error.message : 'Failed to download file';
-      throw new InternalServerErrorException(errorMessage);
-    }
-  }
-
   @Get('file/:fileId/thumbnail')
   @UseGuards(JwtAuthGuard)
-  @ApiOperation({ summary: 'Get thumbnail URL for a file' })
-  @ApiSuccessResponse({ description: 'Thumbnail URL retrieved successfully' })
-  async getThumbnail(@Param('fileId') fileId: string) {
+  @ApiOperation({ summary: 'Get proxied thumbnail image' })
+  @ApiSuccessResponse({ description: 'Thumbnail image proxied successfully' })
+  async getThumbnail(@Param('fileId') fileId: string, @Res() res: Response) {
     try {
-      const thumbnailUrl = await this.albumsService.getThumbnailUrl(fileId);
-      return ResponseBuilder.success(
-        { url: thumbnailUrl },
-        'Thumbnail URL retrieved successfully',
-      );
+      const result = await this.albumsService.getThumbnailStream(fileId);
+
+      res.set({
+        'Content-Type': result.contentType || 'image/jpeg',
+        'Cache-Control': 'public, max-age=3600',
+      });
+
+      result.stream.pipe(res);
     } catch (error: unknown) {
       console.error(`[getThumbnail] Error getting thumbnail ${fileId}:`, error);
       const errorMessage =
         error instanceof Error ? error.message : 'Failed to get thumbnail';
+      throw new InternalServerErrorException(errorMessage);
+    }
+  }
+
+  @Get('file/:fileId/content')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Get original file content (streamed)' })
+  @ApiSuccessResponse({ description: 'File content streamed successfully' })
+  async getFileContent(@Param('fileId') fileId: string, @Res() res: Response) {
+    try {
+      const { stream, mimeType, name } =
+        await this.albumsService.getFileStream(fileId);
+
+      res.set({
+        'Content-Type': mimeType || 'application/octet-stream',
+        'Content-Disposition': `inline; filename="${encodeURIComponent(name)}"`,
+        'Cache-Control': 'public, max-age=3600',
+      });
+
+      stream.pipe(res);
+    } catch (error: unknown) {
+      console.error(`[getFileContent] Error streaming file ${fileId}:`, error);
+      const errorMessage =
+        error instanceof Error ? error.message : 'Failed to get file';
       throw new InternalServerErrorException(errorMessage);
     }
   }
@@ -176,17 +194,56 @@ export class AlbumsController {
   @Delete(':id/files')
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @RequirePermissions('albums:update')
-  @ApiOperation({ summary: 'Remove files from album' })
-  @ApiSuccessResponse({ description: 'Files removed from album successfully' })
+  @ApiOperation({ summary: 'Soft delete files from album (move to trash)' })
+  @ApiSuccessResponse({ description: 'Files moved to trash successfully' })
   async removeFiles(
     @Param('id') id: string,
     @Body() removeFilesDto: RemoveFilesFromAlbumDto,
   ) {
-    const album = await this.albumsService.removeFiles(id, removeFilesDto);
+    const result = await this.albumsService.removeFiles(id, removeFilesDto);
+    return ResponseBuilder.success(result, result.message);
+  }
+
+  @Get(':id/deleted-files')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions('albums:read')
+  @ApiOperation({ summary: 'Get deleted files in album (trash)' })
+  @ApiSuccessResponse({ description: 'Deleted files retrieved successfully' })
+  async getDeletedFiles(@Param('id') id: string) {
+    const files = await this.albumsService.getDeletedFiles(id);
     return ResponseBuilder.success(
-      album,
-      'Files removed from album successfully',
+      files,
+      'Deleted files retrieved successfully',
     );
+  }
+
+  @Patch(':id/files/restore')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions('albums:update')
+  @ApiOperation({ summary: 'Restore soft-deleted files in album' })
+  @ApiSuccessResponse({ description: 'Files restored successfully' })
+  async restoreFiles(
+    @Param('id') id: string,
+    @Body() removeFilesDto: RemoveFilesFromAlbumDto,
+  ) {
+    const result = await this.albumsService.restoreFiles(id, removeFilesDto);
+    return ResponseBuilder.success(result, result.message);
+  }
+
+  @Delete(':id/files/force')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions('albums:delete')
+  @ApiOperation({ summary: 'Permanently delete files (OneDrive + DB)' })
+  @ApiSuccessResponse({ description: 'Files permanently deleted' })
+  async forceDeleteFiles(
+    @Param('id') id: string,
+    @Body() removeFilesDto: RemoveFilesFromAlbumDto,
+  ) {
+    const result = await this.albumsService.forceDeleteFiles(
+      id,
+      removeFilesDto,
+    );
+    return ResponseBuilder.success(result, result.message);
   }
 
   @Post(':id/share')
@@ -249,7 +306,7 @@ export class AlbumsController {
       );
       return ResponseBuilder.success(
         album,
-        `${files.length} image(s) uploaded to album successfully`,
+        'Image uploaded to album successfully',
       );
     } catch (error: unknown) {
       const errorMessage =
@@ -279,5 +336,25 @@ export class AlbumsController {
   async remove(@Param('id') id: string) {
     await this.albumsService.remove(id);
     return ResponseBuilder.deleted('Album deleted successfully');
+  }
+
+  @Patch(':id/restore')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions('albums:update')
+  @ApiOperation({ summary: 'Restore a soft-deleted album' })
+  @ApiSuccessResponse({ description: 'Album restored successfully' })
+  async restore(@Param('id') id: string) {
+    const album = await this.albumsService.restore(id);
+    return ResponseBuilder.success(album, 'Album restored successfully');
+  }
+
+  @Delete(':id/hard')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions('albums:delete')
+  @ApiOperation({ summary: 'Permanently delete album (OneDrive + DB)' })
+  @ApiSuccessResponse({ description: 'Album permanently deleted' })
+  async hardDelete(@Param('id') id: string) {
+    const result = await this.albumsService.forceDelete(id);
+    return ResponseBuilder.deleted(result.message);
   }
 }

@@ -20,6 +20,7 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
+import { JwtService } from '@nestjs/jwt';
 import { AuthService } from './auth.service';
 import {
   AuthResponseDto,
@@ -40,7 +41,10 @@ interface AuthServiceResponse extends AuthResponseDto {
 @ApiTags('Authentication')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly jwtService: JwtService,
+  ) {}
 
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
@@ -112,7 +116,7 @@ export class AuthController {
     response.cookie('access_token', accessToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: 'lax', // Changed from 'strict' to allow cross-site requests
       maxAge: 15 * 60 * 1000, // 15 minutes
     });
 
@@ -120,7 +124,7 @@ export class AuthController {
     response.cookie('refresh_token', refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: 'lax', // Changed from 'strict' to allow cross-site requests
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
   }
@@ -204,14 +208,25 @@ export class AuthController {
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ): Promise<{ message: string }> {
-    const refreshToken = request.cookies?.['refresh_token'];
+    const refreshToken = request.cookies?.['refresh_token'] as
+      | string
+      | undefined;
+
+    console.log(
+      '[RefreshController] Received refresh token',
+      'Length:',
+      refreshToken?.length,
+      'First 20 chars:',
+      refreshToken?.substring(0, 20),
+    );
 
     if (!refreshToken) {
+      console.log('[RefreshController] Refresh token not found in cookies');
       throw new Error('Refresh token not found in cookies');
     }
 
     const tokens = await this.authService.refreshTokens({
-      refreshToken: refreshToken,
+      refreshToken,
     });
 
     // Set new cookies

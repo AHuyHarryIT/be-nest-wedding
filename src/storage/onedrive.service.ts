@@ -1,8 +1,9 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ConfidentialClientApplication } from '@azure/msal-node';
 import axios from 'axios';
 import { GenericRecord } from '../common/types';
+import { AuthService } from './auth.service';
+import { UploadService, ProgressCallback } from './upload.service';
 
 // OneDrive API Response Types
 interface OneDriveFileResponse {
@@ -54,93 +55,64 @@ interface OneDriveShareLinkResponse {
 
 @Injectable()
 export class OneDriveService {
-  private msalClient: ConfidentialClientApplication;
-  private accessToken: string | null = null;
-  private tokenExpiry: number = 0;
   private folderCache = new Map<string, string>(); // Cache folder IDs
+  private noThumbSet = new Set<string>(); // Cache missing thumbnails
 
-  constructor(private configService: ConfigService) {
-    const clientId = this.configService.get<string>('AZURE_CLIENT_ID');
-    const clientSecret = this.configService.get<string>('AZURE_CLIENT_SECRET');
-    const tenantId = this.configService.get<string>('AZURE_TENANT_ID');
+  constructor(
+    private configService: ConfigService,
+    private authService: AuthService,
+    private uploadService: UploadService,
+  ) {}
 
-    if (!clientId || !clientSecret || !tenantId) {
-      console.warn(
-        'OneDrive configuration incomplete. Some functionality may not work.',
-      );
-    }
-
-    this.msalClient = new ConfidentialClientApplication({
-      auth: {
-        clientId: clientId || '',
-        clientSecret: clientSecret || '',
-        authority: `https://login.microsoftonline.com/${tenantId}`,
-      },
-    });
-  }
-
-  private async getAccessToken(): Promise<string> {
-    // Return cached token if still valid
-    if (this.accessToken && Date.now() < this.tokenExpiry) {
-      return this.accessToken;
-    }
-
-    const tokenRes = await this.msalClient.acquireTokenByClientCredential({
-      scopes: ['https://graph.microsoft.com/.default'],
-    });
-
-    if (!tokenRes?.accessToken) {
-      throw new Error('Failed to acquire access token');
-    }
-
-    this.accessToken = tokenRes.accessToken;
-    // Token expires in ~3600 seconds, refresh after 3500
-    this.tokenExpiry = Date.now() + 3500 * 1000;
-
-    return this.accessToken;
-  }
-
+  /**
+   * Upload a file to OneDrive.
+   * Delegates to UploadService which handles both small and large files.
+   */
   async uploadFile(
     fileBuffer: Buffer,
     fileName: string,
-    folderId: string,
+    folderPath: string = '',
+    onProgress?: ProgressCallback,
+    abortSignal?: AbortSignal,
   ): Promise<OneDriveFileResponse> {
-    const token = await this.getAccessToken();
-    const userId = this.configService.get<string>('AZURE_USER_ID');
+    const result = await this.uploadService.uploadFile(
+      fileBuffer,
+      fileName,
+      folderPath,
+      onProgress,
+      abortSignal,
+    );
 
-    if (!userId) {
-      throw new BadRequestException('Azure user ID not configured');
-    }
-
-    // Upload file to album
-    const uploadUrl = `https://graph.microsoft.com/v1.0/users/${userId}/drive/items/${folderId}:/${fileName}:/content`;
-
-    try {
-      const response = await axios.put<OneDriveFileResponse>(
-        uploadUrl,
-        fileBuffer,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/octet-stream',
-          },
-        },
-      );
-
-      const uploadedFile = response.data;
-
-      return uploadedFile;
-    } catch (error: unknown) {
-      const errorData = error as GenericRecord<unknown>;
-      const errorMessage = (errorData?.response as GenericRecord<unknown>)
-        ?.data as GenericRecord<unknown>;
-      const message =
-        ((errorMessage?.error as GenericRecord<unknown>)?.message as string) ||
-        'Unknown error';
+    if (!result.success) {
       throw new BadRequestException(
-        `Failed to upload file to OneDrive: ${message}`,
+        `Failed to upload file to OneDrive: ${result.error}`,
       );
     }
+
+    return {
+      id: result.driveItemId || '',
+      name: result.fileName,
+      webUrl: result.webUrl || '',
+      eTag: '',
+      size: fileBuffer.length,
+      cTag: '',
+      parentReference: {
+        id: '',
+        name: '',
+        path: '',
+        siteId: '',
+      },
+      file: {
+        mimeType: 'application/octet-stream',
+        hashes: {
+          quickXorHash: '',
+        },
+      },
+      '@odata.context': '',
+      '@microsoft.graph.downloadUrl': '',
+      createdDateTime: new Date().toISOString(),
+      lastModifiedDateTime: new Date().toISOString(),
+    };
   }
 
   /**
@@ -148,7 +120,7 @@ export class OneDriveService {
    * Creates a "Products" root folder and then a subfolder for the specific product
    */
   async getOrCreateProductFolder(folderName: string): Promise<string> {
-    const token = await this.getAccessToken();
+    const token = await this.authService.getAccessToken();
     const userId = this.configService.get<string>('AZURE_USER_ID');
 
     if (!userId) {
@@ -190,11 +162,14 @@ export class OneDriveService {
     }
   }
 
-  private async getOrCreateFolder(
-    token: string,
-    userId: string,
-    folderName: string,
-  ): Promise<string> {
+  private async getOrCreateFolder(folderName: string): Promise<string> {
+    const token = await this.authService.getAccessToken();
+    const userId = this.configService.get<string>('AZURE_USER_ID');
+
+    if (!userId) {
+      throw new BadRequestException('Azure user ID not configured');
+    }
+
     const cacheKey = `${userId}:Albums:${folderName}`;
 
     // Return cached folder ID if available
@@ -290,7 +265,7 @@ export class OneDriveService {
     folderName: string,
     parentFolderName?: string,
   ): Promise<{ id: string; webUrl: string }> {
-    const token = await this.getAccessToken();
+    const token = await this.authService.getAccessToken();
     const userId = this.configService.get<string>('AZURE_USER_ID');
 
     if (!userId) {
@@ -360,7 +335,7 @@ export class OneDriveService {
    */
   async getFolderUrl(itemId: string): Promise<string> {
     try {
-      const token = await this.getAccessToken();
+      const token = await this.authService.getAccessToken();
       const userId = this.configService.get<string>('AZURE_USER_ID');
 
       if (!userId) {
@@ -388,7 +363,12 @@ export class OneDriveService {
     size: 'small' | 'medium' | 'large' = 'medium',
   ): Promise<string | null> {
     try {
-      const token = await this.getAccessToken();
+      // Check if thumbnail is permanently missing
+      if (this.noThumbSet.has(fileId)) {
+        return null;
+      }
+
+      const token = await this.authService.getAccessToken();
       const userId = this.configService.get<string>('AZURE_USER_ID');
 
       if (!userId) {
@@ -405,6 +385,7 @@ export class OneDriveService {
       const thumbnailSet = thumbData.value?.[0];
 
       if (!thumbnailSet) {
+        this.noThumbSet.add(fileId);
         return null;
       }
 
@@ -424,7 +405,7 @@ export class OneDriveService {
 
   async deleteFile(fileId: string): Promise<boolean> {
     try {
-      const token = await this.getAccessToken();
+      const token = await this.authService.getAccessToken();
       const userId = this.configService.get<string>('AZURE_USER_ID');
 
       if (!userId) {
@@ -444,8 +425,109 @@ export class OneDriveService {
     }
   }
 
+  /**
+   * Delete a folder and all its contents from OneDrive.
+   * Also cleans up the internal folder cache.
+   * @param folderId The OneDrive folder (drive item) ID
+   * @returns true if deleted successfully
+   */
+  async deleteFolder(folderId: string): Promise<boolean> {
+    try {
+      const token = await this.authService.getAccessToken();
+      const userId = this.configService.get<string>('AZURE_USER_ID');
+
+      if (!userId) {
+        return false;
+      }
+
+      const deleteUrl = `https://graph.microsoft.com/v1.0/users/${userId}/drive/items/${folderId}`;
+
+      await axios.delete(deleteUrl, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      // Clean up folder cache entries that reference this folder
+      for (const [key, cachedId] of this.folderCache.entries()) {
+        if (cachedId === folderId) {
+          this.folderCache.delete(key);
+        }
+      }
+
+      return true;
+    } catch (error) {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment
+      const status = error.response?.status;
+      // 404 means folder already deleted — treat as success
+      if (status === 404) {
+        console.warn(
+          `[OneDrive.deleteFolder] Folder ${folderId} not found (already deleted)`,
+        );
+        return true;
+      }
+      console.error(
+        `[OneDrive.deleteFolder] Failed to delete folder ${folderId}:`,
+        error,
+      );
+      return false;
+    }
+  }
+
+  /**
+   * Delete a folder by its path under a parent folder in OneDrive.
+   * Uses the path-based Graph API: DELETE /drive/root:/ParentFolder/FolderName
+   * @param folderName The folder name (e.g. album title-based name)
+   * @param parentFolder The parent folder path (default: 'Albums')
+   * @returns true if deleted successfully
+   */
+  async deleteFolderByPath(
+    folderName: string,
+    parentFolder: string = '',
+  ): Promise<boolean> {
+    try {
+      const token = await this.authService.getAccessToken();
+      const userId = this.configService.get<string>('AZURE_USER_ID');
+
+      if (!userId) {
+        return false;
+      }
+
+      const encodedPath = encodeURIComponent(`${parentFolder}/${folderName}`);
+      const deleteUrl = `https://graph.microsoft.com/v1.0/users/${userId}/drive/root:/${encodedPath}`;
+
+      await axios.delete(deleteUrl, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      // Clean up folder cache entries matching this folder name
+      for (const [key] of this.folderCache.entries()) {
+        if (key.includes(folderName)) {
+          this.folderCache.delete(key);
+        }
+      }
+
+      console.log(
+        `[OneDrive.deleteFolderByPath] Deleted folder: ${parentFolder}/${folderName}`,
+      );
+      return true;
+    } catch (error) {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment
+      const status = error.response?.status;
+      if (status === 404) {
+        console.warn(
+          `[OneDrive.deleteFolderByPath] Folder ${parentFolder}/${folderName} not found (already deleted)`,
+        );
+        return true;
+      }
+      console.error(
+        `[OneDrive.deleteFolderByPath] Failed to delete folder ${parentFolder}/${folderName}:`,
+        error,
+      );
+      return false;
+    }
+  }
+
   async createShareLink(fileId: string, password?: string): Promise<string> {
-    const token = await this.getAccessToken();
+    const token = await this.authService.getAccessToken();
     const userId = this.configService.get<string>('AZURE_USER_ID');
 
     if (!userId) {
@@ -481,7 +563,7 @@ export class OneDriveService {
   }
 
   async getFileStream(fileId: string) {
-    const token = await this.getAccessToken();
+    const token = await this.authService.getAccessToken();
     const userId = this.configService.get<string>('AZURE_USER_ID');
 
     if (!userId) {
@@ -501,7 +583,7 @@ export class OneDriveService {
         responseType: 'stream',
       });
 
-      return response.data as unknown;
+      return response.data as NodeJS.ReadableStream;
     } catch (error: unknown) {
       console.error(
         `[OneDrive.getFileStream] Error getting file stream:`,
@@ -523,11 +605,36 @@ export class OneDriveService {
     }
   }
 
+  async getThumbnailStream(
+    fileId: string,
+    size: 'small' | 'medium' | 'large' = 'medium',
+  ): Promise<{ stream: NodeJS.ReadableStream; contentType: string }> {
+    // First get the CDN URL
+    const url = await this.getThumbnailUrl(fileId, size);
+    if (!url) {
+      throw new BadRequestException('No thumbnail available for this file');
+    }
+
+    // Then fetch the actual image bytes as a stream
+    const response = await axios.get(url, {
+      responseType: 'stream',
+    });
+
+    const contentType =
+      (response.headers['content-type'] as string) || 'image/jpeg';
+    return { stream: response.data as NodeJS.ReadableStream, contentType };
+  }
+
   async getThumbnailUrl(
     fileId: string,
     size: 'small' | 'medium' | 'large' = 'medium',
   ): Promise<string> {
-    const token = await this.getAccessToken();
+    // Check if thumbnail is permanently missing
+    if (this.noThumbSet.has(fileId)) {
+      return '';
+    }
+
+    const token = await this.authService.getAccessToken();
     const userId = this.configService.get<string>('AZURE_USER_ID');
 
     if (!userId) {
@@ -557,14 +664,21 @@ export class OneDriveService {
 
       return url;
     } catch (error) {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment
+      const status = error.response?.status;
+
+      // 406 means no thumbnail available for this file (permanent)
+      if (status === 406) {
+        this.noThumbSet.add(fileId);
+        return '';
+      }
+
       console.error(
         `[OneDrive.getThumbnailUrl] Error getting ${size} thumbnail:`,
         error,
       );
       // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment
       const errorMessage = error.response?.data?.error?.message;
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment
-      const status = error.response?.status;
       const message =
         (errorMessage as string) ||
         (error instanceof Error ? error.message : 'Unknown error');

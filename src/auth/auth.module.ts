@@ -8,6 +8,7 @@ import { AuthService } from './auth.service';
 import { JWT_ACCESS_CONFIG } from './config/jwt.config';
 import { JwtCookieStrategy } from './strategies/jwt-cookie.strategy';
 import { UsersModule } from '@/users/users.module';
+import { AutoRefreshMiddleware } from './auto-refresh.middleware';
 
 @Module({
   imports: [
@@ -25,7 +26,7 @@ import { UsersModule } from '@/users/users.module';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtCookieStrategy],
-  exports: [AuthService],
+  providers: [AuthService, JwtCookieStrategy, AutoRefreshMiddleware],
+  exports: [AuthService, AutoRefreshMiddleware, JwtModule],
 })
 export class AuthModule {}

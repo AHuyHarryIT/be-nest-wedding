@@ -215,7 +215,10 @@ export class AlbumsService {
         owner: true,
         booking: true,
         coverFile: true,
-        files: { include: { file: true } },
+        files: {
+          include: { file: true },
+          where: { file: { deletedAt: null } },
+        },
       },
     });
 
@@ -287,21 +290,117 @@ export class AlbumsService {
   }
 
   async remove(id: string) {
-    // Delete OneDrive folder (album ID is the folder ID)
-    try {
-      await this.oneDriveService.deleteFile(id);
-    } catch (error) {
-      console.warn(
-        `Failed to delete OneDrive folder for album ${id}:`,
-        (error as Error).message,
-      );
-      // Continue with soft delete even if OneDrive deletion fails
-    }
+    await this.findOne(id);
 
     return this.databaseService.album.update({
       where: { id },
       data: { deletedAt: new Date() },
     });
+  }
+
+  async findDeleted(params?: QueryAlbumDto) {
+    const { page, limit, search, sortBy, sortOrder } =
+      PaginationHelper.mergeWithDefaults(params || {});
+
+    const where: Prisma.AlbumWhereInput = { deletedAt: { not: null } };
+
+    if (search) {
+      where.OR = [
+        { title: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    if (params?.ownerId) {
+      where.ownerUserId = params.ownerId;
+    }
+
+    if (params?.bookingId) {
+      where.bookingId = params.bookingId;
+    }
+
+    const orderBy: Prisma.AlbumOrderByWithRelationInput = {
+      [sortBy || 'deletedAt']: sortOrder,
+    };
+
+    const total = await this.databaseService.album.count({ where });
+    const skip = (page - 1) * limit;
+    const data = await this.databaseService.album.findMany({
+      where,
+      include: {
+        owner: true,
+        booking: true,
+        coverFile: true,
+        _count: { select: { files: true } },
+      },
+      orderBy,
+      skip,
+      take: limit,
+    });
+
+    return PaginationHelper.createPaginatedResponse(data, page, limit, total);
+  }
+
+  async restore(id: string) {
+    const album = await this.databaseService.album.findFirst({
+      where: { id, deletedAt: { not: null } },
+    });
+
+    if (!album) {
+      throw new NotFoundException(`Deleted album with ID ${id} not found`);
+    }
+
+    return this.databaseService.album.update({
+      where: { id },
+      data: { deletedAt: null },
+      include: { owner: true, booking: true, coverFile: true },
+    });
+  }
+
+  async forceDelete(id: string) {
+    const album = await this.databaseService.album.findFirst({
+      where: { id, deletedAt: { not: null } },
+      include: {
+        files: { include: { file: true } },
+      },
+    });
+
+    if (!album) {
+      throw new NotFoundException(`Deleted album with ID ${id} not found`);
+    }
+
+    // Delete OneDrive folder by path (album ID is the folder name under Albums/)
+    // Deleting the folder removes all files inside it
+    try {
+      await this.oneDriveService.deleteFolderByPath(id);
+    } catch (error) {
+      console.warn(
+        `Failed to delete OneDrive folder for album ${id}:`,
+        (error as Error).message,
+      );
+    }
+
+    // Delete AlbumFile junction records
+    await this.databaseService.albumFile.deleteMany({
+      where: { albumId: id },
+    });
+
+    // Hard delete File records
+    const fileIds = album.files.map((af) => af.fileId);
+    if (fileIds.length > 0) {
+      await this.databaseService.file.deleteMany({
+        where: { id: { in: fileIds } },
+      });
+    }
+
+    // Hard delete Album record
+    await this.databaseService.album.delete({
+      where: { id },
+    });
+
+    return {
+      message: `Album permanently deleted (${album.files.length} file(s) removed)`,
+    };
   }
 
   async addFiles(id: string, addFilesDto: AddFilesToAlbumDto) {
@@ -352,16 +451,104 @@ export class AlbumsService {
   async removeFiles(id: string, removeFilesDto: RemoveFilesFromAlbumDto) {
     await this.findOne(id);
 
-    const deleted = await this.databaseService.albumFile.deleteMany({
+    // Soft-delete File records (set deletedAt) — AlbumFile links are kept for restore
+    const softDeleted = await this.databaseService.file.updateMany({
+      where: {
+        id: { in: removeFilesDto.fileIds },
+        albums: { some: { albumId: id } },
+        deletedAt: null,
+      },
+      data: { deletedAt: new Date() },
+    });
+
+    return {
+      message: `${softDeleted.count} file(s) moved to trash`,
+      count: softDeleted.count,
+    };
+  }
+
+  async getDeletedFiles(albumId: string) {
+    await this.findOne(albumId);
+
+    const albumFiles = await this.databaseService.albumFile.findMany({
+      where: {
+        albumId,
+        file: { deletedAt: { not: null } },
+      },
+      include: { file: true },
+      orderBy: { file: { deletedAt: 'desc' } },
+    });
+
+    return albumFiles.map((af) => ({
+      albumId: af.albumId,
+      fileId: af.fileId,
+      sortOrder: af.sortOrder,
+      caption: af.caption,
+      image: af.file,
+    }));
+  }
+
+  async restoreFiles(id: string, removeFilesDto: RemoveFilesFromAlbumDto) {
+    await this.findOne(id);
+
+    const restored = await this.databaseService.file.updateMany({
+      where: {
+        id: { in: removeFilesDto.fileIds },
+        albums: { some: { albumId: id } },
+        deletedAt: { not: null },
+      },
+      data: { deletedAt: null },
+    });
+
+    return {
+      message: `${restored.count} file(s) restored`,
+      count: restored.count,
+    };
+  }
+
+  async forceDeleteFiles(id: string, removeFilesDto: RemoveFilesFromAlbumDto) {
+    await this.findOne(id);
+
+    // Get files with their storageKeys for OneDrive deletion
+    const files = await this.databaseService.file.findMany({
+      where: {
+        id: { in: removeFilesDto.fileIds },
+        albums: { some: { albumId: id } },
+      },
+    });
+
+    // Delete from OneDrive
+    let oneDriveDeleted = 0;
+    for (const file of files) {
+      try {
+        await this.oneDriveService.deleteFile(file.storageKey);
+        oneDriveDeleted++;
+      } catch (error) {
+        console.warn(
+          `Failed to delete file ${file.id} from OneDrive:`,
+          (error as Error).message,
+        );
+      }
+    }
+
+    // Delete AlbumFile junction records
+    await this.databaseService.albumFile.deleteMany({
       where: {
         albumId: id,
         fileId: { in: removeFilesDto.fileIds },
       },
     });
 
+    // Hard delete File records
+    const hardDeleted = await this.databaseService.file.deleteMany({
+      where: {
+        id: { in: removeFilesDto.fileIds },
+      },
+    });
+
     return {
-      message: `${deleted.count} file(s) removed from album`,
-      count: deleted.count,
+      message: `${hardDeleted.count} file(s) permanently deleted (${oneDriveDeleted} from OneDrive)`,
+      count: hardDeleted.count,
     };
   }
 
@@ -536,9 +723,9 @@ export class AlbumsService {
   }
 
   async getFileStream(fileId: string) {
-    // Get file info from database
+    // Allow deleted files so trash view content preview works
     const file = await this.databaseService.file.findUnique({
-      where: { id: fileId, deletedAt: null },
+      where: { id: fileId },
     });
 
     if (!file) {
@@ -563,6 +750,21 @@ export class AlbumsService {
       );
       throw error;
     }
+  }
+
+  async getThumbnailStream(
+    fileId: string,
+  ): Promise<{ stream: NodeJS.ReadableStream; contentType: string }> {
+    // Allow deleted files so trash view thumbnails work
+    const file = await this.databaseService.file.findUnique({
+      where: { id: fileId },
+    });
+
+    if (!file) {
+      throw new NotFoundException(`File with ID ${fileId} not found`);
+    }
+
+    return this.oneDriveService.getThumbnailStream(file.storageKey);
   }
 
   async getThumbnailUrl(fileId: string): Promise<string> {

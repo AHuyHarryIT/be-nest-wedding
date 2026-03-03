@@ -40,27 +40,41 @@ export class AuthService {
       expiresIn: JWT_ACCESS_CONFIG.expiresIn,
     });
 
+    // Generate a refresh token (hex string, no special characters)
     const refreshToken = this.generateRefreshToken();
-    // Convert milliseconds to days for expiry calculation
-    const refreshExpiryDays =
-      REFRESH_JWT_CONFIG.expiresIn / (1000 * 60 * 60 * 24);
-    const refreshTokenExpiry = new Date();
-    refreshTokenExpiry.setDate(
-      refreshTokenExpiry.getDate() + refreshExpiryDays,
+
+    console.log(
+      '[GenerateTokens] Created token',
+      'Length:',
+      refreshToken.length,
+      'First 20 chars:',
+      refreshToken.substring(0, 20),
     );
+
+    // Calculate expiry by adding milliseconds to current time
+    // REFRESH_JWT_CONFIG.expiresIn is in milliseconds (e.g., 604800000 for 7 days)
+    const expiryTimeMs = Number(REFRESH_JWT_CONFIG.expiresIn) || 604800000;
+    const refreshTokenExpiry = new Date(Date.now() + expiryTimeMs);
 
     // Store refresh token in database
     await this.databaseService.user.update({
       where: { id: userId },
       data: {
-        refreshToken,
+        refreshToken: refreshToken.trim(),
         refreshTokenExpiry,
       },
     });
 
+    console.log(
+      '[GenerateTokens] Stored in DB for user',
+      userId,
+      'Expiry:',
+      refreshTokenExpiry.toISOString(),
+    );
+
     return {
       accessToken,
-      refreshToken,
+      refreshToken: refreshToken.trim(),
     };
   }
 
@@ -260,23 +274,117 @@ export class AuthService {
   ): Promise<{ accessToken: string; refreshToken: string }> {
     const { refreshToken } = refreshTokenDto;
 
+    if (!refreshToken) {
+      throw new UnauthorizedException('Refresh token is missing');
+    }
+
+    // Trim the token to remove any whitespace
+    const trimmedToken = refreshToken.trim();
+    console.log(
+      '[RefreshTokens] Token length:',
+      trimmedToken.length,
+      'Token (first 20 chars):',
+      trimmedToken.substring(0, 20),
+    );
+
     // Find user with this refresh token
     const user = await this.databaseService.user.findFirst({
       where: {
-        refreshToken: refreshToken,
-        refreshTokenExpiry: {
-          gt: new Date(), // Token not expired
-        },
+        refreshToken: trimmedToken,
         isActive: true,
       },
     });
 
     if (!user) {
+      // Check if token exists but user is inactive
+      const inactiveUser = await this.databaseService.user.findFirst({
+        where: {
+          refreshToken: trimmedToken,
+        },
+      });
+
+      if (inactiveUser) {
+        throw new UnauthorizedException('User account is inactive');
+      }
+
+      // Check if any user has a refresh token at all
+      const anyToken = await this.databaseService.user.findFirst({
+        where: {
+          refreshToken: {
+            not: null,
+          },
+        },
+      });
+
+      if (anyToken) {
+        console.log(
+          '[RefreshTokens] Found token in DB (first 20 chars):',
+          anyToken.refreshToken?.substring(0, 20),
+        );
+      } else {
+        console.log('[RefreshTokens] No tokens found in database');
+      }
+
       throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    // Check if token is expired
+    if (!user.refreshTokenExpiry || user.refreshTokenExpiry < new Date()) {
+      throw new UnauthorizedException('Refresh token has expired');
     }
 
     // Generate new tokens
     return this.generateTokens(user.id, user.phoneNumber);
+  }
+
+  async validateOrRefreshAccessToken(
+    userId: string,
+    refreshToken: string,
+  ): Promise<{
+    accessToken: string;
+    refreshToken: string | null;
+    needsRefresh: boolean;
+  }> {
+    // Verify refresh token exists and is not expired
+    const user = await this.databaseService.user.findFirst({
+      where: {
+        id: userId,
+        refreshToken: refreshToken.trim(),
+        isActive: true,
+      },
+    });
+
+    if (!user) {
+      console.log('[ValidateOrRefresh] User or refresh token not found');
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    if (!user.refreshTokenExpiry || user.refreshTokenExpiry < new Date()) {
+      console.log('[ValidateOrRefresh] Refresh token expired');
+      throw new UnauthorizedException('Refresh token has expired');
+    }
+
+    // Generate new access token
+    const accessToken = await this.jwtService.signAsync(
+      {
+        sub: userId,
+        phoneNumber: user.phoneNumber,
+      },
+      {
+        expiresIn: JWT_ACCESS_CONFIG.expiresIn,
+      },
+    );
+
+    console.log(
+      '[ValidateOrRefresh] Generated new access token for user',
+      userId,
+    );
+
+    return {
+      accessToken,
+      refreshToken: null, // No need to refresh the refresh token yet
+      needsRefresh: false,
+    };
   }
 
   async logout(userId: string): Promise<MessageResponseDto> {
