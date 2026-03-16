@@ -42,7 +42,9 @@ export class JwtCookieStrategy extends PassportStrategy(
     });
   }
 
-  async validate(payload: JwtPayload): Promise<AuthenticatedUser> {
+  async validate(
+    payload: JwtPayload,
+  ): Promise<AuthenticatedUser & { id?: string }> {
     const user = await this.userService.findById(payload.sub);
 
     if (!user) {
@@ -54,6 +56,7 @@ export class JwtCookieStrategy extends PassportStrategy(
     }
 
     return {
+      id: payload.sub,
       userId: payload.sub,
       phoneNumber: payload.phoneNumber,
     };

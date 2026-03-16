@@ -140,6 +140,9 @@ model User {
   sessions           SessionStaff[]
   files              File[]
   albums             Album[]
+  chatsAsCustomer    Chat[]         @relation("chat_customer")
+  chatsAsStaff       Chat[]         @relation("chat_staff")
+  messages           Message[]
   // timestamps
   createdAt          DateTime       @default(now()) @map("created_at")
   updatedAt          DateTime       @updatedAt @map("updated_at")
@@ -305,6 +308,7 @@ model Booking {
   sessions    BookingSession[]
   albums      Album[]
   orders      Order[]
+  chats       Chat[]
   // timestamps
   createdAt   DateTime         @default(now()) @map("created_at")
   updatedAt   DateTime         @default(now()) @map("updated_at")
@@ -681,15 +685,16 @@ model File {
 }
 
 model Album {
-  id          String    @id @default(uuid())
-  ownerUserId String?   @map("owner_user_id")
-  bookingId   String?   @map("booking_id")
-  title       String
-  description String?
-  isPublic    Boolean   @default(false) @map("is_public")
-  share_token String?   @unique @map("share_token")
-  expiresAt   DateTime? @map("expires_at")
-  coverFileId String?   @map("cover_file_id")
+  id                 String    @id @default(uuid())
+  ownerUserId        String?   @map("owner_user_id")
+  bookingId          String?   @map("booking_id")
+  title              String
+  description        String?
+  isPublic           Boolean   @default(false) @map("is_public")
+  share_token        String?   @unique @map("share_token")
+  expiresAt          DateTime? @map("expires_at")
+  coverFileId        String?   @map("cover_file_id")
+  oneDriveFolderId   String?   @map("onedrive_folder_id")
 
   // relation
   owner     User?       @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
@@ -721,6 +726,60 @@ model AlbumFile {
   @@id([albumId, fileId])
   @@index([fileId])
   @@map("album_files")
+}
+
+// Chat and Messaging
+enum ChatType {
+  DIRECT
+  GROUP
+}
+
+model Chat {
+  id            String      @id @default(uuid())
+  customerId    String      @map("customer_id")
+  staffId       String?     @map("staff_id")
+  bookingId     String?     @map("booking_id")
+  chatType      ChatType    @default(DIRECT)
+  lastMessageAt DateTime?   @map("last_message_at")
+  isArchived    Boolean     @default(false) @map("is_archived")
+
+  // relation
+  customer User       @relation("chat_customer", fields: [customerId], references: [id], onDelete: Cascade)
+  staff    User?      @relation("chat_staff", fields: [staffId], references: [id], onDelete: SetNull)
+  booking  Booking?   @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  messages Message[]
+
+  // timestamps
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([customerId, staffId])
+  @@index([bookingId])
+  @@index([lastMessageAt])
+  @@map("chats")
+}
+
+model Message {
+  id        String   @id @default(uuid())
+  chatId    String   @map("chat_id")
+  senderId  String   @map("sender_id")
+  content   String
+  isRead    Boolean  @default(false) @map("is_read")
+  readAt    DateTime? @map("read_at")
+
+  // relation
+  chat   Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  sender User @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  // timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([chatId, createdAt])
+  @@index([senderId])
+  @@index([isRead])
+  @@map("messages")
 }
 
 // Audit Logs

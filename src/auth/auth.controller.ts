@@ -31,7 +31,7 @@ import {
   UpdateProfileDto,
 } from './dto/auth.dto';
 import { GetUser, type AuthenticatedUser } from './get-user.decorator';
-import { JwtAuthGuard } from './jwt-auth.guard';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
 interface AuthServiceResponse extends AuthResponseDto {
   accessToken: string;

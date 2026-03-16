@@ -4,19 +4,31 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { JwtPayload } from '../types/jwt';
 import { JWT_ACCESS_CONFIG } from '../config/jwt.config';
+import { Request } from 'express';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(private configService: ConfigService) {
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      jwtFromRequest: ExtractJwt.fromExtractors([
+        ExtractJwt.fromAuthHeaderAsBearerToken(),
+        (request: Request) => {
+          const token = request.cookies?.access_token as string | undefined;
+          return token || null;
+        },
+      ]),
       ignoreExpiration: false,
       secretOrKey: JWT_ACCESS_CONFIG.secret,
     });
   }
 
-  validate(payload: JwtPayload) {
+  validate(payload: JwtPayload): {
+    id: string;
+    userId: string;
+    phoneNumber?: string;
+  } {
     return {
+      id: payload.sub,
       userId: payload.sub,
       phoneNumber: payload.phoneNumber,
     };

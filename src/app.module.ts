@@ -21,6 +21,7 @@ import { AlbumsModule } from './albums/albums.module';
 import { InventoryReservationsModule } from './inventory-reservations/inventory-reservations.module';
 import { UsersModule } from './users/users.module';
 import { SelectionModule } from './selection/selection.module';
+import { ChatModule } from './chat/chat.module';
 import { AutoRefreshMiddleware } from './auth/auto-refresh.middleware';
 
 @Module({
@@ -46,6 +47,7 @@ import { AutoRefreshMiddleware } from './auth/auto-refresh.middleware';
     AlbumsModule,
     InventoryReservationsModule,
     SelectionModule,
+    ChatModule,
   ],
   controllers: [AppController],
   providers: [AppService, DatabaseService],
