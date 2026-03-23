@@ -45,4 +45,18 @@ export class ServiceEntity implements Service {
     nullable: true,
   })
   deletedAt: Date | null;
+
+  @ApiProperty({
+    example: 'https://res.cloudinary.com/...',
+    required: false,
+    nullable: true,
+  })
+  imageUrl: string | null;
+
+  @ApiProperty({
+    example: 'wedding/services/service_1234567890',
+    required: false,
+    nullable: true,
+  })
+  cloudinaryPublicId: string | null;
 }

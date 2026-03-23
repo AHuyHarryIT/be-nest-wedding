@@ -8,13 +8,20 @@ import {
   Post,
   Query,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
+  ParseFilePipe,
+  MaxFileSizeValidator,
+  FileTypeValidator,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
   ApiExtraModels,
   ApiOperation,
   ApiTags,
+  ApiConsumes,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import {
@@ -55,14 +62,32 @@ export class ServicesController {
 
   @Post()
   @RequirePermissions('services:create')
-  @ApiOperation({ summary: 'Create a new service' })
+  @UseInterceptors(FileInterceptor('image'))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Create a new service with optional image' })
   @ApiCreatedSuccessResponse({ description: 'Service created successfully' })
   @ApiUnauthorizedResponse()
   @ApiForbiddenResponse()
   @ApiConflictResponse()
   @ApiErrorResponse({ description: 'Error occurred while creating service' })
-  async create(@Body() createServiceDto: CreateServiceDto) {
-    const service = await this.servicesService.create(createServiceDto);
+  async create(
+    @Body() createServiceDto: CreateServiceDto,
+    @UploadedFile(
+      new ParseFilePipe({
+        validators: [
+          new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 }), // 5MB
+          new FileTypeValidator({ fileType: '.(jpg|jpeg|png|gif|webp)$' }),
+        ],
+        fileIsRequired: false,
+      }),
+    )
+    image?: Express.Multer.File,
+  ) {
+    const service = await this.servicesService.createWithImage(
+      createServiceDto,
+      image?.buffer,
+      image?.originalname,
+    );
     return ResponseBuilder.created(service, 'Service created successfully');
   }
 
@@ -160,7 +185,9 @@ export class ServicesController {
 
   @Patch(':id')
   @RequirePermissions('services:update')
-  @ApiOperation({ summary: 'Update a service by ID' })
+  @UseInterceptors(FileInterceptor('image'))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Update a service by ID with optional image' })
   @ApiUpdatedSuccessResponse({ description: 'Service updated successfully' })
   @ApiNotFoundResponse({ description: 'Service not found' })
   @ApiUnauthorizedResponse()
@@ -170,8 +197,23 @@ export class ServicesController {
   async update(
     @Param('id') id: string,
     @Body() updateServiceDto: UpdateServiceDto,
+    @UploadedFile(
+      new ParseFilePipe({
+        validators: [
+          new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 }), // 5MB
+          new FileTypeValidator({ fileType: '.(jpg|jpeg|png|gif|webp)$' }),
+        ],
+        fileIsRequired: false,
+      }),
+    )
+    image?: Express.Multer.File,
   ) {
-    const service = await this.servicesService.update(id, updateServiceDto);
+    const service = await this.servicesService.updateWithImage(
+      id,
+      updateServiceDto,
+      image?.buffer,
+      image?.originalname,
+    );
     return ResponseBuilder.updated(service, 'Service updated successfully');
   }
 
@@ -211,5 +253,59 @@ export class ServicesController {
   async hardDelete(@Param('id') id: string) {
     await this.servicesService.hardDelete(id);
     return ResponseBuilder.deleted('Service permanently deleted');
+  }
+
+  @Post(':id/image')
+  @RequirePermissions('services:update')
+  @UseInterceptors(FileInterceptor('image'))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Upload or replace service image' })
+  @ApiUpdatedSuccessResponse({
+    description: 'Service image uploaded successfully',
+  })
+  @ApiNotFoundResponse({ description: 'Service not found' })
+  @ApiUnauthorizedResponse()
+  @ApiForbiddenResponse()
+  @ApiBadRequestResponse()
+  async uploadImage(
+    @Param('id') id: string,
+    @UploadedFile(
+      new ParseFilePipe({
+        validators: [
+          new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 }), // 5MB
+          new FileTypeValidator({ fileType: '.(jpg|jpeg|png|gif|webp)$' }),
+        ],
+        fileIsRequired: true,
+      }),
+    )
+    image: Express.Multer.File,
+  ) {
+    const service = await this.servicesService.uploadServiceImage(
+      id,
+      image.buffer,
+      image.originalname,
+    );
+    return ResponseBuilder.updated(
+      service,
+      'Service image uploaded successfully',
+    );
+  }
+
+  @Delete(':id/image')
+  @RequirePermissions('services:update')
+  @ApiOperation({ summary: 'Delete service image' })
+  @ApiDeletedSuccessResponse({
+    description: 'Service image deleted successfully',
+  })
+  @ApiNotFoundResponse({ description: 'Service not found' })
+  @ApiUnauthorizedResponse()
+  @ApiForbiddenResponse()
+  @ApiBadRequestResponse()
+  async deleteImage(@Param('id') id: string) {
+    const service = await this.servicesService.deleteServiceImage(id);
+    return ResponseBuilder.updated(
+      service,
+      'Service image deleted successfully',
+    );
   }
 }

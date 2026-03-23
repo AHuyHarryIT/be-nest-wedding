@@ -1,12 +1,20 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { Prisma } from 'generated/prisma';
 import { PaginationHelper } from '../common/utils/pagination.helper';
 import { DatabaseService } from '../database/database.service';
+import { CloudinaryService } from '../common/services/cloudinary.service';
 import { CreateServiceDto, QueryServiceDto, UpdateServiceDto } from './dto';
 
 @Injectable()
 export class ServicesService {
-  constructor(private readonly databaseService: DatabaseService) {}
+  constructor(
+    private readonly databaseService: DatabaseService,
+    private readonly cloudinaryService: CloudinaryService,
+  ) {}
 
   async create(createServiceDto: CreateServiceDto) {
     // Set default values if not provided
@@ -224,5 +232,134 @@ export class ServicesService {
     return await this.databaseService.service.delete({
       where: { id },
     });
+  }
+
+  /**
+   * Upload and update service image
+   * @param id Service ID
+   * @param imageBuffer Image file buffer
+   * @param fileName Original filename
+   */
+  async uploadServiceImage(id: string, imageBuffer: Buffer, fileName: string) {
+    // Verify service exists
+    const service = await this.findOne(id);
+
+    // Delete old image if it exists
+    if (service.cloudinaryPublicId) {
+      await this.cloudinaryService.deleteImage(service.cloudinaryPublicId);
+    }
+
+    // Upload new image to Cloudinary
+    const uploadResult = await this.cloudinaryService.uploadImage(
+      imageBuffer,
+      fileName,
+      'wedding/services',
+    );
+
+    if (!uploadResult.success) {
+      throw new BadRequestException(
+        `Failed to upload image: ${uploadResult.error}`,
+      );
+    }
+
+    // Update service with new image details
+    return this.databaseService.service.update({
+      where: { id },
+      data: {
+        imageUrl: uploadResult.webUrl,
+        cloudinaryPublicId: uploadResult.publicId,
+      },
+    });
+  }
+
+  /**
+   * Delete service image
+   * @param id Service ID
+   */
+  async deleteServiceImage(id: string) {
+    const service = await this.findOne(id);
+
+    if (!service.cloudinaryPublicId) {
+      throw new BadRequestException('Service has no image to delete');
+    }
+
+    // Delete from Cloudinary
+    await this.cloudinaryService.deleteImage(service.cloudinaryPublicId);
+
+    // Update service to remove image references
+    return this.databaseService.service.update({
+      where: { id },
+      data: {
+        imageUrl: null,
+        cloudinaryPublicId: null,
+      },
+    });
+  }
+
+  /**
+   * Create service with optional image upload
+   * @param createServiceDto Service data
+   * @param imageBuffer Optional image buffer
+   * @param fileName Optional image filename
+   */
+  async createWithImage(
+    createServiceDto: CreateServiceDto,
+    imageBuffer?: Buffer,
+    fileName?: string,
+  ) {
+    // Set default values if not provided
+    const data: Prisma.ServiceCreateInput = {
+      name: createServiceDto.name,
+      description: createServiceDto.description || null,
+      price: createServiceDto.price || 0,
+      isActive: createServiceDto.isActive || false,
+    };
+
+    let createdService = await this.databaseService.service.create({
+      data,
+    });
+
+    // If image provided, upload it
+    if (imageBuffer && fileName) {
+      createdService = await this.uploadServiceImage(
+        createdService.id,
+        imageBuffer,
+        fileName,
+      );
+    }
+
+    return createdService;
+  }
+
+  /**
+   * Update service with optional image replacement
+   * @param id Service ID
+   * @param updateServiceDto Service data to update
+   * @param imageBuffer Optional image buffer for replacement
+   * @param fileName Optional image filename
+   */
+  async updateWithImage(
+    id: string,
+    updateServiceDto: UpdateServiceDto,
+    imageBuffer?: Buffer,
+    fileName?: string,
+  ) {
+    // First check if service exists
+    await this.findOne(id);
+
+    // Handle updates
+    const data: Prisma.ServiceUpdateInput = { ...updateServiceDto };
+
+    let updatedService = await this.databaseService.service.update({
+      where: { id },
+      data,
+    });
+
+    // If new image provided, upload it
+    if (imageBuffer && fileName) {
+      updatedService = await this.uploadServiceImage(id, imageBuffer, fileName);
+    }
+
+    return updatedService;
   }
 }

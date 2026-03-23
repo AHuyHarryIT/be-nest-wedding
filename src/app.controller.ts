@@ -13,6 +13,16 @@ export class AppController {
     return this.appService.getHello();
   }
 
+  @Get('health')
+  getHealth() {
+    return {
+      status: 'ok',
+      service: 'be-nest-wedding',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+    };
+  }
+
   @Get('protected')
   @UseGuards(JwtAuthGuard)
   getProtected(@GetUser() user: UserContext): UserContext {

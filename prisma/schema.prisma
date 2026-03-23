@@ -243,11 +243,15 @@ model Category {
 }
 
 model Service {
-  id          String  @id @default(uuid())
-  name        String
-  description String?
-  price       Float   @default(0)
-  isActive    Boolean @default(false) @map("is_active")
+  id                   String  @id @default(uuid())
+  name                 String
+  description          String?
+  price                Float   @default(0)
+  isActive             Boolean @default(false) @map("is_active")
+  
+  // Image fields
+  imageUrl             String? @map("image_url")
+  cloudinaryPublicId   String? @map("cloudinary_public_id")
 
   // relation
   packages PackageService[]
