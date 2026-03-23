@@ -14,8 +14,14 @@ import { Injectable } from '@nestjs/common';
 @WebSocketGateway({
   namespace: 'chat',
   cors: {
-    origin: ['http://localhost:3000', 'http://localhost:5173'],
+    origin: process.env.ALLOWED_ORIGINS?.split(',') || [
+      'http://localhost:3000',
+      'http://localhost:4200',
+      'http://localhost:5173',
+      'http://localhost:5174',
+    ],
     credentials: true,
+    methods: ['GET', 'POST'],
   },
 })
 @Injectable()

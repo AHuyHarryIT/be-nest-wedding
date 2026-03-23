@@ -178,6 +178,18 @@ export class AuthResponseDto {
     isActive: boolean;
     createdAt: Date;
   };
+
+  @ApiPropertyOptional({
+    description: 'JWT access token for API authentication',
+    example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+  })
+  accessToken?: string;
+
+  @ApiPropertyOptional({
+    description: 'JWT refresh token for token refresh',
+    example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+  })
+  refreshToken?: string;
 }
 
 export class RefreshTokenDto {

@@ -14,15 +14,26 @@ import { setupSwagger } from './common/config/swagger.config';
 import { ValidationPipe } from '@nestjs/common';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [
+    'http://localhost:3000',
+    'http://localhost:4200',
+    'http://localhost:5173',
+    'http://localhost:5174',
+  ];
 
-  // Enable CORS for cookie handling
+  const app = await NestFactory.create(AppModule, {
+    cors: {
+      origin: allowedOrigins,
+      credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'Cookie'],
+    },
+  });
+
+  // Enable CORS for REST API (Express)
   app.enableCors({
-    origin: process.env.ALLOWED_ORIGINS?.split(',') || [
-      'http://localhost:3000',
-      'http://localhost:4200',
-    ],
-    credentials: true, // Allow cookies to be sent
+    origin: allowedOrigins,
+    credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Cookie'],
   });

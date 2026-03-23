@@ -20,10 +20,13 @@ export class JwtCookieStrategy extends PassportStrategy(
     super({
       jwtFromRequest: ExtractJwt.fromExtractors([
         (request: Request) => {
-          // Try to get token from cookies first
+          // Try to get token from cookies first (supports customer and staff cookie names)
           let token: string | null = null;
           if (request && request.cookies) {
-            token = (request.cookies['access_token'] as string) || null;
+            token =
+              (request.cookies['staff_access_token'] as string) ||
+              (request.cookies['access_token'] as string) ||
+              null;
           }
 
           // If no token in cookies, fall back to Authorization header

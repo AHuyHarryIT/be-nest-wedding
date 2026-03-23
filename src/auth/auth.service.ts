@@ -102,8 +102,14 @@ export class AuthService {
     }
 
     // Hash password
-    const saltRounds = this.configService.get<number>('HASH_SALT', 10);
-    const hashedPassword = await bcrypt.hash(password, saltRounds);
+    let hashedPassword: string;
+    try {
+      hashedPassword = await bcrypt.hash(password, 10);
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.error('Bcrypt hash error:', errorMsg);
+      throw new Error(`Password hashing failed: ${errorMsg}`);
+    }
 
     // Create user
     const user = await this.databaseService.user.create({

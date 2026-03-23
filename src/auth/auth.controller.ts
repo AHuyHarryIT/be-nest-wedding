@@ -20,7 +20,6 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
-import { JwtService } from '@nestjs/jwt';
 import { AuthService } from './auth.service';
 import {
   AuthResponseDto,
@@ -41,10 +40,7 @@ interface AuthServiceResponse extends AuthResponseDto {
 @ApiTags('Authentication')
 @Controller('auth')
 export class AuthController {
-  constructor(
-    private readonly authService: AuthService,
-    private readonly jwtService: JwtService,
-  ) {}
+  constructor(private readonly authService: AuthService) {}
 
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
@@ -62,6 +58,7 @@ export class AuthController {
   })
   async register(
     @Body() registerDto: RegisterDto,
+    @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ): Promise<AuthResponseDto> {
     const result = (await this.authService.register(
@@ -69,12 +66,14 @@ export class AuthController {
     )) as AuthServiceResponse;
 
     // Set cookies
-    this.setCookies(response, result.accessToken, result.refreshToken);
+    this.setCookies(request, response, result.accessToken, result.refreshToken);
 
-    // Return response without tokens in body
+    // Return response with tokens in body for frontend storage
     return {
       message: result.message,
       user: result.user,
+      accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
     } as AuthResponseDto;
   }
 
@@ -91,6 +90,7 @@ export class AuthController {
   })
   async login(
     @Body() loginDto: LoginDto,
+    @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ): Promise<AuthResponseDto> {
     const result = (await this.authService.login(
@@ -98,34 +98,57 @@ export class AuthController {
     )) as AuthServiceResponse;
 
     // Set cookies
-    this.setCookies(response, result.accessToken, result.refreshToken);
+    this.setCookies(request, response, result.accessToken, result.refreshToken);
 
-    // Return response without tokens in body
+    // Return response with tokens in body for frontend storage
     return {
       message: result.message,
       user: result.user,
+      accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
     } as AuthResponseDto;
   }
 
+  private resolveCookieNames(request: Request): {
+    accessCookieName: string;
+    refreshCookieName: string;
+  } {
+    const origin = request.headers.origin || '';
+    const host = request.headers.host || '';
+    const isStaffHost =
+      origin.includes('127.0.0.1') || host.includes('127.0.0.1');
+
+    return {
+      accessCookieName: isStaffHost ? 'staff_access_token' : 'access_token',
+      refreshCookieName: isStaffHost ? 'staff_refresh_token' : 'refresh_token',
+    };
+  }
+
   private setCookies(
+    request: Request,
     response: Response,
     accessToken: string,
     refreshToken: string,
   ): void {
+    const { accessCookieName, refreshCookieName } =
+      this.resolveCookieNames(request);
+
     // Set access token cookie (shorter expiration)
-    response.cookie('access_token', accessToken, {
+    response.cookie(accessCookieName, accessToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax', // Changed from 'strict' to allow cross-site requests
       maxAge: 15 * 60 * 1000, // 15 minutes
+      path: '/',
     });
 
     // Set refresh token cookie (longer expiration)
-    response.cookie('refresh_token', refreshToken, {
+    response.cookie(refreshCookieName, refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax', // Changed from 'strict' to allow cross-site requests
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      path: '/',
     });
   }
 
@@ -208,20 +231,11 @@ export class AuthController {
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ): Promise<{ message: string }> {
-    const refreshToken = request.cookies?.['refresh_token'] as
-      | string
-      | undefined;
-
-    console.log(
-      '[RefreshController] Received refresh token',
-      'Length:',
-      refreshToken?.length,
-      'First 20 chars:',
-      refreshToken?.substring(0, 20),
-    );
+    const refreshToken =
+      (request.cookies?.['refresh_token'] as string | undefined) ||
+      (request.cookies?.['staff_refresh_token'] as string | undefined);
 
     if (!refreshToken) {
-      console.log('[RefreshController] Refresh token not found in cookies');
       throw new Error('Refresh token not found in cookies');
     }
 
@@ -230,7 +244,7 @@ export class AuthController {
     });
 
     // Set new cookies
-    this.setCookies(response, tokens.accessToken, tokens.refreshToken);
+    this.setCookies(request, response, tokens.accessToken, tokens.refreshToken);
 
     return { message: 'Tokens refreshed successfully' };
   }
@@ -252,9 +266,11 @@ export class AuthController {
     @GetUser() user: AuthenticatedUser,
     @Res({ passthrough: true }) response: Response,
   ): Promise<MessageResponseDto> {
-    // Clear cookies
+    // Clear both cookie variants to avoid stale cross-host sessions.
     response.clearCookie('access_token');
     response.clearCookie('refresh_token');
+    response.clearCookie('staff_access_token');
+    response.clearCookie('staff_refresh_token');
 
     // Invalidate refresh token in database
     return this.authService.logout(user.userId);

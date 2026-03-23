@@ -11,6 +11,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { ChatService } from './chat.service';
+import { ChatGateway } from './chat.gateway';
 import { CreateChatDto, SendMessageDto, UpdateChatDto } from './dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ChatEntity, MessageEntity } from './entities';
@@ -22,7 +23,10 @@ interface AuthenticatedRequest {
 @Controller('chats')
 @UseGuards(JwtAuthGuard)
 export class ChatController {
-  constructor(private chatService: ChatService) {}
+  constructor(
+    private chatService: ChatService,
+    private chatGateway: ChatGateway,
+  ) {}
 
   private getUserId(req: any): string {
     return (req as AuthenticatedRequest).user.id;
@@ -59,6 +63,7 @@ export class ChatController {
     const skipNum = skip ? parseInt(skip, 10) : 0;
     const takeNum = take ? parseInt(take, 10) : 20;
 
+    await this.chatService.ensureStaffUser(staffId);
     return this.chatService.getChatsByStaff(staffId, skipNum, takeNum);
   }
 
@@ -104,7 +109,35 @@ export class ChatController {
       chatId,
       content: body.content,
     };
-    return this.chatService.sendMessage(sendMessageDto, senderId);
+    const message = await this.chatService.sendMessage(
+      sendMessageDto,
+      senderId,
+    );
+
+    // Emit real-time message event via Socket.IO
+    const chatData = await this.chatService.getChat(chatId);
+    void this.chatGateway.server.to(`chat:${chatId}`).emit('message_received', {
+      id: message.id,
+      chatId: message.chatId,
+      senderId: message.senderId,
+      content: message.content,
+      isRead: message.isRead,
+      createdAt: message.createdAt,
+    });
+
+    // Also emit notification to the other participant
+    const otherUserId =
+      chatData.customerId === senderId ? chatData.staffId : chatData.customerId;
+    if (otherUserId) {
+      void this.chatGateway.server
+        .to(`user:${otherUserId}`)
+        .emit('new_message_notification', {
+          chatId: chatId,
+          messageCount: 1,
+        });
+    }
+
+    return message;
   }
 
   @Get(':chatId/messages')

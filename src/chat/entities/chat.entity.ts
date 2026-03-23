@@ -8,4 +8,10 @@ export class ChatEntity {
   isArchived: boolean;
   createdAt: Date;
   updatedAt: Date;
+  customer?: {
+    id: string;
+    firstName?: string;
+    lastName?: string;
+    email?: string;
+  };
 }

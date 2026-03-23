@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { CreateChatDto, SendMessageDto, UpdateChatDto } from './dto';
@@ -11,9 +12,38 @@ import { ChatEntity, MessageEntity } from './entities';
 export class ChatService {
   constructor(private prisma: DatabaseService) {}
 
+  private async isStaffUser(userId: string): Promise<boolean> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        roles: {
+          include: {
+            role: true,
+          },
+        },
+      },
+    });
+
+    if (!user || !user.isActive) {
+      return false;
+    }
+
+    return user.roles?.some((ur) =>
+      ['super-admin', 'admin', 'manager', 'staff'].includes(ur.role.name),
+    );
+  }
+
+  async ensureStaffUser(userId: string): Promise<void> {
+    const isStaff = await this.isStaffUser(userId);
+    if (!isStaff) {
+      throw new ForbiddenException('Staff role is required for this endpoint');
+    }
+  }
+
   // Chat operations
   async createChat(createChatDto: CreateChatDto): Promise<ChatEntity> {
-    const { customerId, staffId, bookingId } = createChatDto;
+    const { customerId, bookingId } = createChatDto;
+    let { staffId } = createChatDto;
 
     // Verify customer exists
     const customer = await this.prisma.user.findUnique({
@@ -21,6 +51,39 @@ export class ChatService {
     });
     if (!customer) {
       throw new NotFoundException('Customer not found');
+    }
+
+    // If staffId not provided, auto-assign the first admin/staff user
+    if (!staffId) {
+      // Try to find any admin user first
+      const adminUser = await this.prisma.user.findFirst({
+        include: {
+          roles: {
+            include: {
+              role: true,
+            },
+          },
+        },
+        where: {
+          isActive: true,
+          roles: {
+            some: {
+              role: {
+                name: {
+                  in: ['super-admin', 'admin', 'manager', 'staff'],
+                },
+              },
+            },
+          },
+        },
+        orderBy: {
+          createdAt: 'asc',
+        },
+      });
+
+      if (adminUser) {
+        staffId = adminUser.id;
+      }
     }
 
     // If staffId provided, verify staff exists
@@ -76,6 +139,16 @@ export class ChatService {
   async getChat(chatId: string): Promise<ChatEntity> {
     const chat = await this.prisma.chat.findUnique({
       where: { id: chatId },
+      include: {
+        customer: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
+      },
     });
 
     if (!chat) {
@@ -95,6 +168,16 @@ export class ChatService {
         customerId,
         deletedAt: null,
       },
+      include: {
+        customer: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
+      },
       orderBy: { lastMessageAt: 'desc' },
       skip,
       take,
@@ -108,10 +191,21 @@ export class ChatService {
     skip: number = 0,
     take: number = 20,
   ): Promise<ChatEntity[]> {
+    await this.ensureStaffUser(staffId);
+
     const chats = await this.prisma.chat.findMany({
       where: {
-        staffId,
         deletedAt: null,
+      },
+      include: {
+        customer: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
       },
       orderBy: { lastMessageAt: 'desc' },
       skip,
@@ -130,6 +224,16 @@ export class ChatService {
     const updated = await this.prisma.chat.update({
       where: { id: chatId },
       data: updateChatDto,
+      include: {
+        customer: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
+      },
     });
 
     return updated as ChatEntity;
@@ -141,6 +245,16 @@ export class ChatService {
     const updated = await this.prisma.chat.update({
       where: { id: chatId },
       data: { isArchived: true },
+      include: {
+        customer: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
+      },
     });
 
     return updated as ChatEntity;
@@ -165,17 +279,30 @@ export class ChatService {
     // Verify chat exists
     const chatData = await this.getChat(chatId);
 
-    // Verify sender is either customer or staff in the chat
-    if (chatData.customerId !== senderId && chatData.staffId !== senderId) {
-      throw new BadRequestException('User is not part of this chat');
-    }
-
     // Verify sender is an active user
     const sender = await this.prisma.user.findUnique({
       where: { id: senderId },
+      include: {
+        roles: {
+          include: {
+            role: true,
+          },
+        },
+      },
     });
     if (!sender || !sender.isActive) {
       throw new BadRequestException('Sender is not active');
+    }
+
+    // Allow if user is the customer OR has a staff role
+    const isStaff = sender.roles?.some((ur) => {
+      return ['super-admin', 'admin', 'manager', 'staff'].includes(
+        ur.role.name,
+      );
+    });
+
+    if (chatData.customerId !== senderId && !isStaff) {
+      throw new BadRequestException('User is not part of this chat');
     }
 
     const message = await this.prisma.message.create({
@@ -213,8 +340,8 @@ export class ChatService {
   }
 
   async getUnreadMessages(
-    userId: string,
     chatId: string,
+    userId: string,
   ): Promise<MessageEntity[]> {
     const chat = await this.getChat(chatId);
 
@@ -238,8 +365,30 @@ export class ChatService {
   async markMessagesAsRead(chatId: string, userId: string): Promise<void> {
     const chat = await this.getChat(chatId);
 
-    // Verify user is part of the chat
-    if (chat.customerId !== userId && chat.staffId !== userId) {
+    // Verify chat exists and user is either customer or can access as staff
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        roles: {
+          include: {
+            role: true,
+          },
+        },
+      },
+    });
+
+    if (!user || !user.isActive) {
+      throw new BadRequestException('User is not active or does not exist');
+    }
+
+    // Allow if user is the customer OR has a staff role
+    const isStaff = user.roles?.some((ur) => {
+      return ['super-admin', 'admin', 'manager', 'staff'].includes(
+        ur.role.name,
+      );
+    });
+
+    if (chat.customerId !== userId && !isStaff) {
       throw new BadRequestException('User is not part of this chat');
     }
 
