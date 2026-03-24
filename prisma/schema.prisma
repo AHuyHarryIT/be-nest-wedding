@@ -202,46 +202,6 @@ model RolePermission {
   @@map("role_permissions")
 }
 
-model Product {
-  id               String  @id @default(uuid())
-  name             String
-  description      String?
-  price            Float   @default(0)
-  stockQty         Int     @default(0) @map("stock_qty")
-  isActive         Boolean @default(false) @map("is_active")
-  categoryId       String? @map("category_id")
-  imageFileId      String? @map("image_file_id")
-  oneDriveFolderId String? @map("one_drive_folder_id")
-
-  // relation
-  category              Category?              @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  inventoryReservations InventoryReservation[]
-
-  // timestamps
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @default(now()) @map("updated_at")
-  deletedAt DateTime? @map("deleted_at")
-
-  @@map("products")
-}
-
-model Category {
-  id          String  @id @default(uuid())
-  name        String  @unique
-  description String?
-  isActive    Boolean @default(true) @map("is_active")
-
-  // relation
-  products Product[]
-
-  // timestamps
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @default(now()) @map("updated_at")
-  deletedAt DateTime? @map("deleted_at")
-
-  @@map("categories")
-}
-
 model Service {
   id                   String  @id @default(uuid())
   name                 String
@@ -382,7 +342,6 @@ model BookingSession {
   booking               Booking                @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   staffs                SessionStaff[]
   services              SessionService[]
-  inventoryReservations InventoryReservation[]
 
   // timestamps
   createdAt DateTime @default(now()) @map("created_at")
@@ -417,21 +376,6 @@ model SessionService {
 
   @@id([sessionId, serviceId])
   @@map("session_services")
-}
-
-model InventoryReservation {
-  id         String   @id @default(uuid())
-  productId  String   @map("product_id")
-  sessionId  String   @map("session_id")
-  quantity   Int
-  reservedAt DateTime @default(now()) @map("reserved_at")
-
-  // relation
-  product Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
-  session BookingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-
-  @@index([productId])
-  @@map("inventory_reservations")
 }
 
 model Order {

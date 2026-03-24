@@ -27,7 +27,6 @@ export class BookingRepository extends BaseRepository<any> {
           include: {
             staffs: { include: { staff: true } },
             services: { include: { service: true } },
-            inventoryReservations: { include: { product: true } },
           },
         },
         albums: { include: { files: { include: { file: true } } } },

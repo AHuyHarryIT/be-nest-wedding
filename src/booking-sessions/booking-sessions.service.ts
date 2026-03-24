@@ -98,7 +98,6 @@ export class BookingSessionsService {
         booking: true,
         staffs: { include: { staff: true } },
         services: { include: { service: true } },
-        inventoryReservations: { include: { product: true } },
       },
     });
 

@@ -8,8 +8,6 @@ import { DatabaseModule } from './database/database.module';
 import { CommonModule } from './common/common.module';
 import { RolesModule } from './roles/roles.module';
 import { PermissionsModule } from './permissions/permissions.module';
-import { ProductsModule } from './products/products.module';
-import { CategoriesModule } from './categories/categories.module';
 import { ServicesModule } from './services/services.module';
 import { PackagesModule } from './packages/packages.module';
 import { AuthModule } from './auth/auth.module';
@@ -18,7 +16,6 @@ import { BookingSessionsModule } from './booking-sessions/booking-sessions.modul
 import { PaymentsModule } from './payments/payments.module';
 import { OrdersModule } from './orders/orders.module';
 import { AlbumsModule } from './albums/albums.module';
-import { InventoryReservationsModule } from './inventory-reservations/inventory-reservations.module';
 import { UsersModule } from './users/users.module';
 import { SelectionModule } from './selection/selection.module';
 import { ChatModule } from './chat/chat.module';
@@ -36,8 +33,6 @@ import { AutoRefreshMiddleware } from './auth/auto-refresh.middleware';
     UsersModule,
     RolesModule,
     PermissionsModule,
-    CategoriesModule,
-    ProductsModule,
     ServicesModule,
     PackagesModule,
     BookingsModule,
@@ -45,7 +40,6 @@ import { AutoRefreshMiddleware } from './auth/auto-refresh.middleware';
     PaymentsModule,
     OrdersModule,
     AlbumsModule,
-    InventoryReservationsModule,
     SelectionModule,
     ChatModule,
   ],
