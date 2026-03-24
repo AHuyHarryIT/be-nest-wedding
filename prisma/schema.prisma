@@ -267,14 +267,17 @@ model Service {
 }
 
 model Package {
-  id          String  @id @default(uuid())
-  name        String
-  description String?
-  price       Float   @default(0)
-  isActive    Boolean @default(false) @map("is_active")
+  id                   String  @id @default(uuid())
+  name                 String
+  description          String?
+  price                Float   @default(0)
+  isActive             Boolean @default(false) @map("is_active")
+  coverImageUrl        String? @map("cover_image_url")
+  coverImagePublicId   String? @map("cover_image_public_id")
 
   // relation
   services        PackageService[]
+  images          PackageImage[]
   bookingPackages BookingPackage[]
 
   // timestamps
@@ -283,6 +286,21 @@ model Package {
   deletedAt DateTime? @map("deleted_at")
 
   @@map("packages")
+}
+
+model PackageImage {
+  id                 String   @id @default(uuid())
+  packageId          String   @map("package_id")
+  imageUrl           String   @map("image_url")
+  cloudinaryPublicId String   @map("cloudinary_public_id")
+  sortOrder          Int      @default(0) @map("sort_order")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  package Package @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  @@index([packageId, sortOrder])
+  @@map("package_images")
 }
 
 model PackageService {

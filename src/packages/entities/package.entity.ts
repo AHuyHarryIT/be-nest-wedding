@@ -34,6 +34,42 @@ export class Package {
   isActive: boolean;
 
   @ApiProperty({
+    description: 'Cover image URL',
+    required: false,
+    example:
+      'https://res.cloudinary.com/demo/image/upload/v1/wedding/packages/cover/sample.jpg',
+  })
+  coverImageUrl?: string;
+
+  @ApiProperty({
+    description: 'Cloudinary public ID for cover image',
+    required: false,
+    example: 'wedding/packages/cover/sample_1234567890',
+  })
+  coverImagePublicId?: string;
+
+  @ApiProperty({
+    description: 'Ordered gallery images',
+    required: false,
+    type: [Object],
+    example: [
+      {
+        id: 'uuid-image-1',
+        imageUrl:
+          'https://res.cloudinary.com/demo/image/upload/v1/wedding/packages/gallery/photo-1.jpg',
+        cloudinaryPublicId: 'wedding/packages/gallery/photo-1_123',
+        sortOrder: 0,
+      },
+    ],
+  })
+  images?: Array<{
+    id: string;
+    imageUrl: string;
+    cloudinaryPublicId: string;
+    sortOrder: number;
+  }>;
+
+  @ApiProperty({
     description: 'The creation timestamp',
     example: '2023-10-01T12:00:00Z',
   })

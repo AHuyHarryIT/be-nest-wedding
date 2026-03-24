@@ -60,6 +60,18 @@ export class CreatePackageDto {
     default: false,
   })
   @IsOptional()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase();
+      if (normalized === 'true') {
+        return true;
+      }
+      if (normalized === 'false') {
+        return false;
+      }
+    }
+    return value;
+  })
   @IsBoolean()
   isActive?: boolean;
 
@@ -69,6 +81,17 @@ export class CreatePackageDto {
     type: [String],
   })
   @IsOptional()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed) ? parsed : [value];
+      } catch {
+        return [value];
+      }
+    }
+    return value;
+  })
   @IsArray()
   @ArrayMinSize(1)
   @IsUUID('4', { each: true })

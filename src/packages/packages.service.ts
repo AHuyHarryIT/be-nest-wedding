@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from 'generated/prisma';
+import { CloudinaryService } from '../common/services/cloudinary.service';
 import { PaginationHelper } from '../common/utils/pagination.helper';
 import { DatabaseService } from '../database/database.service';
 import { CreatePackageDto, QueryPackageDto, UpdatePackageDto } from './dto';
@@ -7,22 +8,112 @@ import { UpdatePackageServicesDto } from './dto/update-package-services.dto';
 
 @Injectable()
 export class PackagesService {
-  constructor(private readonly databaseService: DatabaseService) {}
+  constructor(
+    private readonly databaseService: DatabaseService,
+    private readonly cloudinaryService: CloudinaryService,
+  ) {}
+
+  private normalizeStringArray(value: unknown): string[] | undefined {
+    if (Array.isArray(value)) {
+      return value.filter((item): item is string => typeof item === 'string');
+    }
+
+    if (typeof value !== 'string') {
+      return undefined;
+    }
+
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) {
+        return parsed.filter(
+          (item): item is string => typeof item === 'string',
+        );
+      }
+    } catch {
+      return value ? [value] : undefined;
+    }
+
+    return undefined;
+  }
 
   async create(createPackageDto: CreatePackageDto) {
-    // Set default values if not provided
+    return this.createWithImages(createPackageDto);
+  }
+
+  async createWithImages(
+    createPackageDto: CreatePackageDto,
+    coverImage?: Express.Multer.File,
+    galleryImages: Express.Multer.File[] = [],
+  ) {
+    const serviceIds =
+      this.normalizeStringArray(createPackageDto.serviceIds) ??
+      createPackageDto.serviceIds;
+
+    let coverImageUrl: string | null = null;
+    let coverImagePublicId: string | null = null;
+
+    if (coverImage?.buffer && coverImage.originalname) {
+      const coverUpload = await this.cloudinaryService.uploadImage(
+        coverImage.buffer,
+        coverImage.originalname,
+        'wedding/packages/cover',
+      );
+
+      if (
+        !coverUpload.success ||
+        !coverUpload.webUrl ||
+        !coverUpload.publicId
+      ) {
+        throw new NotFoundException(
+          coverUpload.error || 'Failed to upload package cover image',
+        );
+      }
+
+      coverImageUrl = coverUpload.webUrl;
+      coverImagePublicId = coverUpload.publicId;
+    }
+
+    const uploadedGallery: Array<{ imageUrl: string; publicId: string }> = [];
+    for (const image of galleryImages) {
+      const uploadResult = await this.cloudinaryService.uploadImage(
+        image.buffer,
+        image.originalname,
+        'wedding/packages/gallery',
+      );
+
+      if (
+        uploadResult.success &&
+        uploadResult.webUrl &&
+        uploadResult.publicId
+      ) {
+        uploadedGallery.push({
+          imageUrl: uploadResult.webUrl,
+          publicId: uploadResult.publicId,
+        });
+      }
+    }
+
     const data: Prisma.PackageCreateInput = {
       name: createPackageDto.name,
       description: createPackageDto.description || null,
       price: createPackageDto.price || 0,
       isActive: createPackageDto.isActive ?? false,
+      coverImageUrl,
+      coverImagePublicId,
     };
 
-    // Handle service associations if provided
-    if (createPackageDto.serviceIds && createPackageDto.serviceIds.length > 0) {
+    if (serviceIds && serviceIds.length > 0) {
       data.services = {
-        create: createPackageDto.serviceIds.map((serviceId) => ({
-          serviceId,
+        create: serviceIds.map((serviceId) => ({ serviceId })),
+      };
+    }
+
+    if (uploadedGallery.length > 0) {
+      data.images = {
+        create: uploadedGallery.map((image, index) => ({
+          imageUrl: image.imageUrl,
+          cloudinaryPublicId: image.publicId,
+          sortOrder: index,
         })),
       };
     }
@@ -30,7 +121,12 @@ export class PackagesService {
     return this.databaseService.package.create({
       data,
       include: {
-        services: true,
+        services: {
+          include: { service: true },
+        },
+        images: {
+          orderBy: { sortOrder: 'asc' },
+        },
       },
     });
   }
@@ -82,15 +178,20 @@ export class PackagesService {
     where.deletedAt = null;
 
     // Build include clause
-    const include = includeServices
-      ? {
-          services: {
-            include: {
-              service: true,
+    const include = {
+      ...(includeServices
+        ? {
+            services: {
+              include: {
+                service: true,
+              },
             },
-          },
-        }
-      : undefined;
+          }
+        : {}),
+      images: {
+        orderBy: { sortOrder: 'asc' as const },
+      },
+    };
 
     // Build orderBy
     const orderBy: Prisma.PackageOrderByWithRelationInput = {
@@ -129,6 +230,9 @@ export class PackagesService {
             service: true,
           },
         },
+        images: {
+          orderBy: { sortOrder: 'asc' },
+        },
       },
     });
 
@@ -140,25 +244,65 @@ export class PackagesService {
   }
 
   async update(id: string, updatePackageDto: UpdatePackageDto) {
+    return this.updateWithImages(id, updatePackageDto);
+  }
+
+  async updateWithImages(
+    id: string,
+    updatePackageDto: UpdatePackageDto,
+    coverImage?: Express.Multer.File,
+    galleryImages: Express.Multer.File[] = [],
+  ) {
     // First check if package exists
-    await this.findOne(id);
+    const existingPackage = await this.findOne(id);
 
     // Separate serviceIds from other update data
-    const { serviceIds, ...updateData } = updatePackageDto;
+    const { serviceIds, galleryOrder, ...updateData } = updatePackageDto;
+    const normalizedServiceIds =
+      this.normalizeStringArray(serviceIds) ?? serviceIds;
+    const normalizedGalleryOrder =
+      this.normalizeStringArray(galleryOrder) ?? galleryOrder;
 
     const data: Prisma.PackageUpdateInput = { ...updateData };
 
+    if (coverImage?.buffer && coverImage.originalname) {
+      const coverUpload = await this.cloudinaryService.uploadImage(
+        coverImage.buffer,
+        coverImage.originalname,
+        'wedding/packages/cover',
+      );
+
+      if (
+        !coverUpload.success ||
+        !coverUpload.webUrl ||
+        !coverUpload.publicId
+      ) {
+        throw new NotFoundException(
+          coverUpload.error || 'Failed to upload package cover image',
+        );
+      }
+
+      if (existingPackage.coverImagePublicId) {
+        await this.cloudinaryService.deleteImage(
+          existingPackage.coverImagePublicId,
+        );
+      }
+
+      data.coverImageUrl = coverUpload.webUrl;
+      data.coverImagePublicId = coverUpload.publicId;
+    }
+
     // Handle service associations if provided
-    if (serviceIds !== undefined) {
+    if (normalizedServiceIds !== undefined) {
       // Delete existing service associations
       await this.databaseService.packageService.deleteMany({
         where: { packageId: id },
       });
 
       // Create new associations if serviceIds is not empty
-      if (serviceIds.length > 0) {
+      if (normalizedServiceIds.length > 0) {
         await this.databaseService.packageService.createMany({
-          data: serviceIds.map((serviceId) => ({
+          data: normalizedServiceIds.map((serviceId) => ({
             packageId: id,
             serviceId,
           })),
@@ -166,11 +310,69 @@ export class PackagesService {
       }
     }
 
+    if (galleryImages.length > 0) {
+      const lastImage = await this.databaseService.packageImage.findFirst({
+        where: { packageId: id },
+        orderBy: { sortOrder: 'desc' },
+      });
+      let nextSortOrder = (lastImage?.sortOrder ?? -1) + 1;
+
+      for (const image of galleryImages) {
+        const uploadResult = await this.cloudinaryService.uploadImage(
+          image.buffer,
+          image.originalname,
+          'wedding/packages/gallery',
+        );
+
+        if (
+          uploadResult.success &&
+          uploadResult.webUrl &&
+          uploadResult.publicId
+        ) {
+          await this.databaseService.packageImage.create({
+            data: {
+              packageId: id,
+              imageUrl: uploadResult.webUrl,
+              cloudinaryPublicId: uploadResult.publicId,
+              sortOrder: nextSortOrder,
+            },
+          });
+          nextSortOrder += 1;
+        }
+      }
+    }
+
+    if (normalizedGalleryOrder && normalizedGalleryOrder.length > 0) {
+      const existingImages = await this.databaseService.packageImage.findMany({
+        where: { packageId: id },
+      });
+
+      const validOrderIds = normalizedGalleryOrder.filter((imageId) =>
+        existingImages.some((image) => image.id === imageId),
+      );
+
+      if (validOrderIds.length > 0) {
+        await this.databaseService.$transaction(
+          validOrderIds.map((imageId, index) =>
+            this.databaseService.packageImage.update({
+              where: { id: imageId },
+              data: { sortOrder: index },
+            }),
+          ),
+        );
+      }
+    }
+
     return this.databaseService.package.update({
       where: { id },
       data,
       include: {
-        services: true,
+        services: {
+          include: { service: true },
+        },
+        images: {
+          orderBy: { sortOrder: 'asc' },
+        },
       },
     });
   }
@@ -236,15 +438,20 @@ export class PackagesService {
     where.deletedAt = { not: null };
 
     // Build include clause
-    const include = includeServices
-      ? {
-          services: {
-            include: {
-              service: true,
+    const include = {
+      ...(includeServices
+        ? {
+            services: {
+              include: {
+                service: true,
+              },
             },
-          },
-        }
-      : undefined;
+          }
+        : {}),
+      images: {
+        orderBy: { sortOrder: 'asc' as const },
+      },
+    };
 
     // Build orderBy
     const orderBy: Prisma.PackageOrderByWithRelationInput = {
@@ -284,6 +491,19 @@ export class PackagesService {
       throw new NotFoundException(`Package with ID "${id}" not found`);
     }
 
+    if (packageItem.coverImagePublicId) {
+      await this.cloudinaryService.deleteImage(packageItem.coverImagePublicId);
+    }
+
+    const packageImages = await this.databaseService.packageImage.findMany({
+      where: { packageId: id },
+      select: { cloudinaryPublicId: true },
+    });
+
+    for (const image of packageImages) {
+      await this.cloudinaryService.deleteImage(image.cloudinaryPublicId);
+    }
+
     return this.databaseService.package.delete({
       where: { id },
     });
@@ -317,6 +537,9 @@ export class PackagesService {
           include: {
             service: true,
           },
+        },
+        images: {
+          orderBy: { sortOrder: 'asc' },
         },
       },
       orderBy: { name: 'asc' },
@@ -393,6 +616,9 @@ export class PackagesService {
             include: {
               service: true,
             },
+          },
+          images: {
+            orderBy: { sortOrder: 'asc' },
           },
         },
       });

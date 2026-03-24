@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -9,10 +10,14 @@ import {
   Put,
   Query,
   UseGuards,
+  UseInterceptors,
+  UploadedFiles,
 } from '@nestjs/common';
+import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
+  ApiConsumes,
   ApiExtraModels,
   ApiOperation,
   ApiTags,
@@ -54,18 +59,73 @@ import { PackagesService } from './packages.service';
 export class PackagesController {
   constructor(private readonly packagesService: PackagesService) {}
 
+  private validateImageFiles(
+    coverImage?: Express.Multer.File,
+    galleryImages: Express.Multer.File[] = [],
+  ) {
+    const allowedTypes = [
+      'image/jpeg',
+      'image/jpg',
+      'image/png',
+      'image/gif',
+      'image/webp',
+    ];
+    const maxFileSize = 5 * 1024 * 1024;
+
+    const allImages = [coverImage, ...galleryImages].filter(
+      (file): file is Express.Multer.File => Boolean(file),
+    );
+
+    for (const file of allImages) {
+      if (!allowedTypes.includes(file.mimetype)) {
+        throw new BadRequestException(
+          `Invalid image format for ${file.originalname}. Only JPG, JPEG, PNG, GIF, and WEBP are allowed.`,
+        );
+      }
+
+      if (file.size > maxFileSize) {
+        throw new BadRequestException(
+          `Image ${file.originalname} exceeds 5MB size limit.`,
+        );
+      }
+    }
+  }
+
   @Post()
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @ApiBearerAuth('JWT-auth')
   @RequirePermissions('packages:create')
   @ApiOperation({ summary: 'Create a new package' })
+  @UseInterceptors(
+    FileFieldsInterceptor([
+      { name: 'coverImage', maxCount: 1 },
+      { name: 'galleryImages', maxCount: 20 },
+    ]),
+  )
+  @ApiConsumes('multipart/form-data')
   @ApiCreatedSuccessResponse({ description: 'Package created successfully' })
   @ApiUnauthorizedResponse()
   @ApiForbiddenResponse()
   @ApiConflictResponse()
   @ApiErrorResponse({ description: 'Error occurred while creating package' })
-  async create(@Body() createPackageDto: CreatePackageDto) {
-    const package_ = await this.packagesService.create(createPackageDto);
+  async create(
+    @Body() createPackageDto: CreatePackageDto,
+    @UploadedFiles()
+    files?: {
+      coverImage?: Express.Multer.File[];
+      galleryImages?: Express.Multer.File[];
+    },
+  ) {
+    const coverImage = files?.coverImage?.[0];
+    const galleryImages = files?.galleryImages ?? [];
+
+    this.validateImageFiles(coverImage, galleryImages);
+
+    const package_ = await this.packagesService.createWithImages(
+      createPackageDto,
+      coverImage,
+      galleryImages,
+    );
     return ResponseBuilder.created(package_, 'Package created successfully');
   }
 
@@ -116,6 +176,13 @@ export class PackagesController {
   @ApiBearerAuth('JWT-auth')
   @RequirePermissions('packages:update')
   @ApiOperation({ summary: 'Update a package by ID' })
+  @UseInterceptors(
+    FileFieldsInterceptor([
+      { name: 'coverImage', maxCount: 1 },
+      { name: 'galleryImages', maxCount: 20 },
+    ]),
+  )
+  @ApiConsumes('multipart/form-data')
   @ApiUpdatedSuccessResponse({ description: 'Package updated successfully' })
   @ApiNotFoundResponse({ description: 'Package not found' })
   @ApiUnauthorizedResponse()
@@ -125,8 +192,23 @@ export class PackagesController {
   async update(
     @Param('id') id: string,
     @Body() updatePackageDto: UpdatePackageDto,
+    @UploadedFiles()
+    files?: {
+      coverImage?: Express.Multer.File[];
+      galleryImages?: Express.Multer.File[];
+    },
   ) {
-    const package_ = await this.packagesService.update(id, updatePackageDto);
+    const coverImage = files?.coverImage?.[0];
+    const galleryImages = files?.galleryImages ?? [];
+
+    this.validateImageFiles(coverImage, galleryImages);
+
+    const package_ = await this.packagesService.updateWithImages(
+      id,
+      updatePackageDto,
+      coverImage,
+      galleryImages,
+    );
     return ResponseBuilder.updated(package_, 'Package updated successfully');
   }
 
