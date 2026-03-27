@@ -1,6 +1,6 @@
 import { PaginationQueryDto } from '@/common';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { IsBoolean, IsNumber, IsOptional, Min } from 'class-validator';
 
 export class QueryPackageDto extends PaginationQueryDto {
@@ -25,6 +25,7 @@ export class QueryPackageDto extends PaginationQueryDto {
     minimum: 0,
   })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   @Min(0)
   minPrice?: number;
@@ -35,6 +36,7 @@ export class QueryPackageDto extends PaginationQueryDto {
     minimum: 0,
   })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   @Min(0)
   maxPrice?: number;

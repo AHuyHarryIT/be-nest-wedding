@@ -157,6 +157,18 @@ export class PackagesService {
       where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
         { description: { contains: search, mode: 'insensitive' } },
+        {
+          services: {
+            some: {
+              service: {
+                OR: [
+                  { name: { contains: search, mode: 'insensitive' } },
+                  { description: { contains: search, mode: 'insensitive' } },
+                ],
+              },
+            },
+          },
+        },
       ];
     }
 
