@@ -109,32 +109,14 @@ export class AuthController {
     } as AuthResponseDto;
   }
 
-  private resolveCookieNames(request: Request): {
-    accessCookieName: string;
-    refreshCookieName: string;
-  } {
-    const origin = request.headers.origin || '';
-    const host = request.headers.host || '';
-    const isStaffHost =
-      origin.includes('127.0.0.1') || host.includes('127.0.0.1');
-
-    return {
-      accessCookieName: isStaffHost ? 'staff_access_token' : 'access_token',
-      refreshCookieName: isStaffHost ? 'staff_refresh_token' : 'refresh_token',
-    };
-  }
-
   private setCookies(
-    request: Request,
+    _request: Request,
     response: Response,
     accessToken: string,
     refreshToken: string,
   ): void {
-    const { accessCookieName, refreshCookieName } =
-      this.resolveCookieNames(request);
-
     // Set access token cookie (shorter expiration)
-    response.cookie(accessCookieName, accessToken, {
+    response.cookie('access_token', accessToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax', // Changed from 'strict' to allow cross-site requests
@@ -143,7 +125,7 @@ export class AuthController {
     });
 
     // Set refresh token cookie (longer expiration)
-    response.cookie(refreshCookieName, refreshToken, {
+    response.cookie('refresh_token', refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax', // Changed from 'strict' to allow cross-site requests
