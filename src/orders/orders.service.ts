@@ -629,7 +629,7 @@ export class OrdersService {
           OR: [
             { gatewayOrderId: momoOrderId },
             ...(status.transId
-              ? [{ gatewayTransactionId: status.transId }]
+              ? [{ gatewayTransactionId: status.transId.toString() }]
               : []),
           ],
         },
@@ -665,15 +665,6 @@ export class OrdersService {
       return;
     }
 
-    const successfulPayment = order.payments.find(
-      (payment) => payment.status === PaymentStatus.SUCCESSFUL,
-    );
-
-    if (successfulPayment) {
-      await this.paymentService.updateOrderStatus(order.id);
-      return;
-    }
-
     const paymentToReconcile = order.payments.find(
       (payment) =>
         payment.method === PaymentMethod.E_WALLET &&
@@ -682,17 +673,26 @@ export class OrdersService {
         payment.status !== PaymentStatus.REFUNDED,
     );
 
-    if (!paymentToReconcile) {
-      this.logger.warn(
-        `Momo query reported success for booking ${bookingId}, but no reconcilable wallet payment was found`,
+    const successfulPayment = order.payments.find(
+      (payment) => payment.status === PaymentStatus.SUCCESSFUL,
+    );
+
+    if (paymentToReconcile) {
+      await this.finalizeSuccessfulMomoPayment(
+        paymentToReconcile.id,
+        momoOrderId,
+        status,
       );
       return;
     }
 
-    await this.finalizeSuccessfulMomoPayment(
-      paymentToReconcile.id,
-      momoOrderId,
-      status,
+    if (successfulPayment) {
+      await this.paymentService.updateOrderStatus(order.id);
+      return;
+    }
+
+    this.logger.warn(
+      `Momo query reported success for booking ${bookingId}, but no reconcilable wallet payment was found`,
     );
   }
 

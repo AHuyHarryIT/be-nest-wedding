@@ -98,7 +98,7 @@ export class BookingRepository extends BaseRepository<any> {
           gte: now,
           lte: futureDate,
         },
-        status: { in: ['PENDING', 'CONFIRMED'] },
+        status: { in: ['PENDING', 'DEPOSIT_PAID', 'CONFIRMED'] },
         deletedAt: null,
       },
       include: {
@@ -275,15 +275,15 @@ export class BookingRepository extends BaseRepository<any> {
     const where: any = {};
     if (customerId) where.customerId = customerId;
 
-    const [total, pending, confirmed, completed, cancelled] = await Promise.all(
-      [
+    const [total, pending, depositPaid, confirmed, completed, cancelled] =
+      await Promise.all([
         this.db.booking.count({ where }),
         this.db.booking.count({ where: { ...where, status: 'PENDING' } }),
+        this.db.booking.count({ where: { ...where, status: 'DEPOSIT_PAID' } }),
         this.db.booking.count({ where: { ...where, status: 'CONFIRMED' } }),
         this.db.booking.count({ where: { ...where, status: 'COMPLETED' } }),
         this.db.booking.count({ where: { ...where, status: 'CANCELLED' } }),
-      ],
-    );
+      ]);
 
     const revenue = await this.db.booking.aggregate({
       where,
@@ -294,6 +294,7 @@ export class BookingRepository extends BaseRepository<any> {
       total,
       byStatus: {
         pending,
+        depositPaid,
         confirmed,
         completed,
         cancelled,

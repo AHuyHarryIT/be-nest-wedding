@@ -77,7 +77,7 @@ describe('PaymentService', () => {
         status: BookingStatus.PENDING,
       },
       data: {
-        status: BookingStatus.CONFIRMED,
+        status: BookingStatus.DEPOSIT_PAID,
       },
     });
   });
@@ -104,5 +104,39 @@ describe('PaymentService', () => {
     await service.updateOrderStatus('order-1');
 
     expect(databaseServiceMock.booking.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('promotes a deposit-paid booking to confirmed after full payment', async () => {
+    databaseServiceMock.order.findUnique.mockResolvedValue({
+      id: 'order-1',
+      bookingId: 'booking-1',
+      totalPrice: 100000,
+      payments: [
+        {
+          amount: 100000,
+          status: PaymentStatus.SUCCESSFUL,
+        },
+      ],
+    });
+    databaseServiceMock.order.update.mockResolvedValue({
+      id: 'order-1',
+      status: OrderStatus.PAID,
+      totalPaid: 100000,
+      balanceRemaining: 0,
+    });
+
+    await service.updateOrderStatus('order-1');
+
+    expect(databaseServiceMock.booking.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'booking-1',
+        status: {
+          in: [BookingStatus.PENDING, BookingStatus.DEPOSIT_PAID],
+        },
+      },
+      data: {
+        status: BookingStatus.CONFIRMED,
+      },
+    });
   });
 });

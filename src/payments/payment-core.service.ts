@@ -388,12 +388,26 @@ export class PaymentService {
       },
     });
 
-    // Once any payment is captured, the booking is financially confirmed.
-    if (totalPaid > 0) {
+    // Deposit capture and full payment are distinct booking milestones.
+    if (status === OrderStatus.PARTIAL) {
       await this.databaseService.booking.updateMany({
         where: {
           id: order.bookingId,
           status: BookingStatus.PENDING,
+        },
+        data: {
+          status: BookingStatus.DEPOSIT_PAID,
+        },
+      });
+    }
+
+    if (status === OrderStatus.PAID) {
+      await this.databaseService.booking.updateMany({
+        where: {
+          id: order.bookingId,
+          status: {
+            in: [BookingStatus.PENDING, BookingStatus.DEPOSIT_PAID],
+          },
         },
         data: {
           status: BookingStatus.CONFIRMED,

@@ -407,6 +407,12 @@ export class BookingsService {
   async update(id: string, updateBookingDto: UpdateBookingDto) {
     const booking = await this.findBookingById(id);
 
+    if (updateBookingDto.status === BookingStatus.CANCELLED) {
+      throw new BadRequestException(
+        'Use the dedicated cancel action to cancel a booking',
+      );
+    }
+
     // Hide edit and delete when status is 'COMPLETED'
     if (booking.status === BookingStatus.COMPLETED) {
       throw new BadRequestException(
@@ -600,21 +606,34 @@ export class BookingsService {
   }
 
   async cancelBooking(id: string) {
-    await this.findBookingById(id);
-    return this.databaseService.booking.update({
+    const booking = await this.findBookingById(id);
+
+    if (booking.status === BookingStatus.CANCELLED) {
+      throw new BadRequestException('Booking is already cancelled');
+    }
+
+    if (booking.status === BookingStatus.COMPLETED) {
+      throw new BadRequestException('Completed bookings cannot be cancelled');
+    }
+
+    await this.databaseService.booking.update({
       where: { id },
       data: {
         status: BookingStatus.CANCELLED,
         cancelledAt: new Date(),
       },
     });
+
+    return this.findBookingById(id);
   }
 
   async confirmBooking(id: string) {
     await this.findBookingById(id);
-    return this.databaseService.booking.update({
+    await this.databaseService.booking.update({
       where: { id },
       data: { status: BookingStatus.CONFIRMED },
     });
+
+    return this.findBookingById(id);
   }
 }

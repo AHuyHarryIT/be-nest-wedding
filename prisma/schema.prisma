@@ -17,6 +17,7 @@ datasource db {
 // Enums
 enum BookingStatus {
   PENDING
+  DEPOSIT_PAID
   CONFIRMED
   CANCELLED
   COMPLETED

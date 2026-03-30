@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { BookingsService } from './bookings.service';
 import { DatabaseService } from '../database/database.service';
 import { BookingStatus } from 'generated/prisma';
@@ -181,5 +181,94 @@ describe('BookingsService', () => {
         'customer-1',
       ),
     ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('allows a status-only update from CONFIRMED to COMPLETED', async () => {
+    databaseServiceMock.booking.findFirst.mockResolvedValue({
+      id: 'booking-1',
+      customerId: 'customer-1',
+      status: BookingStatus.CONFIRMED,
+      orders: [],
+    });
+    databaseServiceMock.booking.update.mockResolvedValue({
+      id: 'booking-1',
+      customerId: 'customer-1',
+      status: BookingStatus.COMPLETED,
+    });
+
+    const result = await service.update('booking-1', {
+      status: BookingStatus.COMPLETED,
+    });
+
+    expect(databaseServiceMock.booking.update).toHaveBeenCalledWith({
+      where: { id: 'booking-1' },
+      data: {
+        status: BookingStatus.COMPLETED,
+      },
+      include: expect.any(Object),
+    });
+    expect(result.status).toBe(BookingStatus.COMPLETED);
+  });
+
+  it('rejects direct status updates to CANCELLED through generic booking updates', async () => {
+    databaseServiceMock.booking.findFirst.mockResolvedValue({
+      id: 'booking-1',
+      customerId: 'customer-1',
+      status: BookingStatus.PENDING,
+      orders: [],
+    });
+
+    await expect(
+      service.update('booking-1', {
+        status: BookingStatus.CANCELLED,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('cancels non-completed bookings through the dedicated cancel flow', async () => {
+    databaseServiceMock.booking.findFirst
+      .mockResolvedValueOnce({
+        id: 'booking-2',
+        customerId: 'customer-1',
+        status: BookingStatus.CONFIRMED,
+        orders: [],
+      })
+      .mockResolvedValueOnce({
+        id: 'booking-2',
+        customerId: 'customer-1',
+        status: BookingStatus.CANCELLED,
+        cancelledAt: new Date('2026-03-31T10:00:00.000Z'),
+        orders: [],
+      });
+    databaseServiceMock.booking.update.mockResolvedValue({
+      id: 'booking-2',
+      customerId: 'customer-1',
+      status: BookingStatus.CANCELLED,
+      cancelledAt: new Date('2026-03-31T10:00:00.000Z'),
+    });
+
+    const result = await service.cancelBooking('booking-2');
+
+    expect(databaseServiceMock.booking.update).toHaveBeenCalledWith({
+      where: { id: 'booking-2' },
+      data: {
+        status: BookingStatus.CANCELLED,
+        cancelledAt: expect.any(Date),
+      },
+    });
+    expect(result.status).toBe(BookingStatus.CANCELLED);
+  });
+
+  it('rejects cancellation for completed bookings', async () => {
+    databaseServiceMock.booking.findFirst.mockResolvedValue({
+      id: 'booking-3',
+      customerId: 'customer-1',
+      status: BookingStatus.COMPLETED,
+      orders: [],
+    });
+
+    await expect(service.cancelBooking('booking-3')).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
   });
 });

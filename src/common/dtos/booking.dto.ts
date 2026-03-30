@@ -17,6 +17,7 @@ import {
  */
 export enum BookingStatusEnum {
   PENDING = 'PENDING',
+  DEPOSIT_PAID = 'DEPOSIT_PAID',
   CONFIRMED = 'CONFIRMED',
   CANCELLED = 'CANCELLED',
   COMPLETED = 'COMPLETED',
