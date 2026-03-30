@@ -25,6 +25,10 @@ import { AutoRefreshMiddleware } from './auth/auto-refresh.middleware';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      envFilePath: [
+        process.env.NODE_ENV === 'production' ? '.env.prod' : '.env.dev',
+        '.env',
+      ],
     }),
     EventEmitterModule.forRoot(),
     DatabaseModule,

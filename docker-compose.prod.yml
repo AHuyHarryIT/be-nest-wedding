@@ -1,14 +1,14 @@
 services:
   db:
     image: postgres:16-alpine
-    container_name: studio-hamy-backend-dev-db
+    container_name: studio-hamy-backend-db
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-appdb}
     volumes:
-      - backend_db_data:/var/lib/postgresql/data
+      - backend_prod_db_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-appdb}"]
       interval: 10s
@@ -18,21 +18,17 @@ services:
   backend:
     build:
       context: .
-      dockerfile: Dockerfile.dev
-    container_name: studio-hamy-backend-dev
+      dockerfile: Dockerfile
+    container_name: studio-hamy-backend
     restart: unless-stopped
     env_file:
-      - .env.dev
+      - .env.prod
     depends_on:
       db:
         condition: service_healthy
     environment:
-      NODE_ENV: development
+      NODE_ENV: production
       PORT: 3000
-      CHOKIDAR_USEPOLLING: "true"
-      CHOKIDAR_INTERVAL: "300"
-      WATCHPACK_POLLING: "true"
-      WATCHPACK_POLLING_INTERVAL: "300"
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-appdb}
@@ -47,14 +43,9 @@ services:
       AZURE_CLIENT_SECRET: ${AZURE_CLIENT_SECRET:-local-dev-client-secret}
       AZURE_TENANT_ID: ${AZURE_TENANT_ID:-local-dev-tenant-id}
       AZURE_USER_ID: ${AZURE_USER_ID:-local-dev-user-id}
+    command: sh -c "npx prisma migrate deploy && node dist/main"
     ports:
       - "3000:3000"
-    volumes:
-      - .:/app
-      - backend_node_modules:/app/node_modules
-      - backend_generated:/app/generated
 
 volumes:
-  backend_db_data:
-  backend_node_modules:
-  backend_generated:
+  backend_prod_db_data:
