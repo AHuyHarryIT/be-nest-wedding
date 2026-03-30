@@ -1,31 +1,20 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
   ArrayMinSize,
   IsArray,
   IsDateString,
   IsNotEmpty,
-  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
-  Min,
   ValidateIf,
 } from 'class-validator';
 
-export class CreateBookingDto {
-  @ApiPropertyOptional({
-    description: 'Customer user ID (UUID format)',
-    example: 'uuid-1234',
-    format: 'uuid',
-  })
-  @IsUUID('4', { message: 'Customer ID must be a valid UUID' })
-  @IsOptional()
-  customerId?: string;
-
+export class CreateCustomerBookingDto {
   @ApiPropertyOptional({
     description: 'List of package IDs to include in booking',
     type: [String],
-    example: ['uuid-1', 'uuid-2'],
+    example: ['uuid-1'],
   })
   @IsArray({ message: 'Package IDs must be an array' })
   @ValidateIf((o) => o.packageIds !== undefined && o.packageIds?.length > 0)
@@ -39,7 +28,7 @@ export class CreateBookingDto {
   @ApiPropertyOptional({
     description: 'List of service IDs to include in booking',
     type: [String],
-    example: ['uuid-1', 'uuid-2'],
+    example: ['uuid-1'],
   })
   @IsArray({ message: 'Service IDs must be an array' })
   @ValidateIf((o) => o.serviceIds !== undefined && o.serviceIds?.length > 0)
@@ -52,36 +41,22 @@ export class CreateBookingDto {
 
   @ApiPropertyOptional({
     description: 'Special notes or requests for the booking',
-    example: 'Special requests for the wedding',
+    example: 'Outdoor ceremony. Guest count: 180. Location: District 2.',
     maxLength: 1000,
   })
   @IsString({ message: 'Notes must be a string' })
   @IsOptional()
   notes?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'Event date in ISO 8601 format',
-    example: '2024-12-31T10:00:00Z',
+    example: '2026-07-15T12:00:00.000Z',
     format: 'date-time',
   })
+  @IsNotEmpty({ message: 'Event date is required' })
   @IsDateString(
     {},
     { message: 'Event date must be a valid ISO 8601 date string' },
   )
-  @IsNotEmpty({ message: 'Event date is required' })
   eventDate: string;
-
-  @ApiPropertyOptional({
-    description: 'Total booking price in VND',
-    example: 10000,
-    default: 0,
-    minimum: 0,
-  })
-  @IsNumber(
-    { maxDecimalPlaces: 2 },
-    { message: 'Total price must be a valid number' },
-  )
-  @IsOptional()
-  @Min(0, { message: 'Total price cannot be negative' })
-  totalPrice?: number;
 }

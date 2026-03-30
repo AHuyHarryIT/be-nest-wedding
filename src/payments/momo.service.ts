@@ -8,6 +8,7 @@ interface MomoPaymentRequest {
   bookingId: string;
   orderInfo: string;
   extraData?: string;
+  redirectUrl?: string;
 }
 
 export interface MomoPaymentResponse {
@@ -79,7 +80,14 @@ export class MomoPaymentService {
         autoCapture,
       } = MomoConfig;
 
-      const { amount, orderInfo, bookingId, extraData = '' } = paymentData;
+      const {
+        amount,
+        orderInfo,
+        bookingId,
+        extraData = '',
+        redirectUrl: paymentRedirectUrl,
+      } = paymentData;
+      const resolvedRedirectUrl = paymentRedirectUrl || redirectUrl;
       // Validate amount
       if (amount < 1000) {
         throw new BadRequestException('Amount must be at least 1000 VND');
@@ -91,7 +99,7 @@ export class MomoPaymentService {
       const requestId = `${partnerCode}_${new Date().getTime()}_${bookingId}`;
 
       // Create signature
-      const rawSignature = `accessKey=${accessKey}&amount=${amount}&extraData=${extraData}&ipnUrl=${ipnUrl}&orderId=${uniqueOrderId}&orderInfo=${orderInfo}&partnerCode=${partnerCode}&redirectUrl=${redirectUrl}&requestId=${requestId}&requestType=${requestType}`;
+      const rawSignature = `accessKey=${accessKey}&amount=${amount}&extraData=${extraData}&ipnUrl=${ipnUrl}&orderId=${uniqueOrderId}&orderInfo=${orderInfo}&partnerCode=${partnerCode}&redirectUrl=${resolvedRedirectUrl}&requestId=${requestId}&requestType=${requestType}`;
 
       const signature = crypto
         .createHmac('sha256', secretKey)
@@ -106,7 +114,7 @@ export class MomoPaymentService {
         amount: amount.toString(),
         orderId: uniqueOrderId,
         orderInfo,
-        redirectUrl,
+        redirectUrl: resolvedRedirectUrl,
         ipnUrl,
         lang,
         requestType,

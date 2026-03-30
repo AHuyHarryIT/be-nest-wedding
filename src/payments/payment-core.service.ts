@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  BookingStatus,
   PaymentType,
   PaymentStatus,
   PaymentMethod,
@@ -378,8 +379,7 @@ export class PaymentService {
       status = 'PARTIAL' as OrderStatus;
     }
 
-    // Update order
-    return this.databaseService.order.update({
+    const updatedOrder = await this.databaseService.order.update({
       where: { id: orderId },
       data: {
         status,
@@ -387,6 +387,21 @@ export class PaymentService {
         balanceRemaining: Math.max(0, balanceRemaining),
       },
     });
+
+    // Once any payment is captured, the booking is financially confirmed.
+    if (totalPaid > 0) {
+      await this.databaseService.booking.updateMany({
+        where: {
+          id: order.bookingId,
+          status: BookingStatus.PENDING,
+        },
+        data: {
+          status: BookingStatus.CONFIRMED,
+        },
+      });
+    }
+
+    return updatedOrder;
   }
 
   /**

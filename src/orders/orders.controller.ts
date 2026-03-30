@@ -129,9 +129,13 @@ export class OrdersController {
   })
   async initiateMomoPayment(
     @Param('bookingId', ParseUUIDPipe) bookingId: string,
-    @Body() body: { paymentId: string },
+    @Body() body: { paymentId: string; redirectUrl?: string },
   ): Promise<MomoPaymentResponse> {
-    return this.ordersService.initiateMomoPayment(bookingId, body.paymentId);
+    return this.ordersService.initiateMomoPayment(
+      bookingId,
+      body.paymentId,
+      body.redirectUrl,
+    );
   }
 
   @Post('momo/check-status')
@@ -156,7 +160,7 @@ export class OrdersController {
 
   @Post('momo/callback')
   @Public()
-  @HttpCode(HttpStatus.NO_CONTENT)
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'MOMO IPN payment callback',
     description:

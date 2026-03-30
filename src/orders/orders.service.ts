@@ -1,10 +1,16 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { Booking } from 'generated/prisma';
+import {
+  Booking,
+  PaymentMethod,
+  PaymentStatus,
+  PaymentType,
+} from 'generated/prisma';
 import { DatabaseService } from '../database/database.service';
 import { PaymentEventsService } from '../payments/events/payment-events.service';
 import {
@@ -58,6 +64,125 @@ export class OrdersService {
     } else {
       return this.payRemaining(existingOrder.id, checkoutDto);
     }
+  }
+
+  async customerCheckoutDeposit(
+    bookingId: string,
+    customerId: string,
+    redirectUrl?: string,
+  ) {
+    const booking = await this.databaseService.booking.findUnique({
+      where: { id: bookingId },
+    });
+
+    if (!booking) {
+      throw new NotFoundException(`Booking with ID ${bookingId} not found`);
+    }
+
+    if (booking.customerId !== customerId) {
+      throw new ForbiddenException('You cannot pay for this booking');
+    }
+
+    if (booking.status === 'CANCELLED' || booking.status === 'COMPLETED') {
+      throw new BadRequestException(
+        'Deposit payment is not available for this booking status',
+      );
+    }
+
+    const existingOrder = await this.databaseService.order.findUnique({
+      where: { bookingId },
+      include: { payments: true },
+    });
+
+    if (!existingOrder) {
+      const createdOrder = await this.createNewOrder(booking, {
+        bookingId,
+        makeDeposit: true,
+        depositValue: this.MIN_DEPOSIT_PERCENTAGE,
+        isDepositPercentage: true,
+        paymentMethod: PaymentMethod.E_WALLET,
+      });
+
+      const depositPayment = createdOrder.payments?.find(
+        (payment) =>
+          payment.paymentType === PaymentType.DEPOSIT &&
+          payment.status === PaymentStatus.PENDING,
+      );
+
+      if (!depositPayment) {
+        throw new BadRequestException('Unable to create deposit payment');
+      }
+
+      const momo = await this.initiateMomoPayment(
+        createdOrder.bookingId,
+        depositPayment.id,
+        redirectUrl,
+      );
+
+      return {
+        order: createdOrder,
+        paymentId: depositPayment.id,
+        momo,
+      };
+    }
+
+    const hasSuccessfulPayment = existingOrder.payments.some(
+      (payment) => payment.status === PaymentStatus.SUCCESSFUL,
+    );
+
+    if (hasSuccessfulPayment) {
+      throw new BadRequestException(
+        'Deposit has already been recorded for this booking',
+      );
+    }
+
+    const hasStaffManagedPayment = existingOrder.payments.some(
+      (payment) =>
+        payment.paymentType !== PaymentType.DEPOSIT &&
+        payment.status !== PaymentStatus.CANCELLED,
+    );
+
+    if (hasStaffManagedPayment) {
+      throw new BadRequestException(
+        'This booking payment is already being managed by the studio. Please continue in Messages.',
+      );
+    }
+
+    let depositPayment = existingOrder.payments.find(
+      (payment) =>
+        payment.paymentType === PaymentType.DEPOSIT &&
+        payment.status === PaymentStatus.PENDING,
+    );
+
+    if (!depositPayment) {
+      const depositAmount =
+        (existingOrder.totalPrice * this.MIN_DEPOSIT_PERCENTAGE) / 100;
+
+      depositPayment = await this.paymentService.createPayment({
+        orderId: existingOrder.id,
+        amount: depositAmount,
+        method: PaymentMethod.E_WALLET,
+        paymentType: PaymentType.DEPOSIT,
+        description: `Customer deposit (${this.MIN_DEPOSIT_PERCENTAGE}%)`,
+      });
+    }
+
+    if (!depositPayment) {
+      throw new BadRequestException('Unable to prepare deposit payment');
+    }
+
+    const momo = await this.initiateMomoPayment(
+      bookingId,
+      depositPayment.id,
+      redirectUrl,
+    );
+    const order = await this.getOrderDetails(existingOrder.id);
+
+    return {
+      order,
+      paymentId: depositPayment.id,
+      momo,
+    };
   }
 
   /**
@@ -375,7 +500,11 @@ export class OrdersService {
   /**
    * Initiate MOMO payment for E-WALLET payment method
    */
-  async initiateMomoPayment(orderId: string, paymentId: string) {
+  async initiateMomoPayment(
+    orderId: string,
+    paymentId: string,
+    redirectUrl?: string,
+  ) {
     const payment = await this.databaseService.payment.findUnique({
       where: { id: paymentId },
       include: { order: true },
@@ -390,6 +519,7 @@ export class OrdersService {
         amount: payment.amount,
         bookingId: payment.order.bookingId,
         orderInfo: `Payment for order ${payment.order.referenceNumber}`,
+        redirectUrl,
         extraData: JSON.stringify({
           orderId: payment.orderId,
           paymentId: payment.id,
@@ -406,6 +536,166 @@ export class OrdersService {
     }
   }
 
+  private extractBookingIdFromMomoOrderId(orderId: string): string {
+    const separatorIndex = orderId.lastIndexOf('_');
+    return separatorIndex >= 0 ? orderId.slice(0, separatorIndex) : orderId;
+  }
+
+  private async finalizeSuccessfulMomoPayment(
+    paymentId: string,
+    gatewayOrderId: string,
+    status: MomoTransactionQueryResponse | Partial<MomoIPNCallback>,
+  ): Promise<void> {
+    const payment = await this.databaseService.payment.findUnique({
+      where: { id: paymentId },
+      include: {
+        attempts: true,
+      },
+    });
+
+    if (!payment) {
+      this.logger.warn(
+        `Unable to finalize successful Momo payment because payment ${paymentId} was not found`,
+      );
+      return;
+    }
+
+    if (payment.status === PaymentStatus.SUCCESSFUL) {
+      await this.paymentService.updateOrderStatus(payment.orderId);
+      return;
+    }
+
+    const successfulAttempt = payment.attempts.find(
+      (attempt) => attempt.status === 'SUCCESS',
+    );
+
+    const attempt =
+      successfulAttempt ||
+      (await this.paymentAttemptService.createAttempt({
+        paymentId: payment.id,
+        attemptNumber: payment.attempts.length + 1,
+        status: 'SUCCESS',
+        attemptedAmount: payment.amount,
+      }));
+
+    const existingGatewayTransaction =
+      await this.databaseService.paymentGatewayTransaction.findFirst({
+        where: {
+          paymentId: payment.id,
+          gatewayProvider: 'momo',
+          OR: [
+            { gatewayOrderId },
+            ...(status.transId
+              ? [{ gatewayTransactionId: status.transId.toString() }]
+              : []),
+          ],
+        },
+      });
+
+    if (!existingGatewayTransaction) {
+      await this.gatewayTransactionService.recordTransaction({
+        paymentId: payment.id,
+        paymentAttemptId: attempt.id,
+        gatewayProvider: 'momo',
+        gatewayTransactionId: status.transId?.toString(),
+        gatewayOrderId,
+        amount: payment.amount,
+        gatewayStatus: status.resultCode?.toString(),
+        gatewayResponse: status,
+      });
+    }
+
+    await this.paymentService.completePaymentAttempt(
+      attempt.id,
+      'SUCCESS',
+      status.resultCode?.toString(),
+      status.message,
+    );
+  }
+
+  private async reconcileSuccessfulMomoStatusQuery(
+    momoOrderId: string,
+    status: MomoTransactionQueryResponse,
+  ): Promise<void> {
+    const bookingId = this.extractBookingIdFromMomoOrderId(momoOrderId);
+    if (!bookingId) {
+      return;
+    }
+
+    const existingTransaction =
+      await this.databaseService.paymentGatewayTransaction.findFirst({
+        where: {
+          gatewayProvider: 'momo',
+          OR: [
+            { gatewayOrderId: momoOrderId },
+            ...(status.transId
+              ? [{ gatewayTransactionId: status.transId }]
+              : []),
+          ],
+        },
+      });
+
+    if (existingTransaction) {
+      await this.finalizeSuccessfulMomoPayment(
+        existingTransaction.paymentId,
+        momoOrderId,
+        status,
+      );
+      return;
+    }
+
+    const order = await this.databaseService.order.findUnique({
+      where: { bookingId },
+      include: {
+        payments: {
+          include: {
+            attempts: true,
+          },
+          orderBy: {
+            createdAt: 'desc',
+          },
+        },
+      },
+    });
+
+    if (!order) {
+      this.logger.warn(
+        `Could not reconcile Momo query success because no order was found for booking ${bookingId}`,
+      );
+      return;
+    }
+
+    const successfulPayment = order.payments.find(
+      (payment) => payment.status === PaymentStatus.SUCCESSFUL,
+    );
+
+    if (successfulPayment) {
+      await this.paymentService.updateOrderStatus(order.id);
+      return;
+    }
+
+    const paymentToReconcile = order.payments.find(
+      (payment) =>
+        payment.method === PaymentMethod.E_WALLET &&
+        payment.status !== PaymentStatus.SUCCESSFUL &&
+        payment.status !== PaymentStatus.CANCELLED &&
+        payment.status !== PaymentStatus.REFUNDED,
+    );
+
+    if (!paymentToReconcile) {
+      this.logger.warn(
+        `Momo query reported success for booking ${bookingId}, but no reconcilable wallet payment was found`,
+      );
+      return;
+    }
+
+    await this.finalizeSuccessfulMomoPayment(
+      paymentToReconcile.id,
+      momoOrderId,
+      status,
+    );
+  }
+
   /**
    * Check MOMO payment status
    */
@@ -416,6 +706,11 @@ export class OrdersService {
       this.logger.log(`Checking Momo payment status for orderId: ${orderId}`);
       const status = await this.momoService.queryTransactionStatus(orderId);
       this.logger.log(`Momo payment status: ${JSON.stringify(status)}`);
+
+      if (status.resultCode === 0 || status.resultCode === 9000) {
+        await this.reconcileSuccessfulMomoStatusQuery(orderId, status);
+      }
+
       return status;
     } catch (error) {
       this.logger.error(
@@ -478,6 +773,11 @@ export class OrdersService {
         );
 
       if (existingTransaction) {
+        await this.finalizeSuccessfulMomoPayment(
+          existingTransaction.paymentId,
+          callbackData.orderId,
+          callbackData,
+        );
         this.logger.log(
           `Idempotent request detected. Transaction already processed`,
         );
@@ -552,35 +852,11 @@ export class OrdersService {
         return { resultCode: 1, message: 'Payment ID not found' };
       }
 
-      // Record gateway transaction and mark payment as successful
       const amount = callbackData.amount || 0;
-
-      // Create attempt
-      const attempt = await this.paymentAttemptService.createAttempt({
+      await this.finalizeSuccessfulMomoPayment(
         paymentId,
-        attemptNumber: 1,
-        status: 'SUCCESS',
-        attemptedAmount: amount,
-      });
-
-      // Record gateway transaction
-      await this.gatewayTransactionService.recordTransaction({
-        paymentId,
-        paymentAttemptId: attempt.id,
-        gatewayProvider: 'momo',
-        gatewayTransactionId: callbackData.transId?.toString(),
-        gatewayOrderId: callbackData.orderId,
-        amount,
-        gatewayStatus: callbackData.resultCode?.toString(),
-        gatewayResponse: callbackData,
-      });
-
-      // Mark payment as successful
-      await this.paymentService.completePaymentAttempt(
-        attempt.id,
-        'SUCCESS',
-        callbackData.resultCode?.toString(),
-        callbackData.message,
+        callbackData.orderId,
+        callbackData,
       );
 
       // Emit events

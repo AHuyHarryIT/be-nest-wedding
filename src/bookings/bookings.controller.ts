@@ -23,6 +23,7 @@ import {
   ViewBookingDto,
 } from './dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { GetUser, type AuthenticatedUser } from '../auth/get-user.decorator';
 import { PermissionsGuard } from '../common/guards/permissions.guard';
 import { RequirePermissions } from '../common/decorators/permissions.decorator';
 import {
@@ -58,19 +59,31 @@ export class BookingsController {
   @ApiUnauthorizedResponse()
   @ApiForbiddenResponse()
   @ApiErrorResponse()
-  async create(@Body() createBookingDto: CreateBookingDto) {
-    const booking = await this.bookingsService.create(createBookingDto);
+  async create(
+    @Body() createBookingDto: CreateBookingDto,
+    @GetUser() user: AuthenticatedUser,
+  ) {
+    const booking = await this.bookingsService.create(
+      createBookingDto,
+      user.userId,
+    );
     return ResponseBuilder.created(booking, 'Booking created successfully');
   }
 
   @Get()
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
   @ApiOperation({ summary: 'Get all bookings with pagination' })
   @ApiPaginatedResponse(ViewBookingDto, {
     description: 'Paginated list of bookings',
   })
+  @ApiUnauthorizedResponse()
   @ApiErrorResponse()
-  async findAll(@Query() query: QueryBookingDto) {
-    const result = await this.bookingsService.findAll(query);
+  async findAll(
+    @Query() query: QueryBookingDto,
+    @GetUser() user: AuthenticatedUser,
+  ) {
+    const result = await this.bookingsService.findAll(query, user.userId);
     if (
       typeof result === 'object' &&
       'data' in result &&
@@ -86,13 +99,17 @@ export class BookingsController {
   }
 
   @Get(':id')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
   @ApiOperation({ summary: 'Get a booking by ID' })
   @ApiStandardResponse(ViewBookingDto, {
     description: 'Booking found successfully',
   })
   @ApiNotFoundResponse()
-  async findOne(@Param('id') id: string) {
-    const booking = await this.bookingsService.findOne(id);
+  @ApiUnauthorizedResponse()
+  @ApiForbiddenResponse()
+  async findOne(@Param('id') id: string, @GetUser() user: AuthenticatedUser) {
+    const booking = await this.bookingsService.findOne(id, user.userId);
     return ResponseBuilder.success(booking, 'Booking retrieved successfully');
   }
 

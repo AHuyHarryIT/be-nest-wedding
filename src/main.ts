@@ -17,8 +17,11 @@ async function bootstrap() {
   const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [
     'http://localhost:3000',
     'http://localhost:4200',
+    'http://127.0.0.1:4200',
+    'http://127.0.0.1:5173',
     'http://localhost:5173',
     'http://localhost:5174',
+    'http://127.0.0.1:5174',
   ];
 
   const app = await NestFactory.create(AppModule, {

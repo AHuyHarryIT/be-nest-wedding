@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import {
   Prisma,
@@ -13,6 +14,7 @@ import {
 import { PaginationHelper } from '../common/utils/pagination.helper';
 import { DatabaseService } from '../database/database.service';
 import { CreateBookingDto, QueryBookingDto, UpdateBookingDto } from './dto';
+import { CreateCustomerBookingDto } from './dto';
 
 export interface BookingWithOrderSummary extends Booking {
   orders?: Array<Order & { payments: Payment[] }>;
@@ -34,17 +36,141 @@ export interface BookingWithOrderSummary extends Booking {
 
 @Injectable()
 export class BookingsService {
+  private readonly staffRoleNames = new Set([
+    'super-admin',
+    'admin',
+    'manager',
+    'staff',
+  ]);
+
   constructor(private readonly databaseService: DatabaseService) {}
 
-  async create(createBookingDto: CreateBookingDto) {
+  private async resolveCreateCustomerId(
+    createBookingDto: CreateBookingDto,
+    actorUserId: string,
+  ): Promise<string> {
+    const isStaff = await this.isStaffUser(actorUserId);
+
+    if (isStaff) {
+      if (!createBookingDto.customerId) {
+        throw new BadRequestException('Customer ID is required');
+      }
+
+      return createBookingDto.customerId;
+    }
+
+    if (
+      createBookingDto.customerId &&
+      createBookingDto.customerId !== actorUserId
+    ) {
+      throw new ForbiddenException('You can only create bookings for yourself');
+    }
+
+    return actorUserId;
+  }
+
+  private async isStaffUser(userId: string): Promise<boolean> {
+    const userRoles = await this.databaseService.userRole.findMany({
+      where: {
+        userId,
+      },
+      include: {
+        role: true,
+      },
+    });
+
+    return userRoles.some((userRole) =>
+      this.staffRoleNames.has(userRole.role.name),
+    );
+  }
+
+  private async assertBookingAccess(
+    booking: { customerId: string },
+    userId: string,
+  ): Promise<void> {
+    if (booking.customerId === userId) {
+      return;
+    }
+
+    const isStaff = await this.isStaffUser(userId);
+    if (isStaff) {
+      return;
+    }
+
+    throw new ForbiddenException('You cannot access this booking');
+  }
+
+  private async findBookingById(id: string): Promise<BookingWithOrderSummary> {
+    const booking = await this.databaseService.booking.findFirst({
+      where: { id, deletedAt: null },
+      include: {
+        customer: true,
+        packages: {
+          include: {
+            package: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+                price: true,
+              },
+            },
+          },
+        },
+        services: {
+          include: {
+            service: true,
+          },
+        },
+        albums: true,
+        orders: {
+          include: {
+            payments: true,
+          },
+        },
+      },
+    });
+
+    if (!booking) {
+      throw new NotFoundException(`Booking with ID ${id} not found`);
+    }
+
+    const response: BookingWithOrderSummary = { ...booking };
+    if (booking.orders && booking.orders.length > 0) {
+      const order = booking.orders[0];
+      const totalPaid = order.payments
+        .filter((p: Payment) => p.status === 'SUCCESSFUL')
+        .reduce((sum: number, p: Payment) => sum + p.amount, 0);
+
+      const balanceRemaining = order.totalPrice - totalPaid;
+
+      response.order = {
+        ...order,
+        summary: {
+          totalPrice: order.totalPrice,
+          totalPaid,
+          balanceRemaining,
+          isPaid: balanceRemaining === 0,
+          isPartiallyPaid: totalPaid > 0 && balanceRemaining > 0,
+        },
+      };
+    }
+
+    return response;
+  }
+
+  async create(createBookingDto: CreateBookingDto, actorUserId: string) {
+    const customerId = await this.resolveCreateCustomerId(
+      createBookingDto,
+      actorUserId,
+    );
+
     // Validate customer exists
     const customer = await this.databaseService.user.findUnique({
-      where: { id: createBookingDto.customerId },
+      where: { id: customerId },
     });
     if (!customer) {
-      throw new NotFoundException(
-        `Customer with ID ${createBookingDto.customerId} not found`,
-      );
+      throw new NotFoundException(`Customer with ID ${customerId} not found`);
     }
 
     // Determine which packages/services to use
@@ -57,6 +183,8 @@ export class BookingsService {
         'At least one package or service must be selected',
       );
     }
+
+    let computedTotalPrice = 0;
 
     // Validate packages exist
     if (packageIds.length > 0) {
@@ -71,6 +199,8 @@ export class BookingsService {
       if (packages.length !== packageIds.length) {
         throw new NotFoundException('One or more packages not found');
       }
+
+      computedTotalPrice += packages.reduce((sum, item) => sum + item.price, 0);
     }
 
     // Validate services exist
@@ -86,13 +216,21 @@ export class BookingsService {
       if (services.length !== serviceIds.length) {
         throw new NotFoundException('One or more services not found');
       }
+
+      computedTotalPrice += services.reduce((sum, item) => sum + item.price, 0);
     }
 
+    const isStaff = await this.isStaffUser(actorUserId);
+    const totalPrice =
+      isStaff && createBookingDto.totalPrice !== undefined
+        ? createBookingDto.totalPrice
+        : computedTotalPrice;
+
     const data: Prisma.BookingCreateInput = {
-      customer: { connect: { id: createBookingDto.customerId } },
+      customer: { connect: { id: customerId } },
       notes: createBookingDto.notes,
       eventDate: new Date(createBookingDto.eventDate),
-      totalPrice: createBookingDto.totalPrice ?? 0,
+      totalPrice,
       status: BookingStatus.PENDING,
     };
 
@@ -163,7 +301,20 @@ export class BookingsService {
     });
   }
 
-  async findAll(params?: QueryBookingDto) {
+  async createForCustomer(
+    customerId: string,
+    createBookingDto: CreateCustomerBookingDto,
+  ) {
+    return this.create(
+      {
+        ...createBookingDto,
+        customerId,
+      },
+      customerId,
+    );
+  }
+
+  async findAll(params: QueryBookingDto | undefined, userId: string) {
     const paginationParams = PaginationHelper.mergeWithDefaults(params || {});
     const {
       page,
@@ -187,7 +338,12 @@ export class BookingsService {
       where.OR = [{ notes: { contains: search, mode: 'insensitive' } }];
     }
 
-    if (customerId) where.customerId = customerId;
+    const isStaff = await this.isStaffUser(userId);
+    if (isStaff) {
+      if (customerId) where.customerId = customerId;
+    } else {
+      where.customerId = userId;
+    }
     if (status) where.status = status;
 
     const include: Prisma.BookingInclude = {};
@@ -242,70 +398,14 @@ export class BookingsService {
     );
   }
 
-  async findOne(id: string): Promise<BookingWithOrderSummary> {
-    const booking = await this.databaseService.booking.findFirst({
-      where: { id, deletedAt: null },
-      include: {
-        customer: true,
-        packages: {
-          include: {
-            package: {
-              select: {
-                id: true,
-                name: true,
-                description: true,
-                price: true,
-              },
-            },
-          },
-        },
-        services: {
-          include: {
-            service: true,
-          },
-        },
-        albums: true,
-        orders: {
-          include: {
-            payments: true,
-          },
-        },
-      },
-    });
-
-    if (!booking) {
-      throw new NotFoundException(`Booking with ID ${id} not found`);
-    }
-
-    // Add order summary if order exists
-    const response: BookingWithOrderSummary = { ...booking };
-    if (booking.orders && booking.orders.length > 0) {
-      const order = booking.orders[0]; // Get first (latest) order
-
-      // Calculate totals from payments
-      const totalPaid = order.payments
-        .filter((p: Payment) => p.status === 'SUCCESSFUL')
-        .reduce((sum: number, p: Payment) => sum + p.amount, 0);
-
-      const balanceRemaining = order.totalPrice - totalPaid;
-
-      response.order = {
-        ...order,
-        summary: {
-          totalPrice: order.totalPrice,
-          totalPaid,
-          balanceRemaining,
-          isPaid: balanceRemaining === 0,
-          isPartiallyPaid: totalPaid > 0 && balanceRemaining > 0,
-        },
-      };
-    }
-
-    return response;
+  async findOne(id: string, userId: string): Promise<BookingWithOrderSummary> {
+    const booking = await this.findBookingById(id);
+    await this.assertBookingAccess(booking, userId);
+    return booking;
   }
 
   async update(id: string, updateBookingDto: UpdateBookingDto) {
-    const booking = await this.findOne(id);
+    const booking = await this.findBookingById(id);
 
     // Hide edit and delete when status is 'COMPLETED'
     if (booking.status === BookingStatus.COMPLETED) {
@@ -451,7 +551,7 @@ export class BookingsService {
   }
 
   async remove(id: string) {
-    const booking = await this.findOne(id);
+    const booking = await this.findBookingById(id);
 
     // Hide edit and delete when status is 'COMPLETED'
     if (booking.status === BookingStatus.COMPLETED) {
@@ -500,7 +600,7 @@ export class BookingsService {
   }
 
   async cancelBooking(id: string) {
-    await this.findOne(id);
+    await this.findBookingById(id);
     return this.databaseService.booking.update({
       where: { id },
       data: {
@@ -511,7 +611,7 @@ export class BookingsService {
   }
 
   async confirmBooking(id: string) {
-    await this.findOne(id);
+    await this.findBookingById(id);
     return this.databaseService.booking.update({
       where: { id },
       data: { status: BookingStatus.CONFIRMED },

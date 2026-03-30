@@ -29,6 +29,17 @@ export class AuthService {
     private configService: ConfigService,
   ) {}
 
+  private async getDefaultCustomerRole() {
+    return this.databaseService.role.upsert({
+      where: { name: 'customer' },
+      update: {},
+      create: {
+        name: 'customer',
+        description: 'Customer with basic read permissions',
+      },
+    });
+  }
+
   private generateRefreshToken(): string {
     return crypto.randomBytes(64).toString('hex');
   }
@@ -101,6 +112,8 @@ export class AuthService {
       }
     }
 
+    const customerRole = await this.getDefaultCustomerRole();
+
     // Hash password
     let hashedPassword: string;
     try {
@@ -120,6 +133,13 @@ export class AuthService {
         lastName,
         email,
         isActive: true,
+        roles: {
+          create: [
+            {
+              roleId: customerRole.id,
+            },
+          ],
+        },
       },
     });
 
