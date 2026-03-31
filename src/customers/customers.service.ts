@@ -6,6 +6,7 @@ import { Prisma } from 'generated/prisma';
 import { DatabaseService } from '../database/database.service';
 import { PaginationHelper } from '../common/utils/pagination.helper';
 import { CreateCustomerDto, QueryCustomerDto, UpdateCustomerDto } from './dto';
+import { normalizeVietnamesePhoneNumber } from '@/common/utils/phone.util';
 
 const CUSTOMER_SELECT = {
   id: true,
@@ -56,8 +57,11 @@ export class CustomersService {
       marketingEmails,
       isActive,
     } = createCustomerDto;
+    const normalizedPhoneNumber = normalizeVietnamesePhoneNumber(phoneNumber);
 
-    await this.authIdentityService.assertPhoneNumberAvailable(phoneNumber);
+    await this.authIdentityService.assertPhoneNumberAvailable(
+      normalizedPhoneNumber,
+    );
 
     if (email) {
       await this.authIdentityService.assertEmailAvailable(email);
@@ -68,7 +72,7 @@ export class CustomersService {
 
     const customer = await this.databaseService.customer.create({
       data: {
-        phoneNumber,
+        phoneNumber: normalizedPhoneNumber,
         passwordHash,
         firstName,
         lastName,

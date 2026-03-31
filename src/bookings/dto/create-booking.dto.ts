@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   ArrayMinSize,
+  ArrayUnique,
   IsArray,
   IsDateString,
   IsNotEmpty,
@@ -10,7 +11,10 @@ import {
   IsUUID,
   Min,
   ValidateIf,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
+import { AssignBookingStaffItemDto } from './assign-booking-staff.dto';
 
 export class CreateBookingDto {
   @ApiPropertyOptional({
@@ -84,4 +88,25 @@ export class CreateBookingDto {
   @IsOptional()
   @Min(0, { message: 'Total price cannot be negative' })
   totalPrice?: number;
+
+  @ApiPropertyOptional({
+    description: 'List of staff IDs assigned to the booking',
+    type: [String],
+    example: ['STF-ADMIN', 'STF-QA-002'],
+  })
+  @IsArray({ message: 'Staff IDs must be an array' })
+  @ArrayUnique({ message: 'Staff IDs must be unique' })
+  @IsString({ each: true, message: 'Each staff ID must be a string' })
+  @IsOptional()
+  staffIds?: string[];
+
+  @ApiPropertyOptional({
+    description: 'Assigned staff members with optional jobs',
+    type: [AssignBookingStaffItemDto],
+  })
+  @IsArray({ message: 'Staff assignments must be an array' })
+  @ValidateNested({ each: true })
+  @Type(() => AssignBookingStaffItemDto)
+  @IsOptional()
+  staffAssignments?: AssignBookingStaffItemDto[];
 }

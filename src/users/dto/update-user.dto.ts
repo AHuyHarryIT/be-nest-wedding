@@ -5,6 +5,10 @@ import {
   IsOptional,
   IsBoolean,
   MaxLength,
+  IsUUID,
+  IsArray,
+  ArrayUnique,
+  ValidateIf,
 } from 'class-validator';
 
 export class UpdateUserDto {
@@ -36,6 +40,9 @@ export class UpdateUserDto {
     nullable: true,
     format: 'email',
   })
+  @ValidateIf(
+    (_, value) => value !== null && value !== undefined && value !== '',
+  )
   @IsEmail({}, { message: 'Email must be a valid email address' })
   @IsOptional()
   email?: string | null;
@@ -50,6 +57,37 @@ export class UpdateUserDto {
   @IsOptional()
   @MaxLength(50, { message: 'Staff ID cannot exceed 50 characters' })
   id?: string;
+
+  @ApiPropertyOptional({
+    description: 'Managed job IDs assigned to the staff account',
+    example: ['uuid-job-1', 'uuid-job-2'],
+    type: [String],
+    nullable: true,
+  })
+  @IsArray({ message: 'Job IDs must be an array' })
+  @ArrayUnique({ message: 'Job IDs must be unique' })
+  @IsUUID('4', { each: true, message: 'Each job ID must be a valid UUID' })
+  @IsOptional()
+  jobIds?: string[] | null;
+
+  @ApiPropertyOptional({
+    description: 'Legacy single job ID alias for backward compatibility',
+    example: 'uuid-job-1',
+    nullable: true,
+  })
+  @IsUUID('4', { message: 'Job ID must be a valid UUID' })
+  @IsOptional()
+  jobId?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'Array of role IDs to assign to this user',
+    example: ['uuid-1', 'uuid-2'],
+    type: [String],
+  })
+  @IsArray({ message: 'Role IDs must be an array' })
+  @IsUUID('4', { each: true, message: 'Each role ID must be a valid UUID' })
+  @IsOptional()
+  roleIds?: string[];
 
   @ApiPropertyOptional({
     description: 'User active status',

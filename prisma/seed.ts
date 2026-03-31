@@ -53,6 +53,18 @@ async function seedRBAC() {
     { key: 'services:read', description: 'View services' },
     { key: 'services:update', description: 'Update services' },
     { key: 'services:delete', description: 'Delete services' },
+    { key: 'services:read:deleted', description: 'View deleted services' },
+    { key: 'services:restore', description: 'Restore deleted services' },
+    { key: 'services:hard-delete', description: 'Permanently delete services' },
+
+    // Job permissions
+    { key: 'jobs:create', description: 'Create new jobs' },
+    { key: 'jobs:read', description: 'View jobs' },
+    { key: 'jobs:update', description: 'Update jobs' },
+    { key: 'jobs:delete', description: 'Delete jobs' },
+    { key: 'jobs:read:deleted', description: 'View deleted jobs' },
+    { key: 'jobs:restore', description: 'Restore deleted jobs' },
+    { key: 'jobs:hard-delete', description: 'Permanently delete jobs' },
 
     // Package permissions
     { key: 'packages:create', description: 'Create new packages' },
@@ -174,10 +186,18 @@ async function seedRBAC() {
     'products:create',
     'products:update',
     'services:read',
+    'services:read:deleted',
+    'services:restore',
     'packages:read',
     'categories:read',
     'categories:create',
     'categories:update',
+    'jobs:read',
+    'jobs:create',
+    'jobs:update',
+    'jobs:delete',
+    'jobs:read:deleted',
+    'jobs:restore',
     'bookings:create',
     'bookings:read',
     'bookings:update',
@@ -218,6 +238,7 @@ async function seedRBAC() {
     'services:read',
     'packages:read',
     'categories:read',
+    'jobs:read',
     'bookings:read',
     'bookings:create',
     'orders:read',
@@ -463,6 +484,54 @@ async function seedServices() {
 }
 
 /**
+ * Seed jobs
+ */
+async function seedJobs() {
+  console.log('🧩 Seeding jobs...');
+
+  const jobs = [
+    {
+      name: 'Lead Photographer',
+      description: 'Primary photography lead for wedding day coverage',
+      isActive: true,
+    },
+    {
+      name: 'Assistant Photographer',
+      description: 'Assists with coverage, lighting, and logistics',
+      isActive: true,
+    },
+    {
+      name: 'Videographer',
+      description: 'Handles wedding video capture and coverage',
+      isActive: true,
+    },
+    {
+      name: 'Photo Editor',
+      description: 'Post-production and album preparation responsibility',
+      isActive: true,
+    },
+    {
+      name: 'Booking Coordinator',
+      description: 'Coordinates schedules, assignments, and client updates',
+      isActive: true,
+    },
+  ];
+
+  for (const job of jobs) {
+    await prisma.job.upsert({
+      where: { name: job.name },
+      update: {
+        description: job.description,
+        isActive: job.isActive,
+      },
+      create: job,
+    });
+  }
+
+  console.log(`  ✓ Created ${jobs.length} jobs`);
+}
+
+/**
  * Seed packages
  */
 async function seedPackages(
@@ -564,7 +633,7 @@ async function seedPackages(
 /**
  * Seed customer users
  */
-async function seedCustomerUsers(customerRoleId: string) {
+async function seedCustomerUsers() {
   console.log('👥 Seeding customer users...');
 
   const saltRounds = process.env.HASH_SALT
@@ -629,8 +698,11 @@ async function main() {
     // Seed admin user with admin role
     await seedAdminUser(roles.adminRole.id);
 
+    // Seed jobs
+    await seedJobs();
+
     // Seed customer users
-    await seedCustomerUsers(roles.customerRole.id);
+    await seedCustomerUsers();
 
     // Seed services
     const services = await seedServices();

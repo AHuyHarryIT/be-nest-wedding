@@ -56,7 +56,7 @@ describe('CustomersService', () => {
     });
 
     const result = await service.create({
-      phoneNumber: '0903311101',
+      phoneNumber: '+84903311101',
       password: 'SecurePass123',
       firstName: 'Nguyen',
       lastName: 'An',

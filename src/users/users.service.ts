@@ -6,10 +6,10 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
-import * as crypto from 'crypto';
 import { Prisma } from 'generated/prisma';
 import { DatabaseService } from 'src/database/database.service';
 import { PaginationHelper } from '../common/utils/pagination.helper';
+import { normalizeVietnamesePhoneNumber } from '@/common/utils/phone.util';
 import {
   AssignRolesToUserDto,
   CreateUserDto,
@@ -25,20 +25,89 @@ export class UsersService {
     private readonly authIdentityService: AuthIdentityService,
   ) {}
 
-  private async generateStaffId(): Promise<string> {
-    for (let attempt = 0; attempt < 5; attempt += 1) {
-      const candidate = `STF-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
-      const existing = await this.databaseService.staff.findUnique({
-        where: { id: candidate },
-        select: { id: true },
-      });
+  private async assertJobAssignable(jobId: string): Promise<void> {
+    const job = await this.databaseService.job.findFirst({
+      where: { id: jobId, deletedAt: null, isActive: true },
+      select: { id: true },
+    });
 
-      if (!existing) {
-        return candidate;
+    if (!job) {
+      throw new BadRequestException('Job not found or inactive');
+    }
+  }
+
+  private async assertJobsAssignable(jobIds: string[]): Promise<void> {
+    const uniqueJobIds = [...new Set(jobIds)];
+
+    for (const jobId of uniqueJobIds) {
+      await this.assertJobAssignable(jobId);
+    }
+  }
+
+  private normalizeJobIds(
+    jobIds?: string[] | null,
+    jobId?: string | null,
+  ): string[] {
+    const normalized = new Set<string>();
+
+    const addJobId = (value?: string | null) => {
+      if (typeof value !== 'string') return;
+
+      const trimmed = value.trim();
+      if (trimmed) {
+        normalized.add(trimmed);
       }
+    };
+
+    if (Array.isArray(jobIds)) {
+      jobIds.forEach((value) => addJobId(value));
     }
 
-    throw new BadRequestException('Failed to generate a unique staff ID');
+    addJobId(jobId);
+
+    return [...normalized];
+  }
+
+  private mapManagedJobs(staffJobs?: Array<{ job: any }>): {
+    jobIds: string[];
+    jobs: Array<{
+      id: string;
+      name: string;
+      description: string | null;
+      isActive: boolean;
+    }>;
+    jobId: string | null;
+    job: {
+      id: string;
+      name: string;
+      description: string | null;
+      isActive: boolean;
+    } | null;
+  } {
+    const jobs = (staffJobs ?? []).map((entry) => ({
+      id: entry.job.id,
+      name: entry.job.name,
+      description: entry.job.description ?? null,
+      isActive: entry.job.isActive,
+    }));
+
+    const primaryJob = jobs[0] ?? null;
+
+    return {
+      jobIds: jobs.map((job) => job.id),
+      jobs,
+      jobId: primaryJob?.id ?? null,
+      job: primaryJob,
+    };
+  }
+
+  private withManagedJobs(user: any) {
+    const { staffJobs, ...rest } = user;
+
+    return {
+      ...rest,
+      ...this.mapManagedJobs(staffJobs),
+    };
   }
 
   async updateHashRefreshToken({
@@ -57,27 +126,38 @@ export class UsersService {
   }
 
   async create(createUserDto: CreateUserDto) {
-    const { id, phoneNumber, password, roleIds, ...userData } = createUserDto;
+    const { id, phoneNumber, password, roleIds, jobIds, jobId, ...userData } =
+      createUserDto;
+    const normalizedPhoneNumber = normalizeVietnamesePhoneNumber(phoneNumber);
 
-    await this.authIdentityService.assertPhoneNumberAvailable(phoneNumber);
+    await this.authIdentityService.assertPhoneNumberAvailable(
+      normalizedPhoneNumber,
+    );
 
     if (userData.email) {
       await this.authIdentityService.assertEmailAvailable(userData.email);
     }
 
-    const staffId = id?.trim() || (await this.generateStaffId());
+    const resolvedJobIds = this.normalizeJobIds(jobIds, jobId);
+    if (resolvedJobIds.length) {
+      await this.assertJobsAssignable(resolvedJobIds);
+    }
+
+    const staffId = id.trim();
 
     await this.authIdentityService.assertStaffIdAvailable(staffId);
 
     const saltRounds = Number(this.configService.get('HASH_SALT', 10)) || 10;
     const passwordHash = await bcrypt.hash(password, saltRounds);
 
-    if (roleIds && roleIds.length > 0) {
+    const resolvedRoleIds = roleIds?.length ? [...new Set(roleIds)] : [];
+    if (resolvedRoleIds.length > 0) {
       const roles = await this.databaseService.role.findMany({
-        where: { id: { in: roleIds } },
+        where: { id: { in: resolvedRoleIds } },
+        select: { id: true },
       });
 
-      if (roles.length !== roleIds.length) {
+      if (roles.length !== resolvedRoleIds.length) {
         throw new BadRequestException('One or more role IDs are invalid');
       }
     }
@@ -85,18 +165,43 @@ export class UsersService {
     const createdUser = await this.databaseService.staff.create({
       data: {
         id: staffId,
-        phoneNumber,
+        phoneNumber: normalizedPhoneNumber,
         passwordHash,
         ...userData,
-        roles: roleIds?.length
+        ...(resolvedJobIds.length
           ? {
-              create: roleIds.map((roleId) => ({
-                roleId,
-              })),
+              staffJobs: {
+                create: resolvedJobIds.map((jobId) => ({
+                  job: {
+                    connect: { id: jobId },
+                  },
+                })),
+              },
             }
-          : undefined,
+          : {}),
+        ...(resolvedRoleIds.length
+          ? {
+              roles: {
+                create: resolvedRoleIds.map((roleId) => ({
+                  roleId,
+                })),
+              },
+            }
+          : {}),
       },
       include: {
+        staffJobs: {
+          include: {
+            job: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+                isActive: true,
+              },
+            },
+          },
+        },
         roles: {
           include: {
             role: {
@@ -114,14 +219,7 @@ export class UsersService {
     });
 
     return {
-      id: createdUser.id,
-      phoneNumber: createdUser.phoneNumber,
-      firstName: createdUser.firstName,
-      lastName: createdUser.lastName,
-      email: createdUser.email,
-      isActive: createdUser.isActive,
-      createdAt: createdUser.createdAt,
-      updatedAt: createdUser.updatedAt,
+      ...this.withManagedJobs(createdUser),
       roles: createdUser.roles.map((staffRole) => staffRole.role),
     };
   }
@@ -143,6 +241,17 @@ export class UsersService {
             { email: { contains: search, mode: 'insensitive' } },
             { firstName: { contains: search, mode: 'insensitive' } },
             { lastName: { contains: search, mode: 'insensitive' } },
+            {
+              staffJobs: {
+                some: {
+                  job: {
+                    is: {
+                      name: { contains: search, mode: 'insensitive' },
+                    },
+                  },
+                },
+              },
+            },
           ],
         }
       : {};
@@ -164,6 +273,18 @@ export class UsersService {
         firstName: true,
         lastName: true,
         email: true,
+        staffJobs: {
+          select: {
+            job: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+                isActive: true,
+              },
+            },
+          },
+        },
         isActive: true,
         createdAt: true,
         updatedAt: true,
@@ -182,7 +303,7 @@ export class UsersService {
     });
 
     const transformedUsers = users.map((user) => ({
-      ...user,
+      ...this.withManagedJobs(user),
       roles: user.roles.map((ur) => ur.role),
     }));
 
@@ -203,6 +324,18 @@ export class UsersService {
         firstName: true,
         lastName: true,
         email: true,
+        staffJobs: {
+          select: {
+            job: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+                isActive: true,
+              },
+            },
+          },
+        },
         isActive: true,
         createdAt: true,
         updatedAt: true,
@@ -236,41 +369,71 @@ export class UsersService {
     }
 
     return {
-      ...user,
+      ...this.withManagedJobs(user),
       roles: user.roles.map((ur) => ur.role),
     };
   }
 
   async findByPhoneNumber(phoneNumber: string) {
-    return await this.databaseService.staff.findUnique({
-      where: { phoneNumber },
-      select: {
-        id: true,
-        phoneNumber: true,
-        firstName: true,
-        lastName: true,
-        email: true,
-        refreshToken: true,
-        isActive: true,
-        createdAt: true,
-      },
-    });
+    const normalizedPhoneNumber = normalizeVietnamesePhoneNumber(phoneNumber);
+
+    return await this.databaseService.staff
+      .findUnique({
+        where: { phoneNumber: normalizedPhoneNumber },
+        select: {
+          id: true,
+          phoneNumber: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          staffJobs: {
+            select: {
+              job: {
+                select: {
+                  id: true,
+                  name: true,
+                  description: true,
+                  isActive: true,
+                },
+              },
+            },
+          },
+          refreshToken: true,
+          isActive: true,
+          createdAt: true,
+        },
+      })
+      .then((user) => (user ? this.withManagedJobs(user) : null));
   }
 
   async findById(id: string) {
-    return await this.databaseService.staff.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        phoneNumber: true,
-        firstName: true,
-        lastName: true,
-        email: true,
-        refreshToken: true,
-        isActive: true,
-        createdAt: true,
-      },
-    });
+    return await this.databaseService.staff
+      .findUnique({
+        where: { id },
+        select: {
+          id: true,
+          phoneNumber: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          staffJobs: {
+            select: {
+              job: {
+                select: {
+                  id: true,
+                  name: true,
+                  description: true,
+                  isActive: true,
+                },
+              },
+            },
+          },
+          refreshToken: true,
+          isActive: true,
+          createdAt: true,
+        },
+      })
+      .then((user) => (user ? this.withManagedJobs(user) : null));
   }
 
   async update(id: string, updateUserDto: UpdateUserDto) {
@@ -295,12 +458,57 @@ export class UsersService {
       );
     }
 
+    const { jobIds, jobId, roleIds, ...restUpdateUserDto } = updateUserDto;
+    const hasJobChanges = jobIds !== undefined || jobId !== undefined;
+    const resolvedJobIds = hasJobChanges
+      ? this.normalizeJobIds(jobIds, jobId)
+      : [];
+    const hasRoleChanges = roleIds !== undefined;
+
+    if (hasJobChanges && resolvedJobIds.length) {
+      await this.assertJobsAssignable(resolvedJobIds);
+    }
+
+    if (hasRoleChanges) {
+      const uniqueRoleIds = [...new Set(roleIds ?? [])];
+      const roles = await this.databaseService.role.findMany({
+        where: { id: { in: uniqueRoleIds } },
+        select: { id: true },
+      });
+
+      if (roles.length !== uniqueRoleIds.length) {
+        throw new BadRequestException('One or more role IDs are invalid');
+      }
+    }
+
     const updateData = {
-      ...updateUserDto,
+      ...restUpdateUserDto,
       ...(nextStaffId ? { id: nextStaffId } : {}),
+      ...(hasJobChanges
+        ? {
+            staffJobs: {
+              deleteMany: {},
+              create: resolvedJobIds.map((jobId) => ({
+                job: {
+                  connect: { id: jobId },
+                },
+              })),
+            },
+          }
+        : {}),
+      ...(hasRoleChanges
+        ? {
+            roles: {
+              deleteMany: {},
+              create: [...new Set(roleIds ?? [])].map((roleId) => ({
+                roleId,
+              })),
+            },
+          }
+        : {}),
     };
 
-    return await this.databaseService.staff.update({
+    const updatedUser = await this.databaseService.staff.update({
       where: { id },
       data: updateData,
       select: {
@@ -309,11 +517,39 @@ export class UsersService {
         firstName: true,
         lastName: true,
         email: true,
+        staffJobs: {
+          select: {
+            job: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+                isActive: true,
+              },
+            },
+          },
+        },
         isActive: true,
         createdAt: true,
         updatedAt: true,
+        roles: {
+          select: {
+            role: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+              },
+            },
+          },
+        },
       },
     });
+
+    return {
+      ...this.withManagedJobs(updatedUser),
+      roles: updatedUser.roles.map((ur) => ur.role),
+    };
   }
 
   async delete(id: string) {

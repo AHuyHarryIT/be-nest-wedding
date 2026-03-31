@@ -25,6 +25,7 @@ import {
   type AuthIdentityRecord,
   type AuthUserType,
 } from './auth-identity.service';
+import { normalizeVietnamesePhoneNumber } from '@/common/utils/phone.util';
 
 @Injectable()
 export class AuthService {
@@ -69,8 +70,11 @@ export class AuthService {
 
   async register(registerDto: RegisterDto): Promise<AuthResponseDto> {
     const { phoneNumber, password, firstName, lastName, email } = registerDto;
+    const normalizedPhoneNumber = normalizeVietnamesePhoneNumber(phoneNumber);
 
-    await this.authIdentityService.assertPhoneNumberAvailable(phoneNumber);
+    await this.authIdentityService.assertPhoneNumberAvailable(
+      normalizedPhoneNumber,
+    );
 
     if (email) {
       await this.authIdentityService.assertEmailAvailable(email);
@@ -86,7 +90,7 @@ export class AuthService {
 
     const user = await this.databaseService.customer.create({
       data: {
-        phoneNumber,
+        phoneNumber: normalizedPhoneNumber,
         passwordHash: hashedPassword,
         firstName,
         lastName,
@@ -111,7 +115,10 @@ export class AuthService {
 
   async login(loginDto: LoginDto): Promise<AuthResponseDto> {
     const { phoneNumber, password } = loginDto;
-    const user = await this.authIdentityService.findByPhoneNumber(phoneNumber);
+    const normalizedPhoneNumber = normalizeVietnamesePhoneNumber(phoneNumber);
+    const user = await this.authIdentityService.findByPhoneNumber(
+      normalizedPhoneNumber,
+    );
 
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
@@ -363,12 +370,26 @@ export class AuthService {
   }
 
   private toPublicUser(user: AuthIdentityRecord) {
+    const jobs = user.jobs ?? (user.job ? [user.job] : []);
+    const primaryJob = user.job ?? user.jobs?.[0] ?? null;
+
     return {
       id: user.id,
       phoneNumber: user.phoneNumber,
       firstName: user.firstName ?? null,
       lastName: user.lastName ?? null,
       email: user.email ?? null,
+      jobIds: user.jobIds ?? jobs.map((job) => job.id),
+      jobs,
+      jobId: user.jobId ?? primaryJob?.id ?? null,
+      job: primaryJob
+        ? {
+            id: primaryJob.id,
+            name: primaryJob.name,
+            description: primaryJob.description ?? null,
+            isActive: primaryJob.isActive,
+          }
+        : null,
       isActive: user.isActive,
       createdAt: user.createdAt,
     };

@@ -66,6 +66,74 @@ export class ViewBookingOrderDto {
   pendingAmount?: number;
 }
 
+export class ViewBookingAssignedStaffDto {
+  @ApiProperty({
+    description: 'Assigned staff ID',
+    example: 'STF-ADMIN',
+  })
+  @IsString()
+  id: string;
+
+  @ApiProperty({
+    description: 'Assigned booking staff relation ID',
+    example: 'STF-ADMIN',
+  })
+  @IsString()
+  staffId: string;
+
+  @ApiPropertyOptional({
+    description: 'Job or responsibility assigned for this booking',
+    example: 'Main photographer',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsString()
+  job?: string;
+
+  @ApiPropertyOptional({
+    description: 'Assigned staff first name',
+    example: 'Admin',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsString()
+  firstName?: string;
+
+  @ApiPropertyOptional({
+    description: 'Assigned staff last name',
+    example: 'User',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsString()
+  lastName?: string;
+
+  @ApiPropertyOptional({
+    description: 'Assigned staff phone number',
+    example: '0987654321',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsString()
+  phoneNumber?: string;
+
+  @ApiPropertyOptional({
+    description: 'Assigned staff email',
+    example: 'admin@example.com',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsString()
+  email?: string;
+
+  @ApiPropertyOptional({
+    description: 'Whether the assigned staff account is active',
+    example: true,
+  })
+  @IsOptional()
+  isActive?: boolean;
+}
+
 export class ViewBookingDto {
   @ApiProperty({
     description: 'Booking ID',
@@ -162,4 +230,11 @@ export class ViewBookingDto {
   })
   @IsOptional()
   orders?: ViewBookingOrderDto[];
+
+  @ApiPropertyOptional({
+    description: 'Assigned staff members for this booking',
+    type: [ViewBookingAssignedStaffDto],
+  })
+  @IsOptional()
+  assignedStaffs?: ViewBookingAssignedStaffDto[];
 }

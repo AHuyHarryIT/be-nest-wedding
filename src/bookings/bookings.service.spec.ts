@@ -1,8 +1,8 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
-import { BookingsService } from './bookings.service';
-import { DatabaseService } from '../database/database.service';
+import { Test, TestingModule } from '@nestjs/testing';
 import { BookingStatus } from 'generated/prisma';
+import { DatabaseService } from '../database/database.service';
+import { BookingsService } from './bookings.service';
 
 describe('BookingsService', () => {
   let service: BookingsService;
@@ -17,7 +17,10 @@ describe('BookingsService', () => {
     service: {
       findMany: jest.fn(),
     },
-    staffUserRole: {
+    staffRole: {
+      findMany: jest.fn(),
+    },
+    staff: {
       findMany: jest.fn(),
     },
     booking: {
@@ -31,8 +34,23 @@ describe('BookingsService', () => {
     },
   };
 
+  const baseBooking = {
+    id: 'booking-1',
+    customerId: 'customer-1',
+    notes: null,
+    status: BookingStatus.PENDING,
+    eventDate: new Date('2026-12-20T10:00:00.000Z'),
+    totalPrice: 0,
+    cancelledAt: null,
+    createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+    deletedAt: null,
+    orders: [],
+    assignedStaffs: [],
+  };
+
   beforeEach(async () => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -45,15 +63,9 @@ describe('BookingsService', () => {
   });
 
   it('scopes booking lists to the authenticated customer', async () => {
-    databaseServiceMock.staffUserRole.findMany.mockResolvedValue([]);
+    databaseServiceMock.staffRole.findMany.mockResolvedValue([]);
     databaseServiceMock.booking.count.mockResolvedValue(1);
-    databaseServiceMock.booking.findMany.mockResolvedValue([
-      {
-        id: 'booking-1',
-        customerId: 'customer-1',
-        orders: [],
-      },
-    ]);
+    databaseServiceMock.booking.findMany.mockResolvedValue([baseBooking]);
 
     await service.findAll(
       { customerId: 'other-customer' } as any,
@@ -76,7 +88,7 @@ describe('BookingsService', () => {
   });
 
   it('allows staff users to filter bookings by any customer', async () => {
-    databaseServiceMock.staffUserRole.findMany.mockResolvedValue([
+    databaseServiceMock.staffRole.findMany.mockResolvedValue([
       {
         role: {
           name: 'admin',
@@ -84,7 +96,7 @@ describe('BookingsService', () => {
       },
     ]);
     databaseServiceMock.booking.count.mockResolvedValue(1);
-    databaseServiceMock.booking.findMany.mockResolvedValue([]);
+    databaseServiceMock.booking.findMany.mockResolvedValue([baseBooking]);
 
     await service.findAll({ customerId: 'customer-2' } as any, 'staff-1');
 
@@ -98,12 +110,10 @@ describe('BookingsService', () => {
 
   it('rejects customer access to another customer booking', async () => {
     databaseServiceMock.booking.findFirst.mockResolvedValue({
-      id: 'booking-1',
+      ...baseBooking,
       customerId: 'customer-2',
-      status: BookingStatus.PENDING,
-      orders: [],
     });
-    databaseServiceMock.staffUserRole.findMany.mockResolvedValue([]);
+    databaseServiceMock.staffRole.findMany.mockResolvedValue([]);
 
     await expect(
       service.findOne('booking-1', 'customer-1'),
@@ -112,12 +122,11 @@ describe('BookingsService', () => {
 
   it('allows staff access to any booking', async () => {
     databaseServiceMock.booking.findFirst.mockResolvedValue({
-      id: 'booking-1',
+      ...baseBooking,
       customerId: 'customer-2',
       status: BookingStatus.CONFIRMED,
-      orders: [],
     });
-    databaseServiceMock.staffUserRole.findMany.mockResolvedValue([
+    databaseServiceMock.staffRole.findMany.mockResolvedValue([
       {
         role: {
           name: 'staff',
@@ -131,8 +140,8 @@ describe('BookingsService', () => {
     expect(booking.customerId).toBe('customer-2');
   });
 
-  it('creates a customer booking for the authenticated customer and computes total price', async () => {
-    databaseServiceMock.staffUserRole.findMany.mockResolvedValue([]);
+  it('creates a booking with assigned staff and computes total price', async () => {
+    databaseServiceMock.staffRole.findMany.mockResolvedValue([]);
     databaseServiceMock.customer.findUnique.mockResolvedValue({
       id: 'customer-1',
     });
@@ -142,19 +151,32 @@ describe('BookingsService', () => {
     databaseServiceMock.service.findMany.mockResolvedValue([
       { id: 'service-1', price: 50000 },
     ]);
+    databaseServiceMock.staff.findMany.mockResolvedValue([{ id: 'STF-001' }]);
     databaseServiceMock.booking.create.mockResolvedValue({
-      id: 'booking-1',
-      customerId: 'customer-1',
+      ...baseBooking,
       totalPrice: 300000,
-      status: BookingStatus.PENDING,
+      assignedStaffs: [
+        {
+          staffId: 'STF-001',
+          staff: {
+            id: 'STF-001',
+            firstName: 'Assigned',
+            lastName: 'Staff',
+            email: 'staff@example.com',
+            phoneNumber: '0900000001',
+            isActive: true,
+          },
+        },
+      ],
     });
 
-    await service.create(
+    const result = await service.create(
       {
         packageIds: ['package-1'],
         serviceIds: ['service-1'],
+        staffIds: ['STF-001'],
         eventDate: '2026-12-20T10:00:00.000Z',
-      },
+      } as any,
       'customer-1',
     );
 
@@ -163,13 +185,19 @@ describe('BookingsService', () => {
         data: expect.objectContaining({
           customer: { connect: { id: 'customer-1' } },
           totalPrice: 300000,
+          assignedStaffs: {
+            create: [{ staffId: 'STF-001', job: null }],
+          },
         }),
       }),
     );
+    expect(result.assignedStaffs).toEqual([
+      expect.objectContaining({ id: 'STF-001' }),
+    ]);
   });
 
   it('rejects customer attempts to create bookings for another customer', async () => {
-    databaseServiceMock.staffUserRole.findMany.mockResolvedValue([]);
+    databaseServiceMock.staffRole.findMany.mockResolvedValue([]);
 
     await expect(
       service.create(
@@ -177,23 +205,85 @@ describe('BookingsService', () => {
           customerId: 'customer-2',
           packageIds: ['package-1'],
           eventDate: '2026-12-20T10:00:00.000Z',
-        },
+        } as any,
         'customer-1',
       ),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
+  it('allows assignment-only updates on confirmed bookings', async () => {
+    databaseServiceMock.booking.findFirst
+      .mockResolvedValueOnce({
+        ...baseBooking,
+        status: BookingStatus.CONFIRMED,
+        assignedStaffs: [],
+      })
+      .mockResolvedValueOnce({
+        ...baseBooking,
+        status: BookingStatus.CONFIRMED,
+        assignedStaffs: [
+          {
+            staffId: 'STF-002',
+            staff: {
+              id: 'STF-002',
+              firstName: 'Second',
+              lastName: 'Staff',
+              email: 'staff2@example.com',
+              phoneNumber: '0900000002',
+              isActive: true,
+            },
+          },
+        ],
+      });
+    databaseServiceMock.staff.findMany.mockResolvedValue([{ id: 'STF-002' }]);
+    databaseServiceMock.booking.update.mockResolvedValue({
+      ...baseBooking,
+      status: BookingStatus.CONFIRMED,
+      assignedStaffs: [
+        {
+          staffId: 'STF-002',
+          staff: {
+            id: 'STF-002',
+            firstName: 'Second',
+            lastName: 'Staff',
+            email: 'staff2@example.com',
+            phoneNumber: '0900000002',
+            isActive: true,
+          },
+        },
+      ],
+    });
+
+    const result = await service.update('booking-1', {
+      staffIds: ['STF-002'],
+    } as any);
+
+    expect(databaseServiceMock.booking.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'booking-1' },
+        data: expect.objectContaining({
+          assignedStaffs: {
+            deleteMany: {},
+            create: [{ staffId: 'STF-002', job: null }],
+          },
+        }),
+      }),
+    );
+    expect(result.assignedStaffs).toEqual([
+      expect.objectContaining({ id: 'STF-002' }),
+    ]);
+  });
+
   it('allows a status-only update from CONFIRMED to COMPLETED', async () => {
     databaseServiceMock.booking.findFirst.mockResolvedValue({
-      id: 'booking-1',
-      customerId: 'customer-1',
+      ...baseBooking,
       status: BookingStatus.CONFIRMED,
-      orders: [],
+      assignedStaffs: [],
     });
     databaseServiceMock.booking.update.mockResolvedValue({
-      id: 'booking-1',
-      customerId: 'customer-1',
+      ...baseBooking,
       status: BookingStatus.COMPLETED,
+      assignedStaffs: [],
     });
 
     const result = await service.update('booking-1', {
@@ -212,10 +302,8 @@ describe('BookingsService', () => {
 
   it('rejects direct status updates to CANCELLED through generic booking updates', async () => {
     databaseServiceMock.booking.findFirst.mockResolvedValue({
-      id: 'booking-1',
-      customerId: 'customer-1',
-      status: BookingStatus.PENDING,
-      orders: [],
+      ...baseBooking,
+      assignedStaffs: [],
     });
 
     await expect(
@@ -225,49 +313,178 @@ describe('BookingsService', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
+  it('assigns staff through the dedicated booking assignment flow', async () => {
+    databaseServiceMock.booking.findFirst
+      .mockResolvedValueOnce({
+        ...baseBooking,
+        status: BookingStatus.CONFIRMED,
+        assignedStaffs: [],
+      })
+      .mockResolvedValueOnce({
+        ...baseBooking,
+        status: BookingStatus.CONFIRMED,
+        assignedStaffs: [
+          {
+            staffId: 'STF-003',
+            staff: {
+              id: 'STF-003',
+              firstName: 'Assigned',
+              lastName: 'Person',
+              email: 'person@example.com',
+              phoneNumber: '0900000003',
+              isActive: true,
+            },
+          },
+        ],
+      });
+    databaseServiceMock.staff.findMany.mockResolvedValue([{ id: 'STF-003' }]);
+    databaseServiceMock.booking.update.mockResolvedValue({
+      ...baseBooking,
+      status: BookingStatus.CONFIRMED,
+      assignedStaffs: [
+        {
+          staffId: 'STF-003',
+          staff: {
+            id: 'STF-003',
+            firstName: 'Assigned',
+            lastName: 'Person',
+            email: 'person@example.com',
+            phoneNumber: '0900000003',
+            isActive: true,
+          },
+        },
+      ],
+    });
+
+    const result = await service.assignStaff('booking-1', ['STF-003']);
+
+    expect(databaseServiceMock.booking.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'booking-1' },
+        data: expect.objectContaining({
+          assignedStaffs: {
+            deleteMany: {},
+            create: [{ staffId: 'STF-003', job: null }],
+          },
+        }),
+      }),
+    );
+    expect(result.assignedStaffs).toEqual([
+      expect.objectContaining({ id: 'STF-003' }),
+    ]);
+  });
+
+  it('assigns staff with a booking job through the dedicated flow', async () => {
+    databaseServiceMock.booking.findFirst
+      .mockResolvedValueOnce({
+        ...baseBooking,
+        status: BookingStatus.CONFIRMED,
+        assignedStaffs: [],
+      })
+      .mockResolvedValueOnce({
+        ...baseBooking,
+        status: BookingStatus.CONFIRMED,
+        assignedStaffs: [
+          {
+            staffId: 'STF-004',
+            job: 'Main photographer',
+            staff: {
+              id: 'STF-004',
+              firstName: 'Lead',
+              lastName: 'Shooter',
+              email: 'lead@example.com',
+              phoneNumber: '0900000004',
+              isActive: true,
+            },
+          },
+        ],
+      });
+    databaseServiceMock.staff.findMany.mockResolvedValue([{ id: 'STF-004' }]);
+    databaseServiceMock.booking.update.mockResolvedValue({
+      ...baseBooking,
+      status: BookingStatus.CONFIRMED,
+      assignedStaffs: [
+        {
+          staffId: 'STF-004',
+          job: 'Main photographer',
+          staff: {
+            id: 'STF-004',
+            firstName: 'Lead',
+            lastName: 'Shooter',
+            email: 'lead@example.com',
+            phoneNumber: '0900000004',
+            isActive: true,
+          },
+        },
+      ],
+    });
+
+    const result = await service.assignStaff('booking-1', [
+      {
+        staffId: 'STF-004',
+        job: 'Main photographer',
+      },
+    ]);
+
+    expect(databaseServiceMock.booking.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'booking-1' },
+        data: expect.objectContaining({
+          assignedStaffs: {
+            deleteMany: {},
+            create: [{ staffId: 'STF-004', job: 'Main photographer' }],
+          },
+        }),
+      }),
+    );
+    expect(result.assignedStaffs).toEqual([
+      expect.objectContaining({
+        id: 'STF-004',
+        job: 'Main photographer',
+      }),
+    ]);
+  });
+
   it('cancels non-completed bookings through the dedicated cancel flow', async () => {
     databaseServiceMock.booking.findFirst
       .mockResolvedValueOnce({
-        id: 'booking-2',
-        customerId: 'customer-1',
+        ...baseBooking,
         status: BookingStatus.CONFIRMED,
-        orders: [],
+        assignedStaffs: [],
       })
       .mockResolvedValueOnce({
-        id: 'booking-2',
-        customerId: 'customer-1',
+        ...baseBooking,
         status: BookingStatus.CANCELLED,
         cancelledAt: new Date('2026-03-31T10:00:00.000Z'),
-        orders: [],
+        assignedStaffs: [],
       });
     databaseServiceMock.booking.update.mockResolvedValue({
-      id: 'booking-2',
-      customerId: 'customer-1',
+      ...baseBooking,
       status: BookingStatus.CANCELLED,
       cancelledAt: new Date('2026-03-31T10:00:00.000Z'),
+      assignedStaffs: [],
     });
 
-    const result = await service.cancelBooking('booking-2');
+    const result = await service.cancelBooking('booking-1');
 
     expect(databaseServiceMock.booking.update).toHaveBeenCalledWith({
-      where: { id: 'booking-2' },
+      where: { id: 'booking-1' },
       data: {
         status: BookingStatus.CANCELLED,
         cancelledAt: expect.any(Date),
       },
     });
-    expect(result.status).toBe(BookingStatus.CANCELLED);
+    expect(result.id).toBe('booking-1');
   });
 
   it('rejects cancellation for completed bookings', async () => {
     databaseServiceMock.booking.findFirst.mockResolvedValue({
-      id: 'booking-3',
-      customerId: 'customer-1',
+      ...baseBooking,
       status: BookingStatus.COMPLETED,
-      orders: [],
+      assignedStaffs: [],
     });
 
-    await expect(service.cancelBooking('booking-3')).rejects.toBeInstanceOf(
+    await expect(service.cancelBooking('booking-1')).rejects.toBeInstanceOf(
       BadRequestException,
     );
   });

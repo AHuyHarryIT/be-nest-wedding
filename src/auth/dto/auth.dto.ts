@@ -161,6 +161,47 @@ export class AuthResponseDto {
         example: 'john.doe@example.com',
         nullable: true,
       },
+      jobIds: {
+        type: 'array',
+        items: { type: 'string', example: 'uuid-job-1' },
+        example: ['uuid-job-1', 'uuid-job-2'],
+      },
+      jobs: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', example: 'uuid-job-1' },
+            name: { type: 'string', example: 'Lead Photographer' },
+            description: {
+              type: 'string',
+              example: 'Primary photography lead for wedding day coverage',
+              nullable: true,
+            },
+            isActive: { type: 'boolean', example: true },
+          },
+        },
+      },
+      jobId: {
+        type: 'string',
+        example: 'uuid-job-1',
+        nullable: true,
+        description: 'Legacy first job ID for backward compatibility',
+      },
+      job: {
+        type: 'object',
+        nullable: true,
+        properties: {
+          id: { type: 'string', example: 'uuid-job-1' },
+          name: { type: 'string', example: 'Lead Photographer' },
+          description: {
+            type: 'string',
+            example: 'Primary photography lead for wedding day coverage',
+            nullable: true,
+          },
+          isActive: { type: 'boolean', example: true },
+        },
+      },
       isActive: { type: 'boolean', example: true },
       createdAt: {
         type: 'string',
@@ -175,6 +216,20 @@ export class AuthResponseDto {
     firstName?: string | null;
     lastName?: string | null;
     email?: string | null;
+    jobIds?: string[];
+    jobs?: {
+      id: string;
+      name: string;
+      description?: string | null;
+      isActive: boolean;
+    }[];
+    jobId?: string | null;
+    job?: {
+      id: string;
+      name: string;
+      description?: string | null;
+      isActive: boolean;
+    } | null;
     isActive: boolean;
     createdAt: Date;
   };

@@ -9,6 +9,7 @@ import { CommonModule } from './common/common.module';
 import { RolesModule } from './roles/roles.module';
 import { PermissionsModule } from './permissions/permissions.module';
 import { ServicesModule } from './services/services.module';
+import { JobsModule } from './jobs/jobs.module';
 import { PackagesModule } from './packages/packages.module';
 import { AuthModule } from './auth/auth.module';
 import { BookingsModule } from './bookings/bookings.module';
@@ -39,6 +40,7 @@ import { AutoRefreshMiddleware } from './auth/auto-refresh.middleware';
     RolesModule,
     PermissionsModule,
     ServicesModule,
+    JobsModule,
     PackagesModule,
     BookingsModule,
     BookingSessionsModule,

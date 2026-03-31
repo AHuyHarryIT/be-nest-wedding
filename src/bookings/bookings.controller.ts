@@ -17,10 +17,13 @@ import {
 } from '@nestjs/swagger';
 import { BookingsService } from './bookings.service';
 import {
+  AssignBookingStaffDto,
+  AssignBookingStaffItemDto,
   CreateBookingDto,
   UpdateBookingDto,
   QueryBookingDto,
   ViewBookingDto,
+  ViewBookingAssignedStaffDto,
 } from './dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { GetUser, type AuthenticatedUser } from '../auth/get-user.decorator';
@@ -45,6 +48,9 @@ import {
   CreateBookingDto,
   UpdateBookingDto,
   QueryBookingDto,
+  AssignBookingStaffDto,
+  AssignBookingStaffItemDto,
+  ViewBookingAssignedStaffDto,
 )
 @Controller('bookings')
 export class BookingsController {
@@ -128,6 +134,33 @@ export class BookingsController {
   ) {
     const booking = await this.bookingsService.update(id, updateBookingDto);
     return ResponseBuilder.updated(booking, 'Booking updated successfully');
+  }
+
+  @Patch(':id/staff')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @ApiBearerAuth('JWT-auth')
+  @RequirePermissions('bookings:update')
+  @ApiOperation({ summary: 'Assign staff to a booking' })
+  @ApiUpdatedSuccessResponse({
+    description: 'Booking staff assignments updated successfully',
+  })
+  @ApiNotFoundResponse()
+  @ApiUnauthorizedResponse()
+  @ApiForbiddenResponse()
+  async assignStaff(
+    @Param('id') id: string,
+    @Body() assignBookingStaffDto: AssignBookingStaffDto,
+  ) {
+    const booking = await this.bookingsService.assignStaff(
+      id,
+      assignBookingStaffDto.staffAssignments ??
+        assignBookingStaffDto.staffIds ??
+        [],
+    );
+    return ResponseBuilder.updated(
+      booking,
+      'Booking staff assignments updated successfully',
+    );
   }
 
   @Delete(':id')

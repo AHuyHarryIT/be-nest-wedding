@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../../database/database.service';
 import { BaseRepository } from './base.repository';
+import { normalizeVietnamesePhoneNumber } from '../utils/phone.util';
 
 /**
  * Staff User Repository - Handles staff identity data operations.
@@ -12,10 +13,67 @@ export class UserRepository extends BaseRepository<any> {
     this.modelName = 'staff';
   }
 
+  private mapManagedJobs(staffJobs?: Array<{ job: any }>): {
+    jobIds: string[];
+    jobs: Array<{
+      id: string;
+      name: string;
+      description: string | null;
+      isActive: boolean;
+    }>;
+    jobId: string | null;
+    job: {
+      id: string;
+      name: string;
+      description: string | null;
+      isActive: boolean;
+    } | null;
+  } {
+    const jobs = (staffJobs ?? []).map((entry) => ({
+      id: entry.job.id,
+      name: entry.job.name,
+      description: entry.job.description ?? null,
+      isActive: entry.job.isActive,
+    }));
+
+    const primaryJob = jobs[0] ?? null;
+
+    return {
+      jobIds: jobs.map((job) => job.id),
+      jobs,
+      jobId: primaryJob?.id ?? null,
+      job: primaryJob,
+    };
+  }
+
+  private withManagedJobs(user: any) {
+    if (!user) return null;
+
+    const { staffJobs, ...rest } = user;
+    return {
+      ...rest,
+      ...this.mapManagedJobs(staffJobs),
+    };
+  }
+
   async findByPhoneNumber(phoneNumber: string) {
-    return this.db.staff.findUnique({
-      where: { phoneNumber },
+    const normalizedPhoneNumber = normalizeVietnamesePhoneNumber(phoneNumber);
+
+    const user = await this.db.staff.findUnique({
+      where: { phoneNumber: normalizedPhoneNumber },
       include: {
+        staffJobs: {
+          include: {
+            job: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+                isActive: true,
+              },
+            },
+          },
+        },
         roles: {
           include: {
             role: {
@@ -25,12 +83,26 @@ export class UserRepository extends BaseRepository<any> {
         },
       },
     });
+
+    return this.withManagedJobs(user);
   }
 
   async findByIdWithPermissions(userId: string) {
     const user = await this.db.staff.findUnique({
       where: { id: userId },
       include: {
+        staffJobs: {
+          include: {
+            job: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+                isActive: true,
+              },
+            },
+          },
+        },
         roles: {
           include: {
             role: {
@@ -56,13 +128,13 @@ export class UserRepository extends BaseRepository<any> {
     );
 
     return {
-      ...user,
+      ...this.withManagedJobs(user),
       permissions: Array.from(new Set(permissions)),
     };
   }
 
   async findByIdLean(userId: string) {
-    return this.db.staff.findUnique({
+    const user = await this.db.staff.findUnique({
       where: { id: userId },
       select: {
         id: true,
@@ -70,9 +142,23 @@ export class UserRepository extends BaseRepository<any> {
         email: true,
         firstName: true,
         lastName: true,
+        staffJobs: {
+          select: {
+            job: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+                isActive: true,
+              },
+            },
+          },
+        },
         isActive: true,
       },
     });
+
+    return this.withManagedJobs(user);
   }
 
   async findActive(params?: { skip?: number; take?: number; search?: string }) {
@@ -84,25 +170,50 @@ export class UserRepository extends BaseRepository<any> {
         { email: { contains: params.search } },
         { firstName: { contains: params.search } },
         { lastName: { contains: params.search } },
+        {
+          staffJobs: {
+            some: {
+              job: {
+                is: {
+                  name: { contains: params.search, mode: 'insensitive' },
+                },
+              },
+            },
+          },
+        },
       ];
     }
 
-    return this.db.staff.findMany({
+    const users = await this.db.staff.findMany({
       where,
       include: {
+        staffJobs: {
+          include: {
+            job: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+                isActive: true,
+              },
+            },
+          },
+        },
         roles: { include: { role: true } },
       },
       orderBy: { createdAt: 'desc' },
       skip: params?.skip,
       take: params?.take,
     });
+
+    return users.map((user) => this.withManagedJobs(user));
   }
 
   async findByRole(
     roleName: string,
     params?: { skip?: number; take?: number },
   ) {
-    return this.db.staff.findMany({
+    const users = await this.db.staff.findMany({
       where: {
         roles: {
           some: {
@@ -111,11 +222,25 @@ export class UserRepository extends BaseRepository<any> {
         },
       },
       include: {
+        staffJobs: {
+          include: {
+            job: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+                isActive: true,
+              },
+            },
+          },
+        },
         roles: { include: { role: true } },
       },
       skip: params?.skip,
       take: params?.take,
     });
+
+    return users.map((user) => this.withManagedJobs(user));
   }
 
   async addRole(userId: string, roleId: string) {

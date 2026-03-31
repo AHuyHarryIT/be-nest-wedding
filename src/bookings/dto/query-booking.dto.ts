@@ -58,4 +58,13 @@ export class QueryBookingDto extends PaginationQueryDto {
   @IsOptional()
   @Type(() => Boolean)
   includeServices?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Include assigned staff details in response',
+    default: false,
+  })
+  @IsBoolean({ message: 'includeStaffs must be a boolean value' })
+  @IsOptional()
+  @Type(() => Boolean)
+  includeStaffs?: boolean;
 }

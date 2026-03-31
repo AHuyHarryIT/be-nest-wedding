@@ -8,6 +8,21 @@ import { BaseRepository } from './base.repository';
  */
 @Injectable()
 export class BookingRepository extends BaseRepository<any> {
+  private readonly assignedStaffInclude = {
+    include: {
+      staff: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          phoneNumber: true,
+          isActive: true,
+        },
+      },
+    },
+  };
+
   constructor(protected db: DatabaseService) {
     super(db);
     this.modelName = 'booking';
@@ -23,6 +38,7 @@ export class BookingRepository extends BaseRepository<any> {
         customer: true,
         packages: { include: { package: true } },
         services: { include: { service: true } },
+        assignedStaffs: this.assignedStaffInclude,
         sessions: {
           include: {
             staffs: { include: { staff: true } },
@@ -31,7 +47,7 @@ export class BookingRepository extends BaseRepository<any> {
         },
         albums: { include: { files: { include: { file: true } } } },
         orders: { include: { payments: true, refunds: true } },
-      },
+      } as any,
     });
   }
 
@@ -47,8 +63,9 @@ export class BookingRepository extends BaseRepository<any> {
       include: {
         packages: { include: { package: true } },
         services: { include: { service: true } },
+        assignedStaffs: this.assignedStaffInclude,
         orders: true,
-      },
+      } as any,
       orderBy: { eventDate: 'desc' },
       ...params,
     });
@@ -72,8 +89,9 @@ export class BookingRepository extends BaseRepository<any> {
       include: {
         customer: true,
         orders: true,
+        assignedStaffs: this.assignedStaffInclude,
         sessions: true,
-      },
+      } as any,
       orderBy: { eventDate: 'asc' },
       skip: params?.skip,
       take: params?.take,
@@ -104,8 +122,9 @@ export class BookingRepository extends BaseRepository<any> {
       include: {
         customer: true,
         orders: true,
+        assignedStaffs: this.assignedStaffInclude,
         sessions: true,
-      },
+      } as any,
       orderBy: { eventDate: 'asc' },
       ...params,
     });
@@ -128,9 +147,10 @@ export class BookingRepository extends BaseRepository<any> {
       },
       include: {
         customer: true,
+        assignedStaffs: this.assignedStaffInclude,
         sessions: { include: { staffs: true } },
         orders: true,
-      },
+      } as any,
     });
   }
 

@@ -32,7 +32,15 @@ export interface BookingWithOrderSummary extends Booking {
   packages?: any;
   services?: any;
   albums?: any;
+  assignedStaffs?: any[];
 }
+
+type BookingStaffAssignmentInput =
+  | string
+  | {
+      staffId: string;
+      job?: string | null;
+    };
 
 @Injectable()
 export class BookingsService {
@@ -44,6 +52,111 @@ export class BookingsService {
   ]);
 
   constructor(private readonly databaseService: DatabaseService) {}
+
+  private readonly assignedStaffInclude: any = {
+    include: {
+      staff: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          phoneNumber: true,
+          isActive: true,
+        },
+      },
+    },
+  };
+
+  private normalizeStaffAssignments(
+    staffAssignments: BookingStaffAssignmentInput[],
+  ): Array<{ staffId: string; job: string | null }> {
+    const normalizedAssignments: Array<{
+      staffId: string;
+      job: string | null;
+    }> = staffAssignments
+      .map((assignment) => {
+        if (typeof assignment === 'string') {
+          return { staffId: assignment.trim(), job: null };
+        }
+
+        return {
+          staffId: assignment.staffId.trim(),
+          job:
+            typeof assignment.job === 'string' && assignment.job.trim()
+              ? assignment.job.trim()
+              : null,
+        };
+      })
+      .filter((assignment) => Boolean(assignment.staffId));
+
+    const uniqueAssignments: Array<{ staffId: string; job: string | null }> =
+      [];
+    const seenIds = new Set<string>();
+
+    for (const assignment of normalizedAssignments) {
+      if (seenIds.has(assignment.staffId)) {
+        continue;
+      }
+
+      seenIds.add(assignment.staffId);
+      uniqueAssignments.push(assignment);
+    }
+
+    return uniqueAssignments;
+  }
+
+  private normalizeStaffIds(staffIds: string[]): string[] {
+    return [
+      ...new Set(staffIds.map((staffId) => staffId.trim()).filter(Boolean)),
+    ];
+  }
+
+  private async validateStaffAssignments(staffIds: string[]): Promise<void> {
+    if (!staffIds.length) {
+      return;
+    }
+
+    const uniqueStaffIds = this.normalizeStaffIds(staffIds);
+    const staffs = await this.databaseService.staff.findMany({
+      where: {
+        id: { in: uniqueStaffIds },
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
+
+    if (staffs.length !== uniqueStaffIds.length) {
+      throw new NotFoundException('One or more staff members not found');
+    }
+  }
+
+  private mapAssignedStaffs(
+    booking: BookingWithOrderSummary & {
+      assignedStaffs?: Array<{
+        staffId: string;
+        job?: string | null;
+        staff: {
+          id: string;
+          firstName: string | null;
+          lastName: string | null;
+          email: string | null;
+          phoneNumber: string;
+          isActive: boolean;
+        };
+      }>;
+    },
+  ): BookingWithOrderSummary {
+    return {
+      ...booking,
+      assignedStaffs:
+        booking.assignedStaffs?.map((assignment) => ({
+          ...assignment.staff,
+          staffId: assignment.staffId,
+          job: assignment.job ?? null,
+        })) ?? [],
+    };
+  }
 
   private async resolveCreateCustomerId(
     createBookingDto: CreateBookingDto,
@@ -122,23 +235,27 @@ export class BookingsService {
             service: true,
           },
         },
+        assignedStaffs: this.assignedStaffInclude,
         albums: true,
         orders: {
           include: {
             payments: true,
           },
         },
-      },
+      } as any,
     });
 
     if (!booking) {
       throw new NotFoundException(`Booking with ID ${id} not found`);
     }
 
-    const response: BookingWithOrderSummary = { ...booking };
+    const response: BookingWithOrderSummary = this.mapAssignedStaffs(
+      booking as any,
+    );
     if (booking.orders && booking.orders.length > 0) {
-      const order = booking.orders[0];
-      const totalPaid = order.payments
+      const order = booking.orders[0] as any;
+      const payments = (order.payments ?? []) as Payment[];
+      const totalPaid = payments
         .filter((p: Payment) => p.status === 'SUCCESSFUL')
         .reduce((sum: number, p: Payment) => sum + p.amount, 0);
 
@@ -159,6 +276,18 @@ export class BookingsService {
     return response;
   }
 
+  private async buildAssignedStaffData(
+    staffAssignments: BookingStaffAssignmentInput[],
+  ): Promise<Array<{ staffId: string; job: string | null }>> {
+    const normalizedAssignments =
+      this.normalizeStaffAssignments(staffAssignments);
+    const staffIds = normalizedAssignments.map(({ staffId }) => staffId);
+
+    await this.validateStaffAssignments(staffIds);
+
+    return normalizedAssignments;
+  }
+
   async create(createBookingDto: CreateBookingDto, actorUserId: string) {
     const customerId = await this.resolveCreateCustomerId(
       createBookingDto,
@@ -176,6 +305,11 @@ export class BookingsService {
     // Determine which packages/services to use
     const packageIds = createBookingDto.packageIds || [];
     const serviceIds = createBookingDto.serviceIds || [];
+    const staffAssignments = createBookingDto.staffAssignments
+      ? await this.buildAssignedStaffData(createBookingDto.staffAssignments)
+      : this.normalizeStaffIds(createBookingDto.staffIds || []).map(
+          (staffId) => ({ staffId, job: null }),
+        );
 
     // At least one package or service is required
     if (packageIds.length === 0 && serviceIds.length === 0) {
@@ -220,13 +354,19 @@ export class BookingsService {
       computedTotalPrice += services.reduce((sum, item) => sum + item.price, 0);
     }
 
+    if (!createBookingDto.staffAssignments) {
+      await this.validateStaffAssignments(
+        staffAssignments.map(({ staffId }) => staffId),
+      );
+    }
+
     const isStaff = await this.isStaffUser(actorUserId);
     const totalPrice =
       isStaff && createBookingDto.totalPrice !== undefined
         ? createBookingDto.totalPrice
         : computedTotalPrice;
 
-    const data: Prisma.BookingCreateInput = {
+    const data: any = {
       customer: { connect: { id: customerId } },
       notes: createBookingDto.notes,
       eventDate: new Date(createBookingDto.eventDate),
@@ -268,7 +408,16 @@ export class BookingsService {
       };
     }
 
-    return this.databaseService.booking.create({
+    if (staffAssignments.length > 0) {
+      data.assignedStaffs = {
+        create: staffAssignments.map(({ staffId, job }) => ({
+          staffId,
+          job,
+        })),
+      };
+    }
+
+    const booking = await this.databaseService.booking.create({
       data,
       include: {
         customer: {
@@ -297,8 +446,13 @@ export class BookingsService {
             service: true,
           },
         },
-      },
+        assignedStaffs: this.assignedStaffInclude,
+      } as any,
     });
+
+    return this.mapAssignedStaffs(
+      booking as unknown as BookingWithOrderSummary & { assignedStaffs: any[] },
+    );
   }
 
   async createForCustomer(
@@ -330,6 +484,7 @@ export class BookingsService {
       includeCustomer,
       includePackages,
       includeServices,
+      includeStaffs,
     } = params || {};
 
     const where: Prisma.BookingWhereInput = { deletedAt: null };
@@ -346,7 +501,7 @@ export class BookingsService {
     }
     if (status) where.status = status;
 
-    const include: Prisma.BookingInclude = {};
+    const include: any = {};
     if (includeCustomer)
       include.customer = {
         select: {
@@ -376,6 +531,9 @@ export class BookingsService {
           service: true,
         },
       };
+    if (includeStaffs) {
+      include.assignedStaffs = this.assignedStaffInclude;
+    }
 
     const orderBy: Prisma.BookingOrderByWithRelationInput = {
       [sortBy]: sortOrder,
@@ -390,8 +548,12 @@ export class BookingsService {
       take: limit,
     });
 
+    const bookingRows = includeStaffs
+      ? (bookings as any[]).map((booking) => this.mapAssignedStaffs(booking))
+      : bookings;
+
     return PaginationHelper.createPaginatedResponse(
-      bookings,
+      bookingRows as any[],
       page,
       limit,
       total,
@@ -413,18 +575,31 @@ export class BookingsService {
       );
     }
 
-    // Hide edit and delete when status is 'COMPLETED'
-    if (booking.status === BookingStatus.COMPLETED) {
+    // Hide edit and delete when status is 'COMPLETED' or 'CANCELLED'
+    if (
+      booking.status === BookingStatus.COMPLETED ||
+      booking.status === BookingStatus.CANCELLED
+    ) {
       throw new BadRequestException(
-        `Cannot edit completed bookings. Current status: ${booking.status}`,
+        `Cannot edit bookings with status ${booking.status}`,
       );
     }
 
     // Only allow status updates or other edits if booking is PENDING
     // (unless only status is being updated)
+    const hasBookingFieldUpdates =
+      updateBookingDto.customerId !== undefined ||
+      updateBookingDto.notes !== undefined ||
+      updateBookingDto.eventDate !== undefined ||
+      updateBookingDto.totalPrice !== undefined ||
+      updateBookingDto.packageIds !== undefined ||
+      updateBookingDto.serviceIds !== undefined;
+    const hasStatusUpdate = updateBookingDto.status !== undefined;
     const isOnlyStatusUpdate =
-      Object.keys(updateBookingDto).length === 1 && updateBookingDto.status;
-    if (!isOnlyStatusUpdate && booking.status !== BookingStatus.PENDING) {
+      Object.keys(updateBookingDto).length === 1 && hasStatusUpdate;
+    const requiresPendingStatus =
+      hasBookingFieldUpdates || (hasStatusUpdate && !isOnlyStatusUpdate);
+    if (requiresPendingStatus && booking.status !== BookingStatus.PENDING) {
       throw new BadRequestException(
         `Only bookings with PENDING status can be edited. Current status: ${booking.status}`,
       );
@@ -468,7 +643,22 @@ export class BookingsService {
       }
     }
 
-    const data: Prisma.BookingUpdateInput = {};
+    const normalizedStaffAssignments =
+      updateBookingDto.staffAssignments !== undefined
+        ? await this.buildAssignedStaffData(updateBookingDto.staffAssignments)
+        : updateBookingDto.staffIds !== undefined
+          ? this.normalizeStaffIds(updateBookingDto.staffIds).map(
+              (staffId) => ({ staffId, job: null }),
+            )
+          : undefined;
+
+    if (normalizedStaffAssignments) {
+      await this.validateStaffAssignments(
+        normalizedStaffAssignments.map(({ staffId }) => staffId),
+      );
+    }
+
+    const data: any = {};
     if (updateBookingDto.status !== undefined)
       data.status = updateBookingDto.status;
     if (updateBookingDto.customerId)
@@ -530,7 +720,21 @@ export class BookingsService {
       }
     }
 
-    return this.databaseService.booking.update({
+    if (normalizedStaffAssignments !== undefined) {
+      data.assignedStaffs = {
+        deleteMany: {},
+        ...(normalizedStaffAssignments.length > 0
+          ? {
+              create: normalizedStaffAssignments.map(({ staffId, job }) => ({
+                staffId,
+                job,
+              })),
+            }
+          : {}),
+      };
+    }
+
+    const updatedBooking = await this.databaseService.booking.update({
       where: { id },
       data,
       include: {
@@ -552,8 +756,87 @@ export class BookingsService {
             service: true,
           },
         },
-      },
+        assignedStaffs: this.assignedStaffInclude,
+      } as any,
     });
+
+    return this.mapAssignedStaffs(
+      updatedBooking as unknown as BookingWithOrderSummary & {
+        assignedStaffs?: any[];
+      },
+    );
+  }
+
+  async assignStaff(
+    id: string,
+    staffAssignments: BookingStaffAssignmentInput[],
+  ) {
+    const booking = await this.findBookingById(id);
+
+    if (
+      booking.status === BookingStatus.CANCELLED ||
+      booking.status === BookingStatus.COMPLETED
+    ) {
+      throw new BadRequestException(
+        `Cannot assign staff when booking status is ${booking.status}`,
+      );
+    }
+
+    const normalizedStaffAssignments =
+      this.normalizeStaffAssignments(staffAssignments);
+    await this.validateStaffAssignments(
+      normalizedStaffAssignments.map(({ staffId }) => staffId),
+    );
+
+    const updatedBooking = await this.databaseService.booking.update({
+      where: { id },
+      data: {
+        assignedStaffs: {
+          deleteMany: {},
+          ...(normalizedStaffAssignments.length > 0
+            ? {
+                create: normalizedStaffAssignments.map(({ staffId, job }) => ({
+                  staffId,
+                  job,
+                })),
+              }
+            : {}),
+        },
+      } as any,
+      include: {
+        customer: true,
+        packages: {
+          include: {
+            package: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+                price: true,
+              },
+            },
+          },
+        },
+        services: {
+          include: {
+            service: true,
+          },
+        },
+        assignedStaffs: this.assignedStaffInclude,
+        albums: true,
+        orders: {
+          include: {
+            payments: true,
+          },
+        },
+      } as any,
+    });
+
+    return this.mapAssignedStaffs(
+      updatedBooking as unknown as BookingWithOrderSummary & {
+        assignedStaffs?: any[];
+      },
+    );
   }
 
   async remove(id: string) {
