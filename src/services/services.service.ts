@@ -16,6 +16,30 @@ export class ServicesService {
     private readonly cloudinaryService: CloudinaryService,
   ) {}
 
+  private readonly serviceInclude = {
+    job: {
+      select: {
+        id: true,
+        name: true,
+      },
+    },
+  } satisfies Prisma.ServiceInclude;
+
+  private async assertJobAssignable(jobId: string): Promise<void> {
+    const job = await this.databaseService.job.findFirst({
+      where: {
+        id: jobId,
+        deletedAt: null,
+        isActive: true,
+      },
+      select: { id: true },
+    });
+
+    if (!job) {
+      throw new NotFoundException(`Job with ID ${jobId} not found`);
+    }
+  }
+
   async create(createServiceDto: CreateServiceDto) {
     // Set default values if not provided
     const data: Prisma.ServiceCreateInput = {
@@ -25,8 +49,14 @@ export class ServicesService {
       isActive: createServiceDto.isActive || false,
     };
 
+    if (createServiceDto.jobId) {
+      await this.assertJobAssignable(createServiceDto.jobId);
+      data.job = { connect: { id: createServiceDto.jobId } };
+    }
+
     return this.databaseService.service.create({
       data,
+      include: this.serviceInclude,
     });
   }
 
@@ -82,6 +112,7 @@ export class ServicesService {
       orderBy,
       skip: PaginationHelper.getSkip(page, limit),
       take: limit,
+      include: this.serviceInclude,
     });
 
     return PaginationHelper.createPaginatedResponse(data, page, limit, total);
@@ -93,6 +124,7 @@ export class ServicesService {
         id,
         deletedAt: null,
       },
+      include: this.serviceInclude,
     });
 
     if (!service) {
@@ -107,11 +139,26 @@ export class ServicesService {
     await this.findOne(id);
 
     // Handle updates
-    const data: Prisma.ServiceUpdateInput = { ...updateServiceDto };
+    const data: Prisma.ServiceUpdateInput = {
+      name: updateServiceDto.name,
+      description: updateServiceDto.description,
+      price: updateServiceDto.price,
+      isActive: updateServiceDto.isActive,
+    };
+
+    if (Object.prototype.hasOwnProperty.call(updateServiceDto, 'jobId')) {
+      if (updateServiceDto.jobId) {
+        await this.assertJobAssignable(updateServiceDto.jobId);
+        data.job = { connect: { id: updateServiceDto.jobId } };
+      } else {
+        data.job = { disconnect: true };
+      }
+    }
 
     return this.databaseService.service.update({
       where: { id },
       data,
+      include: this.serviceInclude,
     });
   }
 
@@ -142,6 +189,7 @@ export class ServicesService {
       data: {
         deletedAt: null,
       },
+      include: this.serviceInclude,
     });
   }
 
@@ -153,6 +201,7 @@ export class ServicesService {
       data: {
         isActive: !service.isActive,
       },
+      include: this.serviceInclude,
     });
   }
 
@@ -211,6 +260,7 @@ export class ServicesService {
       orderBy,
       skip: PaginationHelper.getSkip(page, limit),
       take: limit,
+      include: this.serviceInclude,
     });
 
     return PaginationHelper.createPaginatedResponse(data, page, limit, total);
@@ -269,6 +319,7 @@ export class ServicesService {
         imageUrl: uploadResult.webUrl,
         cloudinaryPublicId: uploadResult.publicId,
       },
+      include: this.serviceInclude,
     });
   }
 
@@ -293,6 +344,7 @@ export class ServicesService {
         imageUrl: null,
         cloudinaryPublicId: null,
       },
+      include: this.serviceInclude,
     });
   }
 
@@ -315,8 +367,14 @@ export class ServicesService {
       isActive: createServiceDto.isActive || false,
     };
 
+    if (createServiceDto.jobId) {
+      await this.assertJobAssignable(createServiceDto.jobId);
+      data.job = { connect: { id: createServiceDto.jobId } };
+    }
+
     let createdService = await this.databaseService.service.create({
       data,
+      include: this.serviceInclude,
     });
 
     // If image provided, upload it
@@ -348,11 +406,26 @@ export class ServicesService {
     await this.findOne(id);
 
     // Handle updates
-    const data: Prisma.ServiceUpdateInput = { ...updateServiceDto };
+    const data: Prisma.ServiceUpdateInput = {
+      name: updateServiceDto.name,
+      description: updateServiceDto.description,
+      price: updateServiceDto.price,
+      isActive: updateServiceDto.isActive,
+    };
+
+    if (Object.prototype.hasOwnProperty.call(updateServiceDto, 'jobId')) {
+      if (updateServiceDto.jobId) {
+        await this.assertJobAssignable(updateServiceDto.jobId);
+        data.job = { connect: { id: updateServiceDto.jobId } };
+      } else {
+        data.job = { disconnect: true };
+      }
+    }
 
     let updatedService = await this.databaseService.service.update({
       where: { id },
       data,
+      include: this.serviceInclude,
     });
 
     // If new image provided, upload it

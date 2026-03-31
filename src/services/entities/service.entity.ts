@@ -59,4 +59,11 @@ export class ServiceEntity implements Service {
     nullable: true,
   })
   cloudinaryPublicId: string | null;
+
+  @ApiProperty({
+    example: '4a7ab730-dcdb-4d1d-af79-369411b9dee8',
+    required: false,
+    nullable: true,
+  })
+  jobId: string | null;
 }

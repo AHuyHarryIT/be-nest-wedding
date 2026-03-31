@@ -17,7 +17,10 @@ export class SelectionService {
     const take = Math.min(limit, 50);
     const skip = (page - 1) * take;
 
-    const baseWhere = config.where ?? {};
+    const baseWhere =
+      typeof config.where === 'function'
+        ? await config.where(query, this.prisma)
+        : (config.where ?? {});
 
     const searchWhere = search
       ? {
@@ -33,9 +36,9 @@ export class SelectionService {
       where,
       take,
       skip,
-      select: config.select
+      select: Array.isArray(config.select)
         ? Object.fromEntries(config.select.map((f) => [f, true]))
-        : {},
+        : (config.select ?? {}),
     });
 
     const total = await config.model(this.prisma).count({ where });

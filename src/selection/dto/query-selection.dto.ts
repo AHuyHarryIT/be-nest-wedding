@@ -20,4 +20,8 @@ export class SelectionQueryDto {
   @IsInt()
   @Min(1)
   limit = 20;
+
+  @IsOptional()
+  @IsString()
+  bookingId?: string;
 }

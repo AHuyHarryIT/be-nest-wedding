@@ -3,6 +3,127 @@ import { PrismaClient } from '../generated/prisma';
 import { faker } from '@faker-js/faker/locale/vi';
 
 const prisma = new PrismaClient();
+const DEFAULT_PASSWORD = '123456';
+
+const SEEDED_JOB_NAMES = {
+  leadPhotographer: 'Lead Photographer',
+  assistantPhotographer: 'Assistant Photographer',
+  videographer: 'Videographer',
+  photoEditor: 'Photo Editor',
+  bookingCoordinator: 'Booking Coordinator',
+} as const;
+
+const SEEDED_SERVICE_NAMES = {
+  leadPhotographerService: 'Lead Photographer Service',
+  photography: 'Photography',
+  videography: 'Videography',
+  photographyAlbum: 'Photography Album',
+  eventPlanning: 'Event Planning',
+} as const;
+
+const SEEDED_PACKAGE_NAME = 'Seeded Assignment Package';
+const SEEDED_BOOKING_ID = '11111111-1111-4111-8111-111111111111';
+const SEEDED_SESSION_TITLE = 'Seeded Ceremony Coverage';
+const SEEDED_CUSTOMER_PHONE = '0903319999';
+
+async function getPasswordHash() {
+  const saltRounds = process.env.HASH_SALT
+    ? parseInt(process.env.HASH_SALT, 10)
+    : 10;
+
+  return bcrypt.hash(DEFAULT_PASSWORD, saltRounds);
+}
+
+async function upsertServiceByName(data: {
+  name: string;
+  description?: string;
+  price: number;
+  isActive?: boolean;
+  jobId?: string | null;
+}) {
+  const existing = await prisma.service.findFirst({
+    where: { name: data.name },
+  });
+
+  if (existing) {
+    return prisma.service.update({
+      where: { id: existing.id },
+      data: {
+        description: data.description,
+        price: data.price,
+        isActive: data.isActive ?? true,
+        job: data.jobId
+          ? {
+              connect: { id: data.jobId },
+            }
+          : {
+              disconnect: true,
+            },
+      },
+    });
+  }
+
+  return prisma.service.create({
+    data: {
+      name: data.name,
+      description: data.description,
+      price: data.price,
+      isActive: data.isActive ?? true,
+      ...(data.jobId
+        ? {
+            job: {
+              connect: { id: data.jobId },
+            },
+          }
+        : {}),
+    },
+  });
+}
+
+async function upsertPackageByName(data: {
+  name: string;
+  description?: string;
+  price: number;
+  serviceIds: string[];
+}) {
+  const existing = await prisma.package.findFirst({
+    where: { name: data.name },
+  });
+
+  const pkg = existing
+    ? await prisma.package.update({
+        where: { id: existing.id },
+        data: {
+          description: data.description,
+          price: data.price,
+          isActive: true,
+        },
+      })
+    : await prisma.package.create({
+        data: {
+          name: data.name,
+          description: data.description,
+          price: data.price,
+          isActive: true,
+        },
+      });
+
+  await prisma.packageService.deleteMany({
+    where: { packageId: pkg.id },
+  });
+
+  if (data.serviceIds.length > 0) {
+    await prisma.packageService.createMany({
+      data: data.serviceIds.map((serviceId) => ({
+        packageId: pkg.id,
+        serviceId,
+      })),
+      skipDuplicates: true,
+    });
+  }
+
+  return pkg;
+}
 
 /**
  * Seed RBAC permissions and roles
@@ -302,11 +423,7 @@ async function seedRBAC() {
 async function seedSuperAdminUser(superAdminRoleId: string) {
   console.log('👤 Seeding super admin user...');
 
-  // Hash password using bcrypt
-  const saltRounds = process.env.HASH_SALT
-    ? parseInt(process.env.HASH_SALT, 10)
-    : 10;
-  const passwordHash = await bcrypt.hash('123456', saltRounds);
+  const passwordHash = await getPasswordHash();
   const superAdminUser = await prisma.staff.upsert({
     where: { phoneNumber: '0912345678' },
     update: {},
@@ -337,7 +454,7 @@ async function seedSuperAdminUser(superAdminRoleId: string) {
   console.log('  ✓ Created super admin user');
   console.log('    📧 Email: superadmin@example.com');
   console.log('    📱 Phone: 0912345678');
-  console.log('    🔑 Password: 123456');
+  console.log(`    🔑 Password: ${DEFAULT_PASSWORD}`);
 
   return superAdminUser;
 }
@@ -348,11 +465,7 @@ async function seedSuperAdminUser(superAdminRoleId: string) {
 async function seedAdminUser(adminRoleId: string) {
   console.log('👤 Seeding admin user...');
 
-  // Hash password using bcrypt
-  const saltRounds = process.env.HASH_SALT
-    ? parseInt(process.env.HASH_SALT, 10)
-    : 10;
-  const passwordHash = await bcrypt.hash('123456', saltRounds);
+  const passwordHash = await getPasswordHash();
   const adminUser = await prisma.staff.upsert({
     where: { phoneNumber: '0987654321' },
     update: {},
@@ -383,7 +496,7 @@ async function seedAdminUser(adminRoleId: string) {
   console.log('  ✓ Created admin user');
   console.log('    📧 Email: admin@example.com');
   console.log('    📱 Phone: 0987654321');
-  console.log('    🔑 Password: 123456');
+  console.log(`    🔑 Password: ${DEFAULT_PASSWORD}`);
 
   return adminUser;
 }
@@ -468,13 +581,11 @@ async function seedServices() {
     const basePrice = 10000;
     const price = basePrice + i * 5000; // Price increases by 5000 for each service
 
-    const service = await prisma.service.create({
-      data: {
-        name: uniqueName,
-        description: `Professional ${uniqueName.toLowerCase()} service for your wedding`,
-        price: price,
-        isActive: true,
-      },
+    const service = await upsertServiceByName({
+      name: uniqueName,
+      description: `Professional ${uniqueName.toLowerCase()} service for your wedding`,
+      price,
+      isActive: true,
     });
     createdServices.push(service);
   }
@@ -517,8 +628,10 @@ async function seedJobs() {
     },
   ];
 
+  const createdJobs: Record<string, { id: string; name: string }> = {};
+
   for (const job of jobs) {
-    await prisma.job.upsert({
+    const createdJob = await prisma.job.upsert({
       where: { name: job.name },
       update: {
         description: job.description,
@@ -526,9 +639,221 @@ async function seedJobs() {
       },
       create: job,
     });
+
+    createdJobs[job.name] = {
+      id: createdJob.id,
+      name: createdJob.name,
+    };
   }
 
   console.log(`  ✓ Created ${jobs.length} jobs`);
+  return createdJobs;
+}
+
+async function seedStaffUsers(
+  roleIds: {
+    adminRoleId: string;
+    managerRoleId: string;
+    staffRoleId: string;
+  },
+  jobsByName: Record<string, { id: string; name: string }>,
+  identityStaffIds: {
+    superAdminStaffId: string;
+    adminStaffId: string;
+  },
+) {
+  console.log('👥 Seeding staff users...');
+
+  const passwordHash = await getPasswordHash();
+  const seededStaffs = [
+    {
+      id: 'STF-PHOTO-001',
+      phoneNumber: '0903317001',
+      email: 'lead.photo@example.com',
+      firstName: 'Lead',
+      lastName: 'Photo',
+      roleIds: [roleIds.staffRoleId],
+      jobNames: [SEEDED_JOB_NAMES.leadPhotographer],
+    },
+    {
+      id: 'STF-PHOTO-002',
+      phoneNumber: '0903317002',
+      email: 'assist.photo@example.com',
+      firstName: 'Assist',
+      lastName: 'Photo',
+      roleIds: [roleIds.staffRoleId],
+      jobNames: [SEEDED_JOB_NAMES.assistantPhotographer],
+    },
+    {
+      id: 'STF-VIDEO-001',
+      phoneNumber: '0903317003',
+      email: 'video@example.com',
+      firstName: 'Video',
+      lastName: 'Team',
+      roleIds: [roleIds.staffRoleId],
+      jobNames: [SEEDED_JOB_NAMES.videographer],
+    },
+    {
+      id: 'STF-COORD-001',
+      phoneNumber: '0903317004',
+      email: 'coordinator@example.com',
+      firstName: 'Booking',
+      lastName: 'Coordinator',
+      roleIds: [roleIds.managerRoleId],
+      jobNames: [SEEDED_JOB_NAMES.bookingCoordinator],
+    },
+  ];
+
+  for (const seededStaff of seededStaffs) {
+    await prisma.staff.upsert({
+      where: { id: seededStaff.id },
+      update: {
+        phoneNumber: seededStaff.phoneNumber,
+        email: seededStaff.email,
+        firstName: seededStaff.firstName,
+        lastName: seededStaff.lastName,
+        isActive: true,
+      },
+      create: {
+        id: seededStaff.id,
+        phoneNumber: seededStaff.phoneNumber,
+        email: seededStaff.email,
+        firstName: seededStaff.firstName,
+        lastName: seededStaff.lastName,
+        passwordHash,
+        isActive: true,
+      },
+    });
+
+    await prisma.staffRole.deleteMany({
+      where: { staffId: seededStaff.id },
+    });
+
+    await prisma.staffRole.createMany({
+      data: seededStaff.roleIds.map((roleId) => ({
+        staffId: seededStaff.id,
+        roleId,
+      })),
+      skipDuplicates: true,
+    });
+
+    await prisma.staffJob.deleteMany({
+      where: { staffId: seededStaff.id },
+    });
+
+    await prisma.staffJob.createMany({
+      data: seededStaff.jobNames.map((jobName) => ({
+        staffId: seededStaff.id,
+        jobId: jobsByName[jobName].id,
+      })),
+      skipDuplicates: true,
+    });
+  }
+
+  await prisma.staffJob.upsert({
+    where: {
+      staffId_jobId: {
+        staffId: identityStaffIds.adminStaffId,
+        jobId: jobsByName[SEEDED_JOB_NAMES.leadPhotographer].id,
+      },
+    },
+    update: {},
+    create: {
+      staffId: identityStaffIds.adminStaffId,
+      jobId: jobsByName[SEEDED_JOB_NAMES.leadPhotographer].id,
+    },
+  });
+
+  await prisma.staffJob.upsert({
+    where: {
+      staffId_jobId: {
+        staffId: identityStaffIds.adminStaffId,
+        jobId: jobsByName[SEEDED_JOB_NAMES.bookingCoordinator].id,
+      },
+    },
+    update: {},
+    create: {
+      staffId: identityStaffIds.adminStaffId,
+      jobId: jobsByName[SEEDED_JOB_NAMES.bookingCoordinator].id,
+    },
+  });
+
+  await prisma.staffRole.upsert({
+    where: {
+      staffId_roleId: {
+        staffId: identityStaffIds.adminStaffId,
+        roleId: roleIds.adminRoleId,
+      },
+    },
+    update: {},
+    create: {
+      staffId: identityStaffIds.adminStaffId,
+      roleId: roleIds.adminRoleId,
+    },
+  });
+
+  await prisma.staffJob.upsert({
+    where: {
+      staffId_jobId: {
+        staffId: identityStaffIds.superAdminStaffId,
+        jobId: jobsByName[SEEDED_JOB_NAMES.photoEditor].id,
+      },
+    },
+    update: {},
+    create: {
+      staffId: identityStaffIds.superAdminStaffId,
+      jobId: jobsByName[SEEDED_JOB_NAMES.photoEditor].id,
+    },
+  });
+
+  console.log(`  ✓ Created ${seededStaffs.length + 2} staff users with managed jobs`);
+}
+
+async function seedManagedServices(
+  jobsByName: Record<string, { id: string; name: string }>,
+) {
+  console.log('🛠️ Assigning jobs to seed services...');
+
+  const configuredServices = await Promise.all([
+    upsertServiceByName({
+      name: SEEDED_SERVICE_NAMES.photography,
+      description: 'Professional photography service for your wedding',
+      price: 10000,
+      isActive: true,
+      jobId: jobsByName[SEEDED_JOB_NAMES.leadPhotographer].id,
+    }),
+    upsertServiceByName({
+      name: SEEDED_SERVICE_NAMES.videography,
+      description: 'Professional videography service for your wedding',
+      price: 15000,
+      isActive: true,
+      jobId: jobsByName[SEEDED_JOB_NAMES.videographer].id,
+    }),
+    upsertServiceByName({
+      name: SEEDED_SERVICE_NAMES.photographyAlbum,
+      description: 'Professional photography album service for your wedding',
+      price: 75000,
+      isActive: true,
+      jobId: jobsByName[SEEDED_JOB_NAMES.photoEditor].id,
+    }),
+    upsertServiceByName({
+      name: SEEDED_SERVICE_NAMES.eventPlanning,
+      description: 'Professional event planning service for your wedding',
+      price: 60000,
+      isActive: true,
+      jobId: jobsByName[SEEDED_JOB_NAMES.bookingCoordinator].id,
+    }),
+    upsertServiceByName({
+      name: SEEDED_SERVICE_NAMES.leadPhotographerService,
+      description: 'Service linked to a managed job',
+      price: 120000,
+      isActive: true,
+      jobId: jobsByName[SEEDED_JOB_NAMES.leadPhotographer].id,
+    }),
+  ]);
+
+  console.log(`  ✓ Configured ${configuredServices.length} services with required jobs`);
+  return Object.fromEntries(configuredServices.map((service) => [service.name, service]));
 }
 
 /**
@@ -597,15 +922,6 @@ async function seedPackages(
     const basePrice = 10000;
     const price = basePrice + i * 15000; // Price increases by 15000 for each package
 
-    const pkg = await prisma.package.create({
-      data: {
-        name: packageName,
-        description: `Complete wedding package with ${2 + Math.floor(i / 6)} services included`,
-        price: price,
-        isActive: true,
-      },
-    });
-
     // Add a subset of services to each package
     const servicesPerPackage = Math.min(2 + Math.floor(i / 5), services.length);
     const selectedServices = services.slice(
@@ -613,15 +929,12 @@ async function seedPackages(
       ((i * servicesPerPackage) % services.length) + servicesPerPackage,
     );
 
-    if (selectedServices.length > 0) {
-      await prisma.packageService.createMany({
-        data: selectedServices.map((service) => ({
-          packageId: pkg.id,
-          serviceId: service.id,
-        })),
-        skipDuplicates: true,
-      });
-    }
+    const pkg = await upsertPackageByName({
+      name: packageName,
+      description: `Complete wedding package with ${2 + Math.floor(i / 6)} services included`,
+      price,
+      serviceIds: selectedServices.map((service) => service.id),
+    });
 
     createdPackages.push(pkg);
   }
@@ -636,10 +949,7 @@ async function seedPackages(
 async function seedCustomerUsers() {
   console.log('👥 Seeding customer users...');
 
-  const saltRounds = process.env.HASH_SALT
-    ? parseInt(process.env.HASH_SALT, 10)
-    : 10;
-  const passwordHash = await bcrypt.hash('123456', saltRounds);
+  const passwordHash = await getPasswordHash();
 
   const createdCustomers: Array<{
     id: string;
@@ -678,8 +988,169 @@ async function seedCustomerUsers() {
     createdCustomers.push(customer);
   }
 
+  const seededCustomer = await prisma.customer.upsert({
+    where: { phoneNumber: SEEDED_CUSTOMER_PHONE },
+    update: {
+      email: 'seed.customer@example.com',
+      firstName: 'Seed',
+      lastName: 'Customer',
+      isActive: true,
+    },
+    create: {
+      phoneNumber: SEEDED_CUSTOMER_PHONE,
+      email: 'seed.customer@example.com',
+      firstName: 'Seed',
+      lastName: 'Customer',
+      passwordHash,
+      isActive: true,
+    },
+  });
+
+  createdCustomers.push(seededCustomer);
+
   console.log(`  ✓ Created ${createdCustomers.length} customer users`);
   return createdCustomers;
+}
+
+async function seedBookingFixtures(
+  customers: Array<{ id: string; phoneNumber: string }>,
+  servicesByName: Record<string, { id: string; price: number }>,
+  adminStaffId: string,
+) {
+  console.log('📅 Seeding booking fixtures...');
+
+  const seededCustomer =
+    customers.find((customer) => customer.phoneNumber === SEEDED_CUSTOMER_PHONE) ??
+    customers[0];
+
+  const packageRecord = await upsertPackageByName({
+    name: SEEDED_PACKAGE_NAME,
+    description: 'Seed package for staff assignment and session testing',
+    price: 210000,
+    serviceIds: [
+      servicesByName[SEEDED_SERVICE_NAMES.photography].id,
+      servicesByName[SEEDED_SERVICE_NAMES.eventPlanning].id,
+    ],
+  });
+
+  const booking = await prisma.booking.upsert({
+    where: { id: SEEDED_BOOKING_ID },
+    update: {
+      customerId: seededCustomer.id,
+      notes: 'Seed booking for service-job assignment and session testing',
+      status: 'PENDING',
+      eventDate: new Date('2026-12-20T09:00:00.000Z'),
+      totalPrice: 330000,
+      cancelledAt: null,
+      deletedAt: null,
+    },
+    create: {
+      id: SEEDED_BOOKING_ID,
+      customerId: seededCustomer.id,
+      notes: 'Seed booking for service-job assignment and session testing',
+      status: 'PENDING',
+      eventDate: new Date('2026-12-20T09:00:00.000Z'),
+      totalPrice: 330000,
+    },
+  });
+
+  await prisma.bookingPackage.deleteMany({
+    where: { bookingId: booking.id },
+  });
+  await prisma.bookingService.deleteMany({
+    where: { bookingId: booking.id },
+  });
+  await prisma.bookingStaff.deleteMany({
+    where: { bookingId: booking.id },
+  });
+
+  await prisma.bookingPackage.create({
+    data: {
+      bookingId: booking.id,
+      packageId: packageRecord.id,
+      price: packageRecord.price,
+      quantity: 1,
+    },
+  });
+
+  await prisma.bookingService.create({
+    data: {
+      bookingId: booking.id,
+      serviceId: servicesByName[SEEDED_SERVICE_NAMES.leadPhotographerService].id,
+      price: servicesByName[SEEDED_SERVICE_NAMES.leadPhotographerService].price,
+      quantity: 1,
+    },
+  });
+
+  await prisma.bookingStaff.create({
+    data: {
+      bookingId: booking.id,
+      staffId: adminStaffId,
+      job: 'Lead photographer',
+    },
+  });
+
+  const existingSession = await prisma.bookingSession.findFirst({
+    where: {
+      bookingId: booking.id,
+      title: SEEDED_SESSION_TITLE,
+    },
+  });
+
+  const session = existingSession
+    ? await prisma.bookingSession.update({
+        where: { id: existingSession.id },
+        data: {
+          locationName: 'Seed Ceremony Hall',
+          address: '123 Seed Street, Ho Chi Minh City',
+          startsAt: new Date('2026-12-20T09:00:00.000Z'),
+          endsAt: new Date('2026-12-20T11:00:00.000Z'),
+          status: 'PENDING',
+        },
+      })
+    : await prisma.bookingSession.create({
+        data: {
+          bookingId: booking.id,
+          title: SEEDED_SESSION_TITLE,
+          locationName: 'Seed Ceremony Hall',
+          address: '123 Seed Street, Ho Chi Minh City',
+          startsAt: new Date('2026-12-20T09:00:00.000Z'),
+          endsAt: new Date('2026-12-20T11:00:00.000Z'),
+          status: 'PENDING',
+        },
+      });
+
+  await prisma.sessionService.deleteMany({
+    where: { sessionId: session.id },
+  });
+  await prisma.sessionStaff.deleteMany({
+    where: { sessionId: session.id },
+  });
+
+  await prisma.sessionService.createMany({
+    data: [
+      {
+        sessionId: session.id,
+        serviceId: servicesByName[SEEDED_SERVICE_NAMES.photography].id,
+        price: servicesByName[SEEDED_SERVICE_NAMES.photography].price,
+      },
+      {
+        sessionId: session.id,
+        serviceId: servicesByName[SEEDED_SERVICE_NAMES.leadPhotographerService].id,
+        price: servicesByName[SEEDED_SERVICE_NAMES.leadPhotographerService].price,
+      },
+    ],
+    skipDuplicates: true,
+  });
+
+  await prisma.sessionStaff.create({
+    data: {
+      sessionId: session.id,
+      staffId: adminStaffId,
+    },
+  });
+
+  console.log(`  ✓ Seeded booking fixture ${booking.id} with package, service, staff assignment, and session`);
 }
 
 /**
@@ -693,22 +1164,40 @@ async function main() {
     const roles = await seedRBAC();
 
     // Seed super admin user with super-admin role
-    await seedSuperAdminUser(roles.superAdminRole.id);
+    const superAdminUser = await seedSuperAdminUser(roles.superAdminRole.id);
 
     // Seed admin user with admin role
-    await seedAdminUser(roles.adminRole.id);
+    const adminUser = await seedAdminUser(roles.adminRole.id);
 
     // Seed jobs
-    await seedJobs();
+    const jobs = await seedJobs();
+
+    // Seed staff users and managed jobs
+    await seedStaffUsers(
+      {
+        adminRoleId: roles.adminRole.id,
+        managerRoleId: roles.managerRole.id,
+        staffRoleId: roles.staffRole.id,
+      },
+      jobs,
+      {
+        superAdminStaffId: superAdminUser.id,
+        adminStaffId: adminUser.id,
+      },
+    );
 
     // Seed customer users
-    await seedCustomerUsers();
+    const customers = await seedCustomerUsers();
 
     // Seed services
     const services = await seedServices();
+    const configuredServices = await seedManagedServices(jobs);
 
     // Seed packages
     await seedPackages(services);
+
+    // Seed booking/session fixtures
+    await seedBookingFixtures(customers, configuredServices, adminUser.id);
 
     console.log('\n✅ Database seeding completed successfully!');
   } catch (error) {

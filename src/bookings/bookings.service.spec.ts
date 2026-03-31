@@ -49,6 +49,12 @@ describe('BookingsService', () => {
     assignedStaffs: [],
   };
 
+  const makeEligibleStaff = (id: string) => ({
+    id,
+    roles: [{ roleId: 'role-1' }],
+    staffJobs: [{ jobId: 'job-1' }],
+  });
+
   beforeEach(async () => {
     jest.resetAllMocks();
 
@@ -151,7 +157,9 @@ describe('BookingsService', () => {
     databaseServiceMock.service.findMany.mockResolvedValue([
       { id: 'service-1', price: 50000 },
     ]);
-    databaseServiceMock.staff.findMany.mockResolvedValue([{ id: 'STF-001' }]);
+    databaseServiceMock.staff.findMany.mockResolvedValue([
+      makeEligibleStaff('STF-001'),
+    ]);
     databaseServiceMock.booking.create.mockResolvedValue({
       ...baseBooking,
       totalPrice: 300000,
@@ -235,7 +243,9 @@ describe('BookingsService', () => {
           },
         ],
       });
-    databaseServiceMock.staff.findMany.mockResolvedValue([{ id: 'STF-002' }]);
+    databaseServiceMock.staff.findMany.mockResolvedValue([
+      makeEligibleStaff('STF-002'),
+    ]);
     databaseServiceMock.booking.update.mockResolvedValue({
       ...baseBooking,
       status: BookingStatus.CONFIRMED,
@@ -337,7 +347,9 @@ describe('BookingsService', () => {
           },
         ],
       });
-    databaseServiceMock.staff.findMany.mockResolvedValue([{ id: 'STF-003' }]);
+    databaseServiceMock.staff.findMany.mockResolvedValue([
+      makeEligibleStaff('STF-003'),
+    ]);
     databaseServiceMock.booking.update.mockResolvedValue({
       ...baseBooking,
       status: BookingStatus.CONFIRMED,
@@ -399,7 +411,9 @@ describe('BookingsService', () => {
           },
         ],
       });
-    databaseServiceMock.staff.findMany.mockResolvedValue([{ id: 'STF-004' }]);
+    databaseServiceMock.staff.findMany.mockResolvedValue([
+      makeEligibleStaff('STF-004'),
+    ]);
     databaseServiceMock.booking.update.mockResolvedValue({
       ...baseBooking,
       status: BookingStatus.CONFIRMED,
@@ -443,6 +457,57 @@ describe('BookingsService', () => {
         job: 'Main photographer',
       }),
     ]);
+  });
+
+  it('rejects assigning staff who do not have both a role and a managed job', async () => {
+    databaseServiceMock.booking.findFirst.mockResolvedValue({
+      ...baseBooking,
+      status: BookingStatus.CONFIRMED,
+      assignedStaffs: [],
+    });
+    databaseServiceMock.staff.findMany.mockResolvedValue([
+      {
+        id: 'STF-005',
+        roles: [],
+        staffJobs: [{ jobId: 'job-1' }],
+      },
+    ]);
+
+    await expect(
+      service.assignStaff('booking-1', ['STF-005']),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(databaseServiceMock.booking.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects assigning staff whose managed jobs do not match the booking service jobs', async () => {
+    databaseServiceMock.booking.findFirst.mockResolvedValue({
+      ...baseBooking,
+      status: BookingStatus.CONFIRMED,
+      services: [
+        {
+          serviceId: 'service-1',
+          service: {
+            jobId: 'job-photo',
+          },
+        },
+      ],
+      packages: [],
+      assignedStaffs: [],
+    });
+    databaseServiceMock.staff.findMany.mockResolvedValue([
+      {
+        id: 'STF-006',
+        roles: [{ roleId: 'role-1' }],
+        staffJobs: [{ jobId: 'job-video' }],
+      },
+    ]);
+
+    await expect(
+      service.assignStaff('booking-1', ['STF-006']),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(databaseServiceMock.booking.update).not.toHaveBeenCalled();
   });
 
   it('cancels non-completed bookings through the dedicated cancel flow', async () => {

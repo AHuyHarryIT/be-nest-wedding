@@ -77,4 +77,24 @@ export class ViewServiceDto {
   @IsDate()
   @Type(() => Date)
   deleted_at: Date | null;
+
+  @ApiPropertyOptional({
+    description: 'Managed job ID required for this service',
+    example: '4a7ab730-dcdb-4d1d-af79-369411b9dee8',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsUUID('4')
+  jobId?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'Managed job summary',
+    example: {
+      id: '4a7ab730-dcdb-4d1d-af79-369411b9dee8',
+      name: 'Photographer',
+    },
+    nullable: true,
+  })
+  @IsOptional()
+  job?: { id: string; name: string } | null;
 }

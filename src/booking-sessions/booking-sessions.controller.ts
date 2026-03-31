@@ -6,10 +6,12 @@ import {
   Patch,
   Param,
   Delete,
+  Query,
 } from '@nestjs/common';
 import { BookingSessionsService } from './booking-sessions.service';
 import { CreateBookingSessionDto } from './dto/create-booking-session.dto';
 import { UpdateBookingSessionDto } from './dto/update-booking-session.dto';
+import { QueryBookingSessionDto } from './dto/query-booking-session.dto';
 
 @Controller('booking-sessions')
 export class BookingSessionsController {
@@ -23,8 +25,8 @@ export class BookingSessionsController {
   }
 
   @Get()
-  findAll() {
-    return this.bookingSessionsService.findAll();
+  findAll(@Query() query: QueryBookingSessionDto) {
+    return this.bookingSessionsService.findAll(query);
   }
 
   @Get(':id')

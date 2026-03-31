@@ -6,6 +6,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  IsUUID,
   MaxLength,
   Min,
 } from 'class-validator';
@@ -64,4 +65,19 @@ export class CreateServiceDto {
     return Boolean(value);
   })
   isActive?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Optional managed job required for this service',
+    example: '4a7ab730-dcdb-4d1d-af79-369411b9dee8',
+    nullable: true,
+  })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === '' || value === null || value === undefined) {
+      return null;
+    }
+    return value;
+  })
+  @IsUUID('4', { message: 'Job ID must be a valid UUID' })
+  jobId?: string | null;
 }
