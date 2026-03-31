@@ -30,6 +30,12 @@ async function seedRBAC() {
     { key: 'users:update', description: 'Update user information' },
     { key: 'users:delete', description: 'Delete users' },
 
+    // Customer permissions
+    { key: 'customers:create', description: 'Create new customers' },
+    { key: 'customers:read', description: 'View customers and their details' },
+    { key: 'customers:update', description: 'Update customer information' },
+    { key: 'customers:delete', description: 'Delete customers' },
+
     // Product permissions
     { key: 'products:create', description: 'Create new products' },
     { key: 'products:read', description: 'View products' },
@@ -137,7 +143,7 @@ async function seedRBAC() {
   const adminPermissions = await prisma.permission.findMany({
     where: {
       key: {
-        notIn: ['users:delete', 'permissions:delete'],
+        notIn: ['permissions:delete'],
       },
     },
   });
@@ -284,6 +290,7 @@ async function seedSuperAdminUser(superAdminRoleId: string) {
     where: { phoneNumber: '0912345678' },
     update: {},
     create: {
+      id: 'STF-SUPERADMIN',
       phoneNumber: '0912345678',
       email: 'superadmin@example.com',
       firstName: 'Super',
@@ -329,6 +336,7 @@ async function seedAdminUser(adminRoleId: string) {
     where: { phoneNumber: '0987654321' },
     update: {},
     create: {
+      id: 'STF-ADMIN',
       phoneNumber: '0987654321',
       email: 'admin@example.com',
       firstName: 'Admin',

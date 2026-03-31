@@ -17,6 +17,7 @@ import { PaymentsModule } from './payments/payments.module';
 import { OrdersModule } from './orders/orders.module';
 import { AlbumsModule } from './albums/albums.module';
 import { UsersModule } from './users/users.module';
+import { CustomersModule } from './customers/customers.module';
 import { SelectionModule } from './selection/selection.module';
 import { ChatModule } from './chat/chat.module';
 import { AutoRefreshMiddleware } from './auth/auto-refresh.middleware';
@@ -44,6 +45,7 @@ import { AutoRefreshMiddleware } from './auth/auto-refresh.middleware';
     PaymentsModule,
     OrdersModule,
     AlbumsModule,
+    CustomersModule,
     SelectionModule,
     ChatModule,
   ],

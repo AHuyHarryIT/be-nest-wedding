@@ -18,10 +18,10 @@ export class QueryAlbumDto extends PaginationRequestDto {
   search?: string;
 
   @ApiPropertyOptional({
-    description: 'Filter by owner user ID',
-    example: 'uuid-1234',
+    description: 'Filter by owner staff ID',
+    example: 'STF-ADMIN',
   })
-  @IsUUID('4')
+  @IsString()
   @IsOptional()
   ownerId?: string;
 

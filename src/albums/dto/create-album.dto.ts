@@ -11,11 +11,10 @@ import {
 
 export class CreateAlbumDto {
   @ApiPropertyOptional({
-    description: 'Owner user ID (UUID format)',
-    example: 'uuid-1234',
-    format: 'uuid',
+    description: 'Owner staff ID',
+    example: 'STF-ADMIN',
   })
-  @IsUUID('4', { message: 'Owner user ID must be a valid UUID' })
+  @IsString({ message: 'Owner user ID must be a string' })
   @IsOptional()
   ownerUserId?: string;
 

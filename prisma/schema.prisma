@@ -153,7 +153,7 @@ model Customer {
 }
 
 model Staff {
-  id                   String          @id @default(uuid())
+  id                   String          @id
   phoneNumber          String          @unique @map("phone_number")
   passwordHash         String          @map("password_hash")
   firstName            String?         @map("first_name")
@@ -163,9 +163,6 @@ model Staff {
   isActive             Boolean         @default(true) @map("is_active")
   refreshToken         String?         @map("refresh_token")
   refreshTokenExpiry   DateTime?       @map("refresh_token_expiry")
-  employeeCode         String?         @unique @map("employee_code")
-  department           String?
-  jobTitle             String?         @map("job_title")
   // relation
   roles                StaffRole[]
   sessions             SessionStaff[]

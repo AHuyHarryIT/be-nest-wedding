@@ -20,6 +20,18 @@ import {
   UploadImageToAlbumDto,
 } from './dto';
 
+const albumOwnerSelect = {
+  id: true,
+  phoneNumber: true,
+  firstName: true,
+  lastName: true,
+  email: true,
+  avatarUrl: true,
+  isActive: true,
+  createdAt: true,
+  updatedAt: true,
+} satisfies Prisma.StaffSelect;
+
 @Injectable()
 export class AlbumsService {
   constructor(
@@ -115,7 +127,11 @@ export class AlbumsService {
 
     return this.databaseService.album.create({
       data,
-      include: { owner: true, booking: true, coverFile: true },
+      include: {
+        owner: { select: albumOwnerSelect },
+        booking: true,
+        coverFile: true,
+      },
     });
   }
 
@@ -161,7 +177,7 @@ export class AlbumsService {
     const data = await this.databaseService.album.findMany({
       where,
       include: {
-        owner: true,
+        owner: { select: albumOwnerSelect },
         booking: true,
         coverFile: true,
         _count: { select: { files: true } },
@@ -177,7 +193,10 @@ export class AlbumsService {
   async findPublic() {
     return this.databaseService.album.findMany({
       where: { isPublic: true, deletedAt: null },
-      include: { owner: true, coverFile: true },
+      include: {
+        owner: { select: albumOwnerSelect },
+        coverFile: true,
+      },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -189,7 +208,7 @@ export class AlbumsService {
         deletedAt: null,
       },
       include: {
-        owner: true,
+        owner: { select: albumOwnerSelect },
         booking: true,
         coverFile: true,
         files: { include: { file: true }, orderBy: { sortOrder: 'asc' } },
@@ -212,7 +231,7 @@ export class AlbumsService {
     const album = await this.databaseService.album.findFirst({
       where: { id, deletedAt: null },
       include: {
-        owner: true,
+        owner: { select: albumOwnerSelect },
         booking: true,
         coverFile: true,
         files: {
@@ -285,7 +304,11 @@ export class AlbumsService {
     return this.databaseService.album.update({
       where: { id },
       data,
-      include: { owner: true, booking: true, coverFile: true },
+      include: {
+        owner: { select: albumOwnerSelect },
+        booking: true,
+        coverFile: true,
+      },
     });
   }
 
@@ -328,7 +351,7 @@ export class AlbumsService {
     const data = await this.databaseService.album.findMany({
       where,
       include: {
-        owner: true,
+        owner: { select: albumOwnerSelect },
         booking: true,
         coverFile: true,
         _count: { select: { files: true } },
@@ -353,7 +376,11 @@ export class AlbumsService {
     return this.databaseService.album.update({
       where: { id },
       data: { deletedAt: null },
-      include: { owner: true, booking: true, coverFile: true },
+      include: {
+        owner: { select: albumOwnerSelect },
+        booking: true,
+        coverFile: true,
+      },
     });
   }
 

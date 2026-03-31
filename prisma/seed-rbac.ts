@@ -28,6 +28,12 @@ async function seedRBACPermissions() {
     { key: 'users:update', description: 'Update user information' },
     { key: 'users:delete', description: 'Delete users' },
 
+    // Customer permissions
+    { key: 'customers:create', description: 'Create new customers' },
+    { key: 'customers:read', description: 'View customers and their details' },
+    { key: 'customers:update', description: 'Update customer information' },
+    { key: 'customers:delete', description: 'Delete customers' },
+
     // Product permissions
     { key: 'products:create', description: 'Create new products' },
     { key: 'products:read', description: 'View products' },
@@ -113,7 +119,7 @@ async function seedRBACPermissions() {
   const adminPermissions = await prisma.permission.findMany({
     where: {
       key: {
-        notIn: ['users:delete', 'permissions:delete'],
+        notIn: ['permissions:delete'],
       },
     },
   });

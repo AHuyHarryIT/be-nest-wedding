@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
+import * as crypto from 'crypto';
 import { Prisma } from 'generated/prisma';
 import { DatabaseService } from 'src/database/database.service';
 import { PaginationHelper } from '../common/utils/pagination.helper';
@@ -24,6 +25,22 @@ export class UsersService {
     private readonly authIdentityService: AuthIdentityService,
   ) {}
 
+  private async generateStaffId(): Promise<string> {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const candidate = `STF-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
+      const existing = await this.databaseService.staff.findUnique({
+        where: { id: candidate },
+        select: { id: true },
+      });
+
+      if (!existing) {
+        return candidate;
+      }
+    }
+
+    throw new BadRequestException('Failed to generate a unique staff ID');
+  }
+
   async updateHashRefreshToken({
     userId,
     hashRefreshToken,
@@ -40,7 +57,7 @@ export class UsersService {
   }
 
   async create(createUserDto: CreateUserDto) {
-    const { phoneNumber, password, roleIds, ...userData } = createUserDto;
+    const { id, phoneNumber, password, roleIds, ...userData } = createUserDto;
 
     await this.authIdentityService.assertPhoneNumberAvailable(phoneNumber);
 
@@ -48,7 +65,11 @@ export class UsersService {
       await this.authIdentityService.assertEmailAvailable(userData.email);
     }
 
-    const saltRounds = this.configService.get<number>('HASH_SALT', 10);
+    const staffId = id?.trim() || (await this.generateStaffId());
+
+    await this.authIdentityService.assertStaffIdAvailable(staffId);
+
+    const saltRounds = Number(this.configService.get('HASH_SALT', 10)) || 10;
     const passwordHash = await bcrypt.hash(password, saltRounds);
 
     if (roleIds && roleIds.length > 0) {
@@ -61,8 +82,9 @@ export class UsersService {
       }
     }
 
-    return await this.databaseService.staff.create({
+    const createdUser = await this.databaseService.staff.create({
       data: {
+        id: staffId,
         phoneNumber,
         passwordHash,
         ...userData,
@@ -90,6 +112,18 @@ export class UsersService {
         },
       },
     });
+
+    return {
+      id: createdUser.id,
+      phoneNumber: createdUser.phoneNumber,
+      firstName: createdUser.firstName,
+      lastName: createdUser.lastName,
+      email: createdUser.email,
+      isActive: createdUser.isActive,
+      createdAt: createdUser.createdAt,
+      updatedAt: createdUser.updatedAt,
+      roles: createdUser.roles.map((staffRole) => staffRole.role),
+    };
   }
 
   async findAll(params?: QueryUserDto) {
@@ -105,12 +139,10 @@ export class UsersService {
       ? {
           OR: [
             { phoneNumber: { contains: search, mode: 'insensitive' } },
+            { id: { contains: search, mode: 'insensitive' } },
             { email: { contains: search, mode: 'insensitive' } },
             { firstName: { contains: search, mode: 'insensitive' } },
             { lastName: { contains: search, mode: 'insensitive' } },
-            { employeeCode: { contains: search, mode: 'insensitive' } },
-            { department: { contains: search, mode: 'insensitive' } },
-            { jobTitle: { contains: search, mode: 'insensitive' } },
           ],
         }
       : {};
@@ -133,9 +165,6 @@ export class UsersService {
         lastName: true,
         email: true,
         isActive: true,
-        employeeCode: true,
-        department: true,
-        jobTitle: true,
         createdAt: true,
         updatedAt: true,
         roles: {
@@ -175,9 +204,6 @@ export class UsersService {
         lastName: true,
         email: true,
         isActive: true,
-        employeeCode: true,
-        department: true,
-        jobTitle: true,
         createdAt: true,
         updatedAt: true,
         roles: {
@@ -260,9 +286,23 @@ export class UsersService {
       await this.authIdentityService.assertEmailAvailable(updateUserDto.email);
     }
 
+    const nextStaffId = updateUserDto.id?.trim();
+
+    if (nextStaffId && nextStaffId !== user.id) {
+      await this.authIdentityService.assertStaffIdAvailable(
+        nextStaffId,
+        user.id,
+      );
+    }
+
+    const updateData = {
+      ...updateUserDto,
+      ...(nextStaffId ? { id: nextStaffId } : {}),
+    };
+
     return await this.databaseService.staff.update({
       where: { id },
-      data: updateUserDto,
+      data: updateData,
       select: {
         id: true,
         phoneNumber: true,
@@ -270,9 +310,6 @@ export class UsersService {
         lastName: true,
         email: true,
         isActive: true,
-        employeeCode: true,
-        department: true,
-        jobTitle: true,
         createdAt: true,
         updatedAt: true,
       },

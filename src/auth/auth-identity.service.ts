@@ -59,6 +59,25 @@ export class AuthIdentityService {
     }
   }
 
+  async assertStaffIdAvailable(
+    staffId: string,
+    excludeStaffId?: string,
+  ): Promise<void> {
+    const staff = await this.databaseService.staff.findFirst({
+      where: excludeStaffId
+        ? {
+            id: staffId,
+            NOT: { id: excludeStaffId },
+          }
+        : { id: staffId },
+      select: { id: true },
+    });
+
+    if (staff) {
+      throw new ConflictException('User with this staff ID already exists');
+    }
+  }
+
   async findByPhoneNumber(
     phoneNumber: string,
   ): Promise<AuthIdentityRecord | null> {

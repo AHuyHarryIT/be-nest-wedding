@@ -41,6 +41,17 @@ export class UpdateUserDto {
   email?: string | null;
 
   @ApiPropertyOptional({
+    description: 'Staff ID code',
+    example: 'STF-001',
+    nullable: true,
+    maxLength: 50,
+  })
+  @IsString({ message: 'Staff ID must be a string' })
+  @IsOptional()
+  @MaxLength(50, { message: 'Staff ID cannot exceed 50 characters' })
+  id?: string;
+
+  @ApiPropertyOptional({
     description: 'User active status',
     example: true,
   })

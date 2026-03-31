@@ -12,9 +12,9 @@ import { Type } from 'class-transformer';
 class ViewUserDto {
   @ApiProperty({
     description: 'User ID',
-    example: 'uuid-1234',
+    example: 'STF-ADMIN',
   })
-  @IsUUID('4')
+  @IsString()
   id: string;
 
   @ApiProperty({
@@ -127,9 +127,9 @@ export class ViewAlbumDto {
 
   @ApiProperty({
     description: 'Owner user ID',
-    example: 'uuid-user-1',
+    example: 'STF-ADMIN',
   })
-  @IsUUID('4')
+  @IsString()
   ownerUserId: string;
 
   @ApiPropertyOptional({

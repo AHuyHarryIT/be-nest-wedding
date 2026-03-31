@@ -188,7 +188,7 @@ export class CreateBookingSessionDto {
   })
   @IsOptional()
   @IsArray()
-  @IsUUID('4', { each: true })
+  @IsString({ each: true })
   staffIds?: string[];
 
   @ApiProperty({

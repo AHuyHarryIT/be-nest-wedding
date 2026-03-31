@@ -1,8 +1,8 @@
-import { IsOptional, IsBoolean, IsUUID } from 'class-validator';
+import { IsOptional, IsBoolean, IsString } from 'class-validator';
 
 export class UpdateChatDto {
   @IsOptional()
-  @IsUUID()
+  @IsString()
   staffId?: string;
 
   @IsOptional()
