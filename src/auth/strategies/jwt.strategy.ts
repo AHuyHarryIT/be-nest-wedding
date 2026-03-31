@@ -28,11 +28,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     id: string;
     userId: string;
     phoneNumber?: string;
+    userType: 'customer' | 'staff';
   } {
     return {
       id: payload.sub,
       userId: payload.sub,
       phoneNumber: payload.phoneNumber,
+      userType: payload.userType,
     };
   }
 }

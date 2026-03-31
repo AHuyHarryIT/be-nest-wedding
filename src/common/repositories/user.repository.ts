@@ -3,21 +3,17 @@ import { DatabaseService } from '../../database/database.service';
 import { BaseRepository } from './base.repository';
 
 /**
- * User Repository - Handles all user data operations
- * Manages authentication, roles, permissions, and profiles
+ * Staff User Repository - Handles staff identity data operations.
  */
 @Injectable()
 export class UserRepository extends BaseRepository<any> {
   constructor(protected db: DatabaseService) {
     super(db);
-    this.modelName = 'user';
+    this.modelName = 'staff';
   }
 
-  /**
-   * Find user by phone number (unique field)
-   */
   async findByPhoneNumber(phoneNumber: string) {
-    return this.db.user.findUnique({
+    return this.db.staff.findUnique({
       where: { phoneNumber },
       include: {
         roles: {
@@ -31,11 +27,8 @@ export class UserRepository extends BaseRepository<any> {
     });
   }
 
-  /**
-   * Find user by ID with full profile and permissions
-   */
   async findByIdWithPermissions(userId: string) {
-    const user = await this.db.user.findUnique({
+    const user = await this.db.staff.findUnique({
       where: { id: userId },
       include: {
         roles: {
@@ -49,10 +42,6 @@ export class UserRepository extends BaseRepository<any> {
             },
           },
         },
-        bookings: {
-          take: 5,
-          orderBy: { createdAt: 'desc' },
-        },
         files: {
           take: 5,
           orderBy: { createdAt: 'desc' },
@@ -62,7 +51,6 @@ export class UserRepository extends BaseRepository<any> {
 
     if (!user) return null;
 
-    // Extract permissions from roles
     const permissions = user.roles.flatMap((ur) =>
       ur.role.permissions.map((rp) => rp.permission.key),
     );
@@ -73,11 +61,8 @@ export class UserRepository extends BaseRepository<any> {
     };
   }
 
-  /**
-   * Find user with minimal data (for auth/sessions)
-   */
   async findByIdLean(userId: string) {
-    return this.db.user.findUnique({
+    return this.db.staff.findUnique({
       where: { id: userId },
       select: {
         id: true,
@@ -90,9 +75,6 @@ export class UserRepository extends BaseRepository<any> {
     });
   }
 
-  /**
-   * Find active users with pagination
-   */
   async findActive(params?: { skip?: number; take?: number; search?: string }) {
     const where: any = { isActive: true };
 
@@ -105,7 +87,7 @@ export class UserRepository extends BaseRepository<any> {
       ];
     }
 
-    return this.db.user.findMany({
+    return this.db.staff.findMany({
       where,
       include: {
         roles: { include: { role: true } },
@@ -116,14 +98,11 @@ export class UserRepository extends BaseRepository<any> {
     });
   }
 
-  /**
-   * Find users by role
-   */
   async findByRole(
     roleName: string,
     params?: { skip?: number; take?: number },
   ) {
-    return this.db.user.findMany({
+    return this.db.staff.findMany({
       where: {
         roles: {
           some: {
@@ -139,13 +118,10 @@ export class UserRepository extends BaseRepository<any> {
     });
   }
 
-  /**
-   * Add role to user
-   */
   async addRole(userId: string, roleId: string) {
-    return this.db.userRole.create({
+    return this.db.staffRole.create({
       data: {
-        userId,
+        staffId: userId,
         roleId,
       },
       include: {
@@ -154,29 +130,23 @@ export class UserRepository extends BaseRepository<any> {
     });
   }
 
-  /**
-   * Remove role from user
-   */
   async removeRole(userId: string, roleId: string) {
-    return this.db.userRole.delete({
+    return this.db.staffRole.delete({
       where: {
-        userId_roleId: {
-          userId,
+        staffId_roleId: {
+          staffId: userId,
           roleId,
         },
       },
     });
   }
 
-  /**
-   * Check if user has permission
-   */
   async hasPermission(userId: string, permissionKey: string): Promise<boolean> {
     const permission = await this.db.rolePermission.findFirst({
       where: {
         role: {
-          users: {
-            some: { userId },
+          staff: {
+            some: { staffId: userId },
           },
         },
         permission: { key: permissionKey },
@@ -186,13 +156,10 @@ export class UserRepository extends BaseRepository<any> {
     return !!permission;
   }
 
-  /**
-   * Check if user has role
-   */
   async hasRole(userId: string, roleName: string): Promise<boolean> {
-    const userRole = await this.db.userRole.findFirst({
+    const userRole = await this.db.staffRole.findFirst({
       where: {
-        userId,
+        staffId: userId,
         role: { name: roleName },
       },
     });
@@ -200,15 +167,12 @@ export class UserRepository extends BaseRepository<any> {
     return !!userRole;
   }
 
-  /**
-   * Update refresh token
-   */
   async updateRefreshToken(
     userId: string,
     token: string | null,
     expiresAt?: Date,
   ) {
-    return this.db.user.update({
+    return this.db.staff.update({
       where: { id: userId },
       data: {
         refreshToken: token,
@@ -217,37 +181,24 @@ export class UserRepository extends BaseRepository<any> {
     });
   }
 
-  /**
-   * Get user statistics
-   */
   async getStatistics() {
-    const [total, active, inactive, withBookings] = await Promise.all([
-      this.db.user.count(),
-      this.db.user.count({ where: { isActive: true } }),
-      this.db.user.count({ where: { isActive: false } }),
-      this.db.user.count({
-        where: {
-          bookings: {
-            some: {},
-          },
-        },
-      }),
+    const [total, active, inactive] = await Promise.all([
+      this.db.staff.count(),
+      this.db.staff.count({ where: { isActive: true } }),
+      this.db.staff.count({ where: { isActive: false } }),
     ]);
 
     return {
       total,
       active,
       inactive,
-      withBookings,
+      withBookings: 0,
       activePercentage: total > 0 ? (active / total) * 100 : 0,
     };
   }
 
-  /**
-   * Deactivate user
-   */
   async deactivate(userId: string) {
-    return this.db.user.update({
+    return this.db.staff.update({
       where: { id: userId },
       data: {
         isActive: false,
@@ -257,11 +208,8 @@ export class UserRepository extends BaseRepository<any> {
     });
   }
 
-  /**
-   * Activate user
-   */
   async activate(userId: string) {
-    return this.db.user.update({
+    return this.db.staff.update({
       where: { id: userId },
       data: { isActive: true },
     });

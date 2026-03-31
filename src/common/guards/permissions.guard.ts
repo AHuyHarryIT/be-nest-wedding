@@ -36,10 +36,14 @@ export class PermissionsGuard implements CanActivate {
       throw new UnauthorizedException('User not authenticated');
     }
 
+    if (user.userType !== 'staff') {
+      throw new ForbiddenException('Only staff users can access this resource');
+    }
+
     // Get user's roles with their permissions
-    const userRoles = await this.databaseService.userRole.findMany({
+    const userRoles = await this.databaseService.staffRole.findMany({
       where: {
-        userId: user.userId,
+        staffId: user.userId,
       },
       include: {
         role: {

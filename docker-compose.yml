@@ -7,6 +7,8 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-appdb}
+    ports:
+      - "5432:5432"
     volumes:
       - backend_db_data:/var/lib/postgresql/data
     healthcheck:
@@ -21,6 +23,10 @@ services:
       dockerfile: Dockerfile.dev
     container_name: studio-hamy-backend-dev
     restart: unless-stopped
+    command:
+      - sh
+      - -c
+      - if [ ! -d node_modules/.bin ]; then npm ci; fi && export DATABASE_URL="postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-appdb}" && npx prisma generate && npm run start:dev
     env_file:
       - .env.dev
     depends_on:

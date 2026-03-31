@@ -8,7 +8,7 @@ describe('BookingsService', () => {
   let service: BookingsService;
 
   const databaseServiceMock = {
-    user: {
+    customer: {
       findUnique: jest.fn(),
     },
     package: {
@@ -17,7 +17,7 @@ describe('BookingsService', () => {
     service: {
       findMany: jest.fn(),
     },
-    userRole: {
+    staffUserRole: {
       findMany: jest.fn(),
     },
     booking: {
@@ -45,7 +45,7 @@ describe('BookingsService', () => {
   });
 
   it('scopes booking lists to the authenticated customer', async () => {
-    databaseServiceMock.userRole.findMany.mockResolvedValue([]);
+    databaseServiceMock.staffUserRole.findMany.mockResolvedValue([]);
     databaseServiceMock.booking.count.mockResolvedValue(1);
     databaseServiceMock.booking.findMany.mockResolvedValue([
       {
@@ -76,7 +76,7 @@ describe('BookingsService', () => {
   });
 
   it('allows staff users to filter bookings by any customer', async () => {
-    databaseServiceMock.userRole.findMany.mockResolvedValue([
+    databaseServiceMock.staffUserRole.findMany.mockResolvedValue([
       {
         role: {
           name: 'admin',
@@ -103,7 +103,7 @@ describe('BookingsService', () => {
       status: BookingStatus.PENDING,
       orders: [],
     });
-    databaseServiceMock.userRole.findMany.mockResolvedValue([]);
+    databaseServiceMock.staffUserRole.findMany.mockResolvedValue([]);
 
     await expect(
       service.findOne('booking-1', 'customer-1'),
@@ -117,7 +117,7 @@ describe('BookingsService', () => {
       status: BookingStatus.CONFIRMED,
       orders: [],
     });
-    databaseServiceMock.userRole.findMany.mockResolvedValue([
+    databaseServiceMock.staffUserRole.findMany.mockResolvedValue([
       {
         role: {
           name: 'staff',
@@ -132,8 +132,8 @@ describe('BookingsService', () => {
   });
 
   it('creates a customer booking for the authenticated customer and computes total price', async () => {
-    databaseServiceMock.userRole.findMany.mockResolvedValue([]);
-    databaseServiceMock.user.findUnique.mockResolvedValue({
+    databaseServiceMock.staffUserRole.findMany.mockResolvedValue([]);
+    databaseServiceMock.customer.findUnique.mockResolvedValue({
       id: 'customer-1',
     });
     databaseServiceMock.package.findMany.mockResolvedValue([
@@ -169,7 +169,7 @@ describe('BookingsService', () => {
   });
 
   it('rejects customer attempts to create bookings for another customer', async () => {
-    databaseServiceMock.userRole.findMany.mockResolvedValue([]);
+    databaseServiceMock.staffUserRole.findMany.mockResolvedValue([]);
 
     await expect(
       service.create(

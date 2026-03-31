@@ -4,6 +4,7 @@ import { UserContext } from '../common/types';
 export interface AuthenticatedUser {
   userId: string;
   phoneNumber: string;
+  userType: 'customer' | 'staff';
 }
 
 export const GetUser = createParamDecorator(

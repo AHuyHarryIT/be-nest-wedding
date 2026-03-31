@@ -112,7 +112,7 @@ export class RolesService {
         },
         _count: {
           select: {
-            users: true,
+            staff: true,
           },
         },
       },
@@ -140,7 +140,7 @@ export class RolesService {
         },
         _count: {
           select: {
-            users: true,
+            staff: true,
           },
         },
       },

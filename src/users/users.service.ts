@@ -1,6 +1,6 @@
+import { AuthIdentityService } from '@/auth/auth-identity.service';
 import {
   BadRequestException,
-  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -10,10 +10,10 @@ import { Prisma } from 'generated/prisma';
 import { DatabaseService } from 'src/database/database.service';
 import { PaginationHelper } from '../common/utils/pagination.helper';
 import {
+  AssignRolesToUserDto,
   CreateUserDto,
   QueryUserDto,
   UpdateUserDto,
-  AssignRolesToUserDto,
 } from './dto';
 
 @Injectable()
@@ -21,6 +21,7 @@ export class UsersService {
   constructor(
     private readonly databaseService: DatabaseService,
     private readonly configService: ConfigService,
+    private readonly authIdentityService: AuthIdentityService,
   ) {}
 
   async updateHashRefreshToken({
@@ -30,7 +31,7 @@ export class UsersService {
     userId: string;
     hashRefreshToken: string | null;
   }) {
-    return await this.databaseService.user.update({
+    return await this.databaseService.staff.update({
       where: { id: userId },
       data: {
         refreshToken: hashRefreshToken,
@@ -38,41 +39,18 @@ export class UsersService {
     });
   }
 
-  /**
-   * Create a new user with optional roles
-   */
   async create(createUserDto: CreateUserDto) {
     const { phoneNumber, password, roleIds, ...userData } = createUserDto;
 
-    // Check if user already exists
-    const existingUser = await this.databaseService.user.findUnique({
-      where: { phoneNumber },
-    });
+    await this.authIdentityService.assertPhoneNumberAvailable(phoneNumber);
 
-    if (existingUser) {
-      throw new ConflictException(
-        `User with phone number "${phoneNumber}" already exists`,
-      );
-    }
-
-    // Check if email already exists (if provided)
     if (userData.email) {
-      const existingEmailUser = await this.databaseService.user.findFirst({
-        where: { email: userData.email },
-      });
-
-      if (existingEmailUser) {
-        throw new ConflictException(
-          `User with email "${userData.email}" already exists`,
-        );
-      }
+      await this.authIdentityService.assertEmailAvailable(userData.email);
     }
 
-    // Hash password
     const saltRounds = this.configService.get<number>('HASH_SALT', 10);
     const passwordHash = await bcrypt.hash(password, saltRounds);
 
-    // If roles are provided, verify they exist
     if (roleIds && roleIds.length > 0) {
       const roles = await this.databaseService.role.findMany({
         where: { id: { in: roleIds } },
@@ -81,43 +59,20 @@ export class UsersService {
       if (roles.length !== roleIds.length) {
         throw new BadRequestException('One or more role IDs are invalid');
       }
-
-      // Create user with roles
-      return await this.databaseService.user.create({
-        data: {
-          phoneNumber,
-          passwordHash,
-          ...userData,
-          roles: {
-            create: roleIds.map((roleId) => ({
-              roleId,
-            })),
-          },
-        },
-        include: {
-          roles: {
-            include: {
-              role: {
-                include: {
-                  permissions: {
-                    include: {
-                      permission: true,
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      });
     }
 
-    // Create user without roles
-    return await this.databaseService.user.create({
+    return await this.databaseService.staff.create({
       data: {
         phoneNumber,
         passwordHash,
         ...userData,
+        roles: roleIds?.length
+          ? {
+              create: roleIds.map((roleId) => ({
+                roleId,
+              })),
+            }
+          : undefined,
       },
       include: {
         roles: {
@@ -137,9 +92,6 @@ export class UsersService {
     });
   }
 
-  /**
-   * Get all users with pagination
-   */
   async findAll(params?: QueryUserDto) {
     const {
       page,
@@ -149,28 +101,27 @@ export class UsersService {
       sortOrder,
     } = PaginationHelper.mergeWithDefaults(params || {});
 
-    // Build where clause for search
-    const where: Prisma.UserWhereInput = search
+    const where: Prisma.StaffWhereInput = search
       ? {
           OR: [
             { phoneNumber: { contains: search, mode: 'insensitive' } },
             { email: { contains: search, mode: 'insensitive' } },
             { firstName: { contains: search, mode: 'insensitive' } },
             { lastName: { contains: search, mode: 'insensitive' } },
+            { employeeCode: { contains: search, mode: 'insensitive' } },
+            { department: { contains: search, mode: 'insensitive' } },
+            { jobTitle: { contains: search, mode: 'insensitive' } },
           ],
         }
       : {};
 
-    // Build orderBy
-    const orderBy: Prisma.UserOrderByWithRelationInput = {
+    const orderBy: Prisma.StaffOrderByWithRelationInput = {
       [sortBy]: sortOrder,
     };
 
-    // Get total count for pagination
-    const total = await this.databaseService.user.count({ where });
+    const total = await this.databaseService.staff.count({ where });
 
-    // Get paginated data
-    const users = await this.databaseService.user.findMany({
+    const users = await this.databaseService.staff.findMany({
       where,
       orderBy,
       skip: PaginationHelper.getSkip(page, limit),
@@ -182,6 +133,9 @@ export class UsersService {
         lastName: true,
         email: true,
         isActive: true,
+        employeeCode: true,
+        department: true,
+        jobTitle: true,
         createdAt: true,
         updatedAt: true,
         roles: {
@@ -198,7 +152,6 @@ export class UsersService {
       },
     });
 
-    // Transform response
     const transformedUsers = users.map((user) => ({
       ...user,
       roles: user.roles.map((ur) => ur.role),
@@ -212,11 +165,8 @@ export class UsersService {
     );
   }
 
-  /**
-   * Get a single user by ID with roles
-   */
   async findOne(id: string) {
-    const user = await this.databaseService.user.findUnique({
+    const user = await this.databaseService.staff.findUnique({
       where: { id },
       select: {
         id: true,
@@ -225,6 +175,9 @@ export class UsersService {
         lastName: true,
         email: true,
         isActive: true,
+        employeeCode: true,
+        department: true,
+        jobTitle: true,
         createdAt: true,
         updatedAt: true,
         roles: {
@@ -256,7 +209,6 @@ export class UsersService {
       throw new NotFoundException(`User with ID "${id}" not found`);
     }
 
-    // Transform response
     return {
       ...user,
       roles: user.roles.map((ur) => ur.role),
@@ -264,7 +216,7 @@ export class UsersService {
   }
 
   async findByPhoneNumber(phoneNumber: string) {
-    return await this.databaseService.user.findUnique({
+    return await this.databaseService.staff.findUnique({
       where: { phoneNumber },
       select: {
         id: true,
@@ -280,7 +232,7 @@ export class UsersService {
   }
 
   async findById(id: string) {
-    return await this.databaseService.user.findUnique({
+    return await this.databaseService.staff.findUnique({
       where: { id },
       select: {
         id: true,
@@ -295,12 +247,8 @@ export class UsersService {
     });
   }
 
-  /**
-   * Update a user (admin can update other users)
-   */
   async update(id: string, updateUserDto: UpdateUserDto) {
-    // Verify user exists
-    const user = await this.databaseService.user.findUnique({
+    const user = await this.databaseService.staff.findUnique({
       where: { id },
     });
 
@@ -308,23 +256,11 @@ export class UsersService {
       throw new NotFoundException(`User with ID "${id}" not found`);
     }
 
-    // Check if email is being updated and already exists
     if (updateUserDto.email && updateUserDto.email !== user.email) {
-      const existingEmailUser = await this.databaseService.user.findFirst({
-        where: {
-          email: updateUserDto.email,
-          id: { not: id },
-        },
-      });
-
-      if (existingEmailUser) {
-        throw new ConflictException(
-          `User with email "${updateUserDto.email}" already exists`,
-        );
-      }
+      await this.authIdentityService.assertEmailAvailable(updateUserDto.email);
     }
 
-    return await this.databaseService.user.update({
+    return await this.databaseService.staff.update({
       where: { id },
       data: updateUserDto,
       select: {
@@ -334,18 +270,17 @@ export class UsersService {
         lastName: true,
         email: true,
         isActive: true,
+        employeeCode: true,
+        department: true,
+        jobTitle: true,
         createdAt: true,
         updatedAt: true,
       },
     });
   }
 
-  /**
-   * Delete a user
-   */
   async delete(id: string) {
-    // Verify user exists
-    const user = await this.databaseService.user.findUnique({
+    const user = await this.databaseService.staff.findUnique({
       where: { id },
     });
 
@@ -353,8 +288,7 @@ export class UsersService {
       throw new NotFoundException(`User with ID "${id}" not found`);
     }
 
-    // Delete user and related records
-    await this.databaseService.user.delete({
+    await this.databaseService.staff.delete({
       where: { id },
     });
 
@@ -363,12 +297,8 @@ export class UsersService {
     };
   }
 
-  /**
-   * Assign roles to a user
-   */
   async assignRoles(userId: string, assignRolesDto: AssignRolesToUserDto) {
-    // Verify user exists
-    const user = await this.databaseService.user.findUnique({
+    const user = await this.databaseService.staff.findUnique({
       where: { id: userId },
     });
 
@@ -376,7 +306,6 @@ export class UsersService {
       throw new NotFoundException(`User with ID "${userId}" not found`);
     }
 
-    // Verify all roles exist
     const roles = await this.databaseService.role.findMany({
       where: { id: { in: assignRolesDto.roleIds } },
     });
@@ -385,25 +314,19 @@ export class UsersService {
       throw new BadRequestException('One or more role IDs are invalid');
     }
 
-    // Add new ones
-
-    await this.databaseService.userRole.createMany({
+    await this.databaseService.staffRole.createMany({
       data: assignRolesDto.roleIds.map((roleId) => ({
-        userId,
+        staffId: userId,
         roleId,
       })),
+      skipDuplicates: true,
     });
 
-    // Return updated user with roles
     return await this.findOne(userId);
   }
 
-  /**
-   * Remove roles from a user
-   */
   async removeRoles(userId: string, roleIds: string[]) {
-    // Verify user exists
-    const user = await this.databaseService.user.findUnique({
+    const user = await this.databaseService.staff.findUnique({
       where: { id: userId },
     });
 
@@ -411,15 +334,13 @@ export class UsersService {
       throw new NotFoundException(`User with ID "${userId}" not found`);
     }
 
-    // Remove specified roles
-    await this.databaseService.userRole.deleteMany({
+    await this.databaseService.staffRole.deleteMany({
       where: {
-        userId,
+        staffId: userId,
         roleId: { in: roleIds },
       },
     });
 
-    // Return updated user with roles
     return await this.findOne(userId);
   }
 }

@@ -1,15 +1,15 @@
 import { Injectable, NestMiddleware } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Request, Response, NextFunction } from 'express';
-import { DatabaseService } from '../database/database.service';
 import { JWT_ACCESS_CONFIG } from './config/jwt.config';
 import { JwtPayload } from './types/jwt';
+import { AuthIdentityService } from './auth-identity.service';
 
 @Injectable()
 export class AutoRefreshMiddleware implements NestMiddleware {
   constructor(
     private jwtService: JwtService,
-    private databaseService: DatabaseService,
+    private authIdentityService: AuthIdentityService,
   ) {}
 
   async use(req: Request, res: Response, next: NextFunction) {
@@ -44,15 +44,12 @@ export class AutoRefreshMiddleware implements NestMiddleware {
 
         if (shouldRefresh) {
           // Validate refresh token and issue new access token
-          const user = await this.databaseService.user.findFirst({
-            where: {
-              refreshToken: refreshToken.trim(),
-              isActive: true,
-            },
-          });
+          const user =
+            await this.authIdentityService.findByRefreshToken(refreshToken);
 
           if (
             user &&
+            user.isActive &&
             user.refreshTokenExpiry &&
             user.refreshTokenExpiry > new Date()
           ) {
@@ -61,6 +58,7 @@ export class AutoRefreshMiddleware implements NestMiddleware {
               {
                 sub: user.id,
                 phoneNumber: user.phoneNumber,
+                userType: user.userType,
               },
               {
                 expiresIn: JWT_ACCESS_CONFIG.expiresIn,

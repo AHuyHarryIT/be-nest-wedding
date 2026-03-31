@@ -13,7 +13,7 @@ export class ChatService {
   constructor(private prisma: DatabaseService) {}
 
   private async isStaffUser(userId: string): Promise<boolean> {
-    const user = await this.prisma.user.findUnique({
+    const user = await this.prisma.staff.findUnique({
       where: { id: userId },
       include: {
         roles: {
@@ -46,7 +46,7 @@ export class ChatService {
     let { staffId } = createChatDto;
 
     // Verify customer exists
-    const customer = await this.prisma.user.findUnique({
+    const customer = await this.prisma.customer.findUnique({
       where: { id: customerId },
     });
     if (!customer) {
@@ -56,7 +56,7 @@ export class ChatService {
     // If staffId not provided, auto-assign the first admin/staff user
     if (!staffId) {
       // Try to find any admin user first
-      const adminUser = await this.prisma.user.findFirst({
+      const adminUser = await this.prisma.staff.findFirst({
         include: {
           roles: {
             include: {
@@ -88,7 +88,7 @@ export class ChatService {
 
     // If staffId provided, verify staff exists
     if (staffId) {
-      const staff = await this.prisma.user.findUnique({
+      const staff = await this.prisma.staff.findUnique({
         where: { id: staffId },
       });
       if (!staff) {
@@ -280,26 +280,30 @@ export class ChatService {
     const chatData = await this.getChat(chatId);
 
     // Verify sender is an active user
-    const sender = await this.prisma.user.findUnique({
+    const senderCustomer = await this.prisma.customer.findUnique({
       where: { id: senderId },
-      include: {
-        roles: {
-          include: {
-            role: true,
-          },
-        },
-      },
     });
-    if (!sender || !sender.isActive) {
+    const senderStaff = senderCustomer
+      ? null
+      : await this.prisma.staff.findUnique({
+          where: { id: senderId },
+          include: {
+            roles: {
+              include: {
+                role: true,
+              },
+            },
+          },
+        });
+
+    if (
+      (!senderCustomer || !senderCustomer.isActive) &&
+      (!senderStaff || !senderStaff.isActive)
+    ) {
       throw new BadRequestException('Sender is not active');
     }
 
-    // Allow if user is the customer OR has a staff role
-    const isStaff = sender.roles?.some((ur) => {
-      return ['super-admin', 'admin', 'manager', 'staff'].includes(
-        ur.role.name,
-      );
-    });
+    const isStaff = Boolean(senderStaff);
 
     if (chatData.customerId !== senderId && !isStaff) {
       throw new BadRequestException('User is not part of this chat');
@@ -308,7 +312,8 @@ export class ChatService {
     const message = await this.prisma.message.create({
       data: {
         chatId,
-        senderId,
+        senderCustomerId: senderCustomer ? senderId : null,
+        senderStaffId: senderStaff ? senderId : null,
         content,
       },
     });
@@ -319,7 +324,10 @@ export class ChatService {
       data: { lastMessageAt: new Date() },
     });
 
-    return message as MessageEntity;
+    return {
+      ...(message as any),
+      senderId: senderCustomer ? senderId : senderStaff?.id,
+    } as MessageEntity;
   }
 
   async getMessages(
@@ -336,7 +344,10 @@ export class ChatService {
       take,
     });
 
-    return messages as MessageEntity[];
+    return messages.map((message) => ({
+      ...(message as any),
+      senderId: message.senderCustomerId ?? message.senderStaffId,
+    })) as MessageEntity[];
   }
 
   async getUnreadMessages(
@@ -354,39 +365,35 @@ export class ChatService {
       where: {
         chatId,
         isRead: false,
-        senderId: { not: userId }, // Don't include messages sent by the user
+        NOT: [{ senderCustomerId: userId }, { senderStaffId: userId }],
       },
       orderBy: { createdAt: 'asc' },
     });
 
-    return messages as MessageEntity[];
+    return messages.map((message) => ({
+      ...(message as any),
+      senderId: message.senderCustomerId ?? message.senderStaffId,
+    })) as MessageEntity[];
   }
 
   async markMessagesAsRead(chatId: string, userId: string): Promise<void> {
     const chat = await this.getChat(chatId);
 
     // Verify chat exists and user is either customer or can access as staff
-    const user = await this.prisma.user.findUnique({
+    const customer = await this.prisma.customer.findUnique({
       where: { id: userId },
-      include: {
-        roles: {
-          include: {
-            role: true,
-          },
-        },
-      },
     });
+    const staff = customer
+      ? null
+      : await this.prisma.staff.findUnique({
+          where: { id: userId },
+        });
 
-    if (!user || !user.isActive) {
+    if ((!customer || !customer.isActive) && (!staff || !staff.isActive)) {
       throw new BadRequestException('User is not active or does not exist');
     }
 
-    // Allow if user is the customer OR has a staff role
-    const isStaff = user.roles?.some((ur) => {
-      return ['super-admin', 'admin', 'manager', 'staff'].includes(
-        ur.role.name,
-      );
-    });
+    const isStaff = Boolean(staff);
 
     if (chat.customerId !== userId && !isStaff) {
       throw new BadRequestException('User is not part of this chat');
@@ -396,7 +403,7 @@ export class ChatService {
       where: {
         chatId,
         isRead: false,
-        senderId: { not: userId }, // Only mark others' messages as read
+        NOT: [{ senderCustomerId: userId }, { senderStaffId: userId }],
       },
       data: {
         isRead: true,
@@ -415,7 +422,8 @@ export class ChatService {
     }
 
     // Only message sender can delete
-    if (message.senderId !== userId) {
+    const messageSenderId = message.senderCustomerId ?? message.senderStaffId;
+    if (messageSenderId !== userId) {
       throw new BadRequestException('You can only delete your own messages');
     }
 
@@ -431,7 +439,7 @@ export class ChatService {
           OR: [{ customerId: userId }, { staffId: userId }],
         },
         isRead: false,
-        senderId: { not: userId },
+        NOT: [{ senderCustomerId: userId }, { senderStaffId: userId }],
       },
     });
 

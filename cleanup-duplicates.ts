@@ -23,7 +23,8 @@ async function cleanupDuplicates() {
       const toDelete: string[] = [];
       
       for (const msg of messages) {
-        const key = `${msg.senderId}:${msg.content.substring(0, 50)}`;
+        const senderId = msg.senderCustomerId ?? msg.senderStaffId ?? 'unknown';
+        const key = `${senderId}:${msg.content.substring(0, 50)}`;
         
         if (seen.has(key)) {
           // This is a duplicate, mark for deletion

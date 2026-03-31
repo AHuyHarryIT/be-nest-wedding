@@ -146,7 +146,7 @@ export class AuthController {
     description: 'Invalid or missing JWT token',
   })
   async getProfile(@GetUser() user: AuthenticatedUser) {
-    return this.authService.validateUser(user.userId);
+    return this.authService.validateUser(user.userId, user.userType);
   }
 
   @Put('profile')
@@ -167,7 +167,11 @@ export class AuthController {
     @GetUser() user: AuthenticatedUser,
     @Body() updateProfileDto: UpdateProfileDto,
   ) {
-    return this.authService.updateProfile(user.userId, updateProfileDto);
+    return this.authService.updateProfile(
+      user.userId,
+      updateProfileDto,
+      user.userType,
+    );
   }
 
   @Post('change-password')
@@ -187,7 +191,11 @@ export class AuthController {
     @GetUser() user: AuthenticatedUser,
     @Body() changePasswordDto: ChangePasswordDto,
   ): Promise<MessageResponseDto> {
-    return this.authService.changePassword(user.userId, changePasswordDto);
+    return this.authService.changePassword(
+      user.userId,
+      changePasswordDto,
+      user.userType,
+    );
   }
 
   @Post('refresh')
@@ -255,7 +263,7 @@ export class AuthController {
     response.clearCookie('staff_refresh_token');
 
     // Invalidate refresh token in database
-    return this.authService.logout(user.userId);
+    return this.authService.logout(user.userId, user.userType);
   }
 
   @Get('me')
@@ -272,6 +280,6 @@ export class AuthController {
     description: 'Invalid or missing JWT token',
   })
   async getCurrentUser(@GetUser() user: AuthenticatedUser) {
-    return this.authService.validateUser(user.userId);
+    return this.authService.validateUser(user.userId, user.userType);
   }
 }

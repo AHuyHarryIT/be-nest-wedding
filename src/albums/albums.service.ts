@@ -30,7 +30,7 @@ export class AlbumsService {
   async create(createAlbumDto: CreateAlbumDto) {
     // Validate owner exists if provided
     if (createAlbumDto.ownerUserId) {
-      const owner = await this.databaseService.user.findUnique({
+      const owner = await this.databaseService.staff.findUnique({
         where: { id: createAlbumDto.ownerUserId },
       });
       if (!owner) {
@@ -135,7 +135,7 @@ export class AlbumsService {
 
     // Filter by owner
     if (params?.ownerId) {
-      where.ownerUserId = params.ownerId;
+      where.ownerStaffId = params.ownerId;
     }
 
     // Filter by booking
@@ -312,7 +312,7 @@ export class AlbumsService {
     }
 
     if (params?.ownerId) {
-      where.ownerUserId = params.ownerId;
+      where.ownerStaffId = params.ownerId;
     }
 
     if (params?.bookingId) {

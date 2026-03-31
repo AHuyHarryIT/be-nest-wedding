@@ -124,32 +124,61 @@ enum VisibilityLevel {
   UNLISTED
 }
 
-model User {
-  id                 String         @id @default(uuid())
-  phoneNumber        String         @unique @map("phone_number")
-  passwordHash       String         @map("password_hash")
-  firstName          String?        @map("first_name")
-  lastName           String?        @map("last_name")
-  email              String?
-  avatarUrl          String?        @map("avatar_url")
-  isActive           Boolean        @default(true) @map("is_active")
-  refreshToken       String?        @map("refresh_token")
-  refreshTokenExpiry DateTime?      @map("refresh_token_expiry")
+model Customer {
+  id                   String    @id @default(uuid())
+  phoneNumber          String    @unique @map("phone_number")
+  passwordHash         String    @map("password_hash")
+  firstName            String?   @map("first_name")
+  lastName             String?   @map("last_name")
+  email                String?
+  avatarUrl            String?   @map("avatar_url")
+  isActive             Boolean   @default(true) @map("is_active")
+  refreshToken         String?   @map("refresh_token")
+  refreshTokenExpiry   DateTime? @map("refresh_token_expiry")
+  weddingDate          DateTime? @map("wedding_date")
+  weddingVenue         String?   @map("wedding_venue")
+  emailNotifications   Boolean   @default(true) @map("email_notifications")
+  smsNotifications     Boolean   @default(true) @map("sms_notifications")
+  marketingEmails      Boolean   @default(false) @map("marketing_emails")
   // relation
-  roles              UserRole[]
-  bookings           Booking[]
-  sessions           SessionStaff[]
-  files              File[]
-  albums             Album[]
-  chatsAsCustomer    Chat[]         @relation("chat_customer")
-  chatsAsStaff       Chat[]         @relation("chat_staff")
-  messages           Message[]
+  bookings             Booking[]
+  chats                Chat[]    @relation("chat_customer")
+  messages             Message[] @relation("message_customer_sender")
   // timestamps
-  createdAt          DateTime       @default(now()) @map("created_at")
-  updatedAt          DateTime       @updatedAt @map("updated_at")
-  deletedAt          DateTime?      @map("deleted_at")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+  deletedAt            DateTime? @map("deleted_at")
 
-  @@map("users")
+  @@map("customers")
+}
+
+model Staff {
+  id                   String          @id @default(uuid())
+  phoneNumber          String          @unique @map("phone_number")
+  passwordHash         String          @map("password_hash")
+  firstName            String?         @map("first_name")
+  lastName             String?         @map("last_name")
+  email                String?
+  avatarUrl            String?         @map("avatar_url")
+  isActive             Boolean         @default(true) @map("is_active")
+  refreshToken         String?         @map("refresh_token")
+  refreshTokenExpiry   DateTime?       @map("refresh_token_expiry")
+  employeeCode         String?         @unique @map("employee_code")
+  department           String?
+  jobTitle             String?         @map("job_title")
+  // relation
+  roles                StaffRole[]
+  sessions             SessionStaff[]
+  files                File[]
+  albums               Album[]
+  chats                Chat[]          @relation("chat_staff")
+  messages             Message[]       @relation("message_staff_sender")
+  // timestamps
+  createdAt            DateTime        @default(now()) @map("created_at")
+  updatedAt            DateTime        @updatedAt @map("updated_at")
+  deletedAt            DateTime?       @map("deleted_at")
+
+  @@map("staffs")
 }
 
 model Role {
@@ -157,7 +186,7 @@ model Role {
   name        String           @unique
   description String?
   // relation
-  users       UserRole[]
+  staff       StaffRole[]
   permissions RolePermission[]
   // timestamps
   createdAt   DateTime         @default(now()) @map("created_at")
@@ -179,16 +208,16 @@ model Permission {
   @@map("permissions")
 }
 
-model UserRole {
-  userId String @map("user_id")
-  roleId String @map("role_id")
+model StaffRole {
+  staffId String @map("staff_id")
+  roleId  String @map("role_id")
   // relation
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  staff   Staff @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  role    Role  @relation(fields: [roleId], references: [id], onDelete: Cascade)
 
-  @@id([userId, roleId])
+  @@id([staffId, roleId])
   @@index([roleId])
-  @@map("user_roles")
+  @@map("staff_roles")
 }
 
 model RolePermission {
@@ -285,7 +314,7 @@ model Booking {
   totalPrice  Float            @default(0) @map("total_price")
   cancelledAt DateTime?        @map("cancelled_at")
   // relation
-  customer    User             @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customer    Customer         @relation(fields: [customerId], references: [id], onDelete: Cascade)
   packages    BookingPackage[]
   services    BookingService[]
   sessions    BookingSession[]
@@ -360,7 +389,7 @@ model SessionStaff {
 
   // relation
   session BookingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  staff   User           @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  staff   Staff          @relation(fields: [staffId], references: [id], onDelete: Cascade)
 
   @@id([sessionId, staffId])
   @@map("session_staffs")
@@ -639,7 +668,7 @@ model File {
   visibility VisibilityLevel @default(PRIVATE)
 
   // relation
-  uploader    User        @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
+  uploader    Staff       @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
   albums      AlbumFile[]
   coverAlbums Album[]
 
@@ -653,7 +682,7 @@ model File {
 
 model Album {
   id                 String    @id @default(uuid())
-  ownerUserId        String?   @map("owner_user_id")
+  ownerStaffId       String?   @map("owner_staff_id")
   bookingId          String?   @map("booking_id")
   title              String
   description        String?
@@ -664,7 +693,7 @@ model Album {
   oneDriveFolderId   String?   @map("onedrive_folder_id")
 
   // relation
-  owner     User?       @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  owner     Staff?      @relation(fields: [ownerStaffId], references: [id], onDelete: Cascade)
   booking   Booking?    @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   coverFile File?       @relation(fields: [coverFileId], references: [id], onDelete: Cascade)
   files     AlbumFile[]
@@ -711,8 +740,8 @@ model Chat {
   isArchived    Boolean     @default(false) @map("is_archived")
 
   // relation
-  customer User       @relation("chat_customer", fields: [customerId], references: [id], onDelete: Cascade)
-  staff    User?      @relation("chat_staff", fields: [staffId], references: [id], onDelete: SetNull)
+  customer Customer   @relation("chat_customer", fields: [customerId], references: [id], onDelete: Cascade)
+  staff    Staff? @relation("chat_staff", fields: [staffId], references: [id], onDelete: SetNull)
   booking  Booking?   @relation(fields: [bookingId], references: [id], onDelete: SetNull)
   messages Message[]
 
@@ -730,21 +759,24 @@ model Chat {
 model Message {
   id        String   @id @default(uuid())
   chatId    String   @map("chat_id")
-  senderId  String   @map("sender_id")
+  senderCustomerId String? @map("sender_customer_id")
+  senderStaffId String? @map("sender_staff_id")
   content   String
   isRead    Boolean  @default(false) @map("is_read")
   readAt    DateTime? @map("read_at")
 
   // relation
-  chat   Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
-  sender User @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  chat            Chat       @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  senderCustomer  Customer?  @relation("message_customer_sender", fields: [senderCustomerId], references: [id], onDelete: Cascade)
+  senderStaff     Staff? @relation("message_staff_sender", fields: [senderStaffId], references: [id], onDelete: Cascade)
 
   // timestamps
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([chatId, createdAt])
-  @@index([senderId])
+  @@index([senderCustomerId])
+  @@index([senderStaffId])
   @@index([isRead])
   @@map("messages")
 }

@@ -20,6 +20,11 @@ import {
 import { JWT_ACCESS_CONFIG } from './config/jwt.config';
 import { REFRESH_JWT_CONFIG } from './config/refresh-jwt.config';
 import { JwtPayload } from './types/jwt';
+import {
+  AuthIdentityService,
+  type AuthIdentityRecord,
+  type AuthUserType,
+} from './auth-identity.service';
 
 @Injectable()
 export class AuthService {
@@ -27,60 +32,33 @@ export class AuthService {
     private databaseService: DatabaseService,
     private jwtService: JwtService,
     private configService: ConfigService,
+    private readonly authIdentityService: AuthIdentityService,
   ) {}
-
-  private async getDefaultCustomerRole() {
-    return this.databaseService.role.upsert({
-      where: { name: 'customer' },
-      update: {},
-      create: {
-        name: 'customer',
-        description: 'Customer with basic read permissions',
-      },
-    });
-  }
 
   private generateRefreshToken(): string {
     return crypto.randomBytes(64).toString('hex');
   }
 
-  private async generateTokens(userId: string, phoneNumber: string) {
-    const payload: JwtPayload = { sub: userId, phoneNumber };
+  private async generateTokens(
+    userId: string,
+    phoneNumber: string,
+    userType: AuthUserType,
+  ) {
+    const payload: JwtPayload = { sub: userId, phoneNumber, userType };
 
     const accessToken = await this.jwtService.signAsync(payload, {
       expiresIn: JWT_ACCESS_CONFIG.expiresIn,
     });
 
-    // Generate a refresh token (hex string, no special characters)
     const refreshToken = this.generateRefreshToken();
-
-    console.log(
-      '[GenerateTokens] Created token',
-      'Length:',
-      refreshToken.length,
-      'First 20 chars:',
-      refreshToken.substring(0, 20),
-    );
-
-    // Calculate expiry by adding milliseconds to current time
-    // REFRESH_JWT_CONFIG.expiresIn is in milliseconds (e.g., 604800000 for 7 days)
     const expiryTimeMs = Number(REFRESH_JWT_CONFIG.expiresIn) || 604800000;
     const refreshTokenExpiry = new Date(Date.now() + expiryTimeMs);
 
-    // Store refresh token in database
-    await this.databaseService.user.update({
-      where: { id: userId },
-      data: {
-        refreshToken: refreshToken.trim(),
-        refreshTokenExpiry,
-      },
-    });
-
-    console.log(
-      '[GenerateTokens] Stored in DB for user',
+    await this.authIdentityService.updateRefreshToken(
+      userType,
       userId,
-      'Expiry:',
-      refreshTokenExpiry.toISOString(),
+      refreshToken.trim(),
+      refreshTokenExpiry,
     );
 
     return {
@@ -92,40 +70,21 @@ export class AuthService {
   async register(registerDto: RegisterDto): Promise<AuthResponseDto> {
     const { phoneNumber, password, firstName, lastName, email } = registerDto;
 
-    // Check if user already exists
-    const existingUser = await this.databaseService.user.findUnique({
-      where: { phoneNumber },
-    });
+    await this.authIdentityService.assertPhoneNumberAvailable(phoneNumber);
 
-    if (existingUser) {
-      throw new ConflictException('User with this phone number already exists');
-    }
-
-    // Check if email already exists (if provided)
     if (email) {
-      const existingEmailUser = await this.databaseService.user.findFirst({
-        where: { email },
-      });
-
-      if (existingEmailUser) {
-        throw new ConflictException('User with this email already exists');
-      }
+      await this.authIdentityService.assertEmailAvailable(email);
     }
 
-    const customerRole = await this.getDefaultCustomerRole();
-
-    // Hash password
     let hashedPassword: string;
     try {
       hashedPassword = await bcrypt.hash(password, 10);
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
-      console.error('Bcrypt hash error:', errorMsg);
       throw new Error(`Password hashing failed: ${errorMsg}`);
     }
 
-    // Create user
-    const user = await this.databaseService.user.create({
+    const user = await this.databaseService.customer.create({
       data: {
         phoneNumber,
         passwordHash: hashedPassword,
@@ -133,108 +92,80 @@ export class AuthService {
         lastName,
         email,
         isActive: true,
-        roles: {
-          create: [
-            {
-              roleId: customerRole.id,
-            },
-          ],
-        },
       },
     });
 
-    // Generate tokens
     const { accessToken, refreshToken } = await this.generateTokens(
       user.id,
       user.phoneNumber,
+      'customer',
     );
-
-    const { ...userWithoutPassword } = user;
 
     return {
       message: 'User registered successfully. Tokens set in cookies.',
-      user: userWithoutPassword,
-      accessToken, // For cookie setting
-      refreshToken, // For cookie setting
+      user,
+      accessToken,
+      refreshToken,
     } as AuthResponseDto;
   }
 
   async login(loginDto: LoginDto): Promise<AuthResponseDto> {
     const { phoneNumber, password } = loginDto;
-
-    // Find user by phone number
-    const user = await this.databaseService.user.findUnique({
-      where: { phoneNumber },
-    });
+    const user = await this.authIdentityService.findByPhoneNumber(phoneNumber);
 
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // Check if user is active
     if (!user.isActive) {
       throw new UnauthorizedException('Account is inactive');
     }
 
-    // Verify password
     const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
     if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // Generate tokens
     const { accessToken, refreshToken } = await this.generateTokens(
       user.id,
       user.phoneNumber,
+      user.userType,
     );
-
-    const { ...userWithoutPassword } = user;
 
     return {
       message: 'Login successful. Tokens set in cookies.',
-      user: userWithoutPassword,
-      accessToken, // For cookie setting
-      refreshToken, // For cookie setting
+      user,
+      accessToken,
+      refreshToken,
     } as AuthResponseDto;
   }
 
-  async validateUser(userId: string) {
-    const user = await this.databaseService.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        phoneNumber: true,
-        firstName: true,
-        lastName: true,
-        email: true,
-        isActive: true,
-        createdAt: true,
-      },
-    });
+  async validateUser(userId: string, userType?: AuthUserType) {
+    const user = userType
+      ? await this.authIdentityService.findById(userType, userId)
+      : await this.findAnyIdentityById(userId);
 
     if (!user || !user.isActive) {
       throw new UnauthorizedException('User not found or inactive');
     }
 
-    return user;
+    return this.toPublicUser(user);
   }
 
   async changePassword(
     userId: string,
     changePasswordDto: ChangePasswordDto,
+    userType?: AuthUserType,
   ): Promise<{ message: string }> {
     const { currentPassword, newPassword } = changePasswordDto;
-
-    // Find user
-    const user = await this.databaseService.user.findUnique({
-      where: { id: userId },
-    });
+    const user = userType
+      ? await this.authIdentityService.findById(userType, userId)
+      : await this.findAnyIdentityById(userId);
 
     if (!user) {
       throw new UnauthorizedException('User not found');
     }
 
-    // Verify current password
     const isCurrentPasswordValid = await bcrypt.compare(
       currentPassword,
       user.passwordHash,
@@ -243,56 +174,63 @@ export class AuthService {
       throw new UnauthorizedException('Current password is incorrect');
     }
 
-    // Hash new password
-    const saltRounds = 10;
-    const hashedNewPassword = await bcrypt.hash(newPassword, saltRounds);
+    const hashedNewPassword = await bcrypt.hash(newPassword, 10);
 
-    // Update password
-    await this.databaseService.user.update({
-      where: { id: userId },
-      data: { passwordHash: hashedNewPassword },
-    });
+    if (user.userType === 'customer') {
+      await this.databaseService.customer.update({
+        where: { id: userId },
+        data: { passwordHash: hashedNewPassword },
+      });
+    } else {
+      await this.databaseService.staff.update({
+        where: { id: userId },
+        data: { passwordHash: hashedNewPassword },
+      });
+    }
 
     return { message: 'Password changed successfully' };
   }
 
-  async updateProfile(userId: string, updateProfileDto: UpdateProfileDto) {
+  async updateProfile(
+    userId: string,
+    updateProfileDto: UpdateProfileDto,
+    userType?: AuthUserType,
+  ) {
     const { firstName, lastName, email } = updateProfileDto;
+    const user = userType
+      ? await this.authIdentityService.findById(userType, userId)
+      : await this.findAnyIdentityById(userId);
 
-    // Check if email already exists (if provided and different)
-    if (email) {
-      const existingEmailUser = await this.databaseService.user.findFirst({
-        where: {
-          email,
-          NOT: { id: userId },
-        },
-      });
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
 
-      if (existingEmailUser) {
-        throw new ConflictException('User with this email already exists');
+    if (email && email !== user.email) {
+      try {
+        await this.authIdentityService.assertEmailAvailable(email);
+      } catch (error) {
+        if (error instanceof ConflictException) {
+          throw new ConflictException('User with this email already exists');
+        }
+        throw error;
       }
     }
 
-    // Update user
-    const updatedUser = await this.databaseService.user.update({
-      where: { id: userId },
-      data: {
-        firstName,
-        lastName,
-        email,
-      },
-      select: {
-        id: true,
-        phoneNumber: true,
-        firstName: true,
-        lastName: true,
-        email: true,
-        isActive: true,
-        createdAt: true,
-      },
-    });
+    const updatedUser =
+      user.userType === 'customer'
+        ? await this.databaseService.customer.update({
+            where: { id: userId },
+            data: { firstName, lastName, email },
+          })
+        : await this.databaseService.staff.update({
+            where: { id: userId },
+            data: { firstName, lastName, email },
+          });
 
-    return updatedUser;
+    return this.toPublicUser({
+      ...updatedUser,
+      userType: user.userType,
+    } as AuthIdentityRecord);
   }
 
   async refreshTokens(
@@ -304,147 +242,135 @@ export class AuthService {
       throw new UnauthorizedException('Refresh token is missing');
     }
 
-    // Trim the token to remove any whitespace
-    const trimmedToken = refreshToken.trim();
-    console.log(
-      '[RefreshTokens] Token length:',
-      trimmedToken.length,
-      'Token (first 20 chars):',
-      trimmedToken.substring(0, 20),
-    );
-
-    // Find user with this refresh token
-    const user = await this.databaseService.user.findFirst({
-      where: {
-        refreshToken: trimmedToken,
-        isActive: true,
-      },
-    });
+    const user =
+      await this.authIdentityService.findByRefreshToken(refreshToken);
 
     if (!user) {
-      // Check if token exists but user is inactive
-      const inactiveUser = await this.databaseService.user.findFirst({
-        where: {
-          refreshToken: trimmedToken,
-        },
-      });
-
-      if (inactiveUser) {
-        throw new UnauthorizedException('User account is inactive');
-      }
-
-      // Check if any user has a refresh token at all
-      const anyToken = await this.databaseService.user.findFirst({
-        where: {
-          refreshToken: {
-            not: null,
-          },
-        },
-      });
-
-      if (anyToken) {
-        console.log(
-          '[RefreshTokens] Found token in DB (first 20 chars):',
-          anyToken.refreshToken?.substring(0, 20),
-        );
-      } else {
-        console.log('[RefreshTokens] No tokens found in database');
-      }
-
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
-    // Check if token is expired
+    if (!user.isActive) {
+      throw new UnauthorizedException('User account is inactive');
+    }
+
     if (!user.refreshTokenExpiry || user.refreshTokenExpiry < new Date()) {
       throw new UnauthorizedException('Refresh token has expired');
     }
 
-    // Generate new tokens
-    return this.generateTokens(user.id, user.phoneNumber);
+    return this.generateTokens(user.id, user.phoneNumber, user.userType);
   }
 
   async validateOrRefreshAccessToken(
     userId: string,
     refreshToken: string,
+    userType?: AuthUserType,
   ): Promise<{
     accessToken: string;
     refreshToken: string | null;
     needsRefresh: boolean;
   }> {
-    // Verify refresh token exists and is not expired
-    const user = await this.databaseService.user.findFirst({
-      where: {
-        id: userId,
-        refreshToken: refreshToken.trim(),
-        isActive: true,
-      },
-    });
+    const user = userType
+      ? await this.authIdentityService.findById(userType, userId)
+      : await this.findAnyIdentityById(userId);
 
-    if (!user) {
-      console.log('[ValidateOrRefresh] User or refresh token not found');
+    if (
+      !user ||
+      !user.isActive ||
+      !user.refreshToken ||
+      user.refreshToken.trim() !== refreshToken.trim()
+    ) {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
     if (!user.refreshTokenExpiry || user.refreshTokenExpiry < new Date()) {
-      console.log('[ValidateOrRefresh] Refresh token expired');
       throw new UnauthorizedException('Refresh token has expired');
     }
 
-    // Generate new access token
     const accessToken = await this.jwtService.signAsync(
       {
-        sub: userId,
+        sub: user.id,
         phoneNumber: user.phoneNumber,
+        userType: user.userType,
       },
       {
         expiresIn: JWT_ACCESS_CONFIG.expiresIn,
       },
     );
 
-    console.log(
-      '[ValidateOrRefresh] Generated new access token for user',
-      userId,
-    );
-
     return {
       accessToken,
-      refreshToken: null, // No need to refresh the refresh token yet
+      refreshToken: null,
       needsRefresh: false,
     };
   }
 
-  async logout(userId: string): Promise<MessageResponseDto> {
-    // Invalidate refresh token
-    await this.databaseService.user.update({
-      where: { id: userId },
-      data: {
-        refreshToken: null,
-        refreshTokenExpiry: null,
-      },
-    });
+  async logout(
+    userId: string,
+    userType?: AuthUserType,
+  ): Promise<MessageResponseDto> {
+    const user = userType
+      ? await this.authIdentityService.findById(userType, userId)
+      : await this.findAnyIdentityById(userId);
+
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    await this.authIdentityService.updateRefreshToken(
+      user.userType,
+      userId,
+      null,
+      null,
+    );
 
     return {
       message: 'Successfully logged out',
     };
   }
 
-  async refreshToken(userId: string): Promise<{ access_token: string }> {
-    const user = await this.databaseService.user.findUnique({
-      where: { id: userId },
-    });
+  async refreshToken(
+    userId: string,
+    userType?: AuthUserType,
+  ): Promise<{ access_token: string }> {
+    const user = userType
+      ? await this.authIdentityService.findById(userType, userId)
+      : await this.findAnyIdentityById(userId);
 
     if (!user || !user.isActive) {
       throw new UnauthorizedException('User not found or inactive');
     }
 
-    // Generate new JWT token
     const payload: JwtPayload = {
       sub: user.id,
       phoneNumber: user.phoneNumber,
+      userType: user.userType,
     };
 
     const accessToken = this.jwtService.sign(payload);
 
     return { access_token: accessToken };
+  }
+
+  private async findAnyIdentityById(
+    userId: string,
+  ): Promise<AuthIdentityRecord | null> {
+    const customer = await this.authIdentityService.findById(
+      'customer',
+      userId,
+    );
+    if (customer) return customer;
+    return this.authIdentityService.findById('staff', userId);
+  }
+
+  private toPublicUser(user: AuthIdentityRecord) {
+    return {
+      id: user.id,
+      phoneNumber: user.phoneNumber,
+      firstName: user.firstName ?? null,
+      lastName: user.lastName ?? null,
+      email: user.email ?? null,
+      isActive: user.isActive,
+      createdAt: user.createdAt,
+    };
   }
 }

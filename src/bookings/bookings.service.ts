@@ -70,9 +70,9 @@ export class BookingsService {
   }
 
   private async isStaffUser(userId: string): Promise<boolean> {
-    const userRoles = await this.databaseService.userRole.findMany({
+    const userRoles = await this.databaseService.staffRole.findMany({
       where: {
-        userId,
+        staffId: userId,
       },
       include: {
         role: true,
@@ -166,7 +166,7 @@ export class BookingsService {
     );
 
     // Validate customer exists
-    const customer = await this.databaseService.user.findUnique({
+    const customer = await this.databaseService.customer.findUnique({
       where: { id: customerId },
     });
     if (!customer) {
@@ -432,7 +432,7 @@ export class BookingsService {
 
     // Validate customer exists if being updated
     if (updateBookingDto.customerId) {
-      const customer = await this.databaseService.user.findUnique({
+      const customer = await this.databaseService.customer.findUnique({
         where: { id: updateBookingDto.customerId },
       });
       if (!customer) {

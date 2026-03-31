@@ -280,7 +280,7 @@ async function seedSuperAdminUser(superAdminRoleId: string) {
     ? parseInt(process.env.HASH_SALT, 10)
     : 10;
   const passwordHash = await bcrypt.hash('123456', saltRounds);
-  const superAdminUser = await prisma.user.upsert({
+  const superAdminUser = await prisma.staff.upsert({
     where: { phoneNumber: '0912345678' },
     update: {},
     create: {
@@ -292,16 +292,16 @@ async function seedSuperAdminUser(superAdminRoleId: string) {
     },
   });
 
-  await prisma.userRole.upsert({
+  await prisma.staffRole.upsert({
     where: {
-      userId_roleId: {
-        userId: superAdminUser.id,
+      staffId_roleId: {
+        staffId: superAdminUser.id,
         roleId: superAdminRoleId,
       },
     },
     update: {},
     create: {
-      userId: superAdminUser.id,
+      staffId: superAdminUser.id,
       roleId: superAdminRoleId,
     },
   });
@@ -325,7 +325,7 @@ async function seedAdminUser(adminRoleId: string) {
     ? parseInt(process.env.HASH_SALT, 10)
     : 10;
   const passwordHash = await bcrypt.hash('123456', saltRounds);
-  const adminUser = await prisma.user.upsert({
+  const adminUser = await prisma.staff.upsert({
     where: { phoneNumber: '0987654321' },
     update: {},
     create: {
@@ -337,16 +337,16 @@ async function seedAdminUser(adminRoleId: string) {
     },
   });
 
-  await prisma.userRole.upsert({
+  await prisma.staffRole.upsert({
     where: {
-      userId_roleId: {
-        userId: adminUser.id,
+      staffId_roleId: {
+        staffId: adminUser.id,
         roleId: adminRoleId,
       },
     },
     update: {},
     create: {
-      userId: adminUser.id,
+      staffId: adminUser.id,
       roleId: adminRoleId,
     },
   });
@@ -586,7 +586,7 @@ async function seedCustomerUsers(customerRoleId: string) {
     const phoneNumber = `09${faker.string.numeric('########')}`;
     const email = faker.internet.email({ firstName, lastName });
 
-    const customer = await prisma.user.upsert({
+    const customer = await prisma.customer.upsert({
       where: { phoneNumber },
       update: {},
       create: {
@@ -595,20 +595,6 @@ async function seedCustomerUsers(customerRoleId: string) {
         firstName,
         lastName,
         passwordHash,
-      },
-    });
-
-    await prisma.userRole.upsert({
-      where: {
-        userId_roleId: {
-          userId: customer.id,
-          roleId: customerRoleId,
-        },
-      },
-      update: {},
-      create: {
-        userId: customer.id,
-        roleId: customerRoleId,
       },
     });
 
