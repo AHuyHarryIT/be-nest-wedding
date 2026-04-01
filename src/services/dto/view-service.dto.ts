@@ -52,6 +52,22 @@ export class ViewServiceDto {
   @IsBoolean()
   is_active: boolean;
 
+  @ApiPropertyOptional({
+    description: 'Whether the service requires location',
+    example: true,
+  })
+  @IsOptional()
+  @IsBoolean()
+  isLocation?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Whether the service requires time',
+    example: true,
+  })
+  @IsOptional()
+  @IsBoolean()
+  isTime?: boolean;
+
   @ApiProperty({
     description: 'Creation date',
     example: '2025-01-01T00:00:00.000Z',

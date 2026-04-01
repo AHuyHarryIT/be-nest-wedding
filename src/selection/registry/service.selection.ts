@@ -9,6 +9,8 @@ export const ServiceSelection: SelectionRegistry = {
       id: true,
       name: true,
       price: true,
+      isLocation: true,
+      isTime: true,
       jobId: true,
       job: {
         select: {

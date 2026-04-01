@@ -237,6 +237,8 @@ model Service {
   description String?
   price       Float   @default(0)
   isActive    Boolean @default(false) @map("is_active")
+  isLocation  Boolean @default(false) @map("is_location")
+  isTime      Boolean @default(false) @map("is_time")
   jobId       String? @map("job_id")
 
   // Image fields

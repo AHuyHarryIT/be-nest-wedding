@@ -30,6 +30,16 @@ export class ServiceEntity implements Service {
   isActive: boolean;
 
   @ApiProperty({
+    example: false,
+  })
+  isLocation: boolean;
+
+  @ApiProperty({
+    example: false,
+  })
+  isTime: boolean;
+
+  @ApiProperty({
     example: '2025-01-01T00:00:00.000Z',
   })
   createdAt: Date;

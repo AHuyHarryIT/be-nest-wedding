@@ -1,0 +1,3 @@
+ALTER TABLE "services"
+ADD COLUMN "is_location" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN "is_time" BOOLEAN NOT NULL DEFAULT false;

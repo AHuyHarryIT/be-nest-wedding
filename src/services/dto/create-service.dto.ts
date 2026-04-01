@@ -67,6 +67,36 @@ export class CreateServiceDto {
   isActive?: boolean;
 
   @ApiPropertyOptional({
+    description: 'Whether this service requires a location value',
+    example: true,
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value.toLowerCase() === 'true';
+    }
+    return Boolean(value);
+  })
+  isLocation?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Whether this service requires a time value',
+    example: true,
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value.toLowerCase() === 'true';
+    }
+    return Boolean(value);
+  })
+  isTime?: boolean;
+
+  @ApiPropertyOptional({
     description: 'Optional managed job required for this service',
     example: '4a7ab730-dcdb-4d1d-af79-369411b9dee8',
     nullable: true,

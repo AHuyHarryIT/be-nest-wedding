@@ -47,6 +47,8 @@ export class ServicesService {
       description: createServiceDto.description || null,
       price: createServiceDto.price || 0,
       isActive: createServiceDto.isActive || false,
+      isLocation: createServiceDto.isLocation || false,
+      isTime: createServiceDto.isTime || false,
     };
 
     if (createServiceDto.jobId) {
@@ -144,6 +146,8 @@ export class ServicesService {
       description: updateServiceDto.description,
       price: updateServiceDto.price,
       isActive: updateServiceDto.isActive,
+      isLocation: updateServiceDto.isLocation,
+      isTime: updateServiceDto.isTime,
     };
 
     if (Object.prototype.hasOwnProperty.call(updateServiceDto, 'jobId')) {
@@ -365,6 +369,8 @@ export class ServicesService {
       description: createServiceDto.description || null,
       price: createServiceDto.price || 0,
       isActive: createServiceDto.isActive || false,
+      isLocation: createServiceDto.isLocation || false,
+      isTime: createServiceDto.isTime || false,
     };
 
     if (createServiceDto.jobId) {
@@ -411,6 +417,8 @@ export class ServicesService {
       description: updateServiceDto.description,
       price: updateServiceDto.price,
       isActive: updateServiceDto.isActive,
+      isLocation: updateServiceDto.isLocation,
+      isTime: updateServiceDto.isTime,
     };
 
     if (Object.prototype.hasOwnProperty.call(updateServiceDto, 'jobId')) {
