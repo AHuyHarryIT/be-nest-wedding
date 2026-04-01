@@ -1085,7 +1085,9 @@ async function seedBookingFixtures(
   await prisma.bookingStaff.create({
     data: {
       bookingId: booking.id,
+      sourceKey: `service:${servicesByName[SEEDED_SERVICE_NAMES.leadPhotographerService].id}`,
       staffId: adminStaffId,
+      serviceLabel: `${SEEDED_PACKAGE_NAME} / ${SEEDED_SERVICE_NAMES.leadPhotographerService}`,
       job: 'Lead photographer',
     },
   });

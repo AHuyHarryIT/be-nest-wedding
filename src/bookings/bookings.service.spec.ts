@@ -49,10 +49,15 @@ describe('BookingsService', () => {
     assignedStaffs: [],
   };
 
-  const makeEligibleStaff = (id: string) => ({
+  const makeEligibleStaff = (
+    id: string,
+    jobIds: string[] = ['job-1'],
+    isActive = true,
+  ) => ({
     id,
+    isActive,
     roles: [{ roleId: 'role-1' }],
-    staffJobs: [{ jobId: 'job-1' }],
+    staffJobs: jobIds.map((jobId) => ({ jobId })),
   });
 
   beforeEach(async () => {
@@ -194,7 +199,14 @@ describe('BookingsService', () => {
           customer: { connect: { id: 'customer-1' } },
           totalPrice: 300000,
           assignedStaffs: {
-            create: [{ staffId: 'STF-001', job: null }],
+            create: [
+              expect.objectContaining({
+                sourceKey: 'staff:STF-001',
+                staffId: 'STF-001',
+                serviceLabel: null,
+                job: null,
+              }),
+            ],
           },
         }),
       }),
@@ -274,7 +286,14 @@ describe('BookingsService', () => {
         data: expect.objectContaining({
           assignedStaffs: {
             deleteMany: {},
-            create: [{ staffId: 'STF-002', job: null }],
+            create: [
+              expect.objectContaining({
+                sourceKey: 'staff:STF-002',
+                staffId: 'STF-002',
+                serviceLabel: null,
+                job: null,
+              }),
+            ],
           },
         }),
       }),
@@ -376,7 +395,14 @@ describe('BookingsService', () => {
         data: expect.objectContaining({
           assignedStaffs: {
             deleteMany: {},
-            create: [{ staffId: 'STF-003', job: null }],
+            create: [
+              expect.objectContaining({
+                sourceKey: 'staff:STF-003',
+                staffId: 'STF-003',
+                serviceLabel: null,
+                job: null,
+              }),
+            ],
           },
         }),
       }),
@@ -435,7 +461,9 @@ describe('BookingsService', () => {
 
     const result = await service.assignStaff('booking-1', [
       {
+        sourceKey: 'service:svc-1',
         staffId: 'STF-004',
+        serviceLabel: 'Photography',
         job: 'Main photographer',
       },
     ]);
@@ -446,7 +474,14 @@ describe('BookingsService', () => {
         data: expect.objectContaining({
           assignedStaffs: {
             deleteMany: {},
-            create: [{ staffId: 'STF-004', job: 'Main photographer' }],
+            create: [
+              expect.objectContaining({
+                sourceKey: 'service:svc-1',
+                staffId: 'STF-004',
+                serviceLabel: 'Photography',
+                job: 'Main photographer',
+              }),
+            ],
           },
         }),
       }),
@@ -480,14 +515,34 @@ describe('BookingsService', () => {
     expect(databaseServiceMock.booking.update).not.toHaveBeenCalled();
   });
 
-  it('rejects assigning staff whose managed jobs do not match the booking service jobs', async () => {
+  it('rejects assigning inactive staff', async () => {
+    databaseServiceMock.booking.findFirst.mockResolvedValue({
+      ...baseBooking,
+      status: BookingStatus.CONFIRMED,
+      assignedStaffs: [],
+      services: [],
+      packages: [],
+    });
+    databaseServiceMock.staff.findMany.mockResolvedValue([
+      makeEligibleStaff('STF-INACTIVE', ['job-1'], false),
+    ]);
+
+    await expect(
+      service.assignStaff('booking-1', ['STF-INACTIVE']),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(databaseServiceMock.booking.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects assigning staff whose managed jobs differ from the booking service jobs', async () => {
     databaseServiceMock.booking.findFirst.mockResolvedValue({
       ...baseBooking,
       status: BookingStatus.CONFIRMED,
       services: [
         {
-          serviceId: 'service-1',
+          serviceId: 'svc-photo',
           service: {
+            id: 'svc-photo',
             jobId: 'job-photo',
           },
         },
@@ -496,18 +551,153 @@ describe('BookingsService', () => {
       assignedStaffs: [],
     });
     databaseServiceMock.staff.findMany.mockResolvedValue([
-      {
-        id: 'STF-006',
-        roles: [{ roleId: 'role-1' }],
-        staffJobs: [{ jobId: 'job-video' }],
-      },
+      makeEligibleStaff('STF-006', ['job-video']),
     ]);
 
     await expect(
-      service.assignStaff('booking-1', ['STF-006']),
-    ).rejects.toBeInstanceOf(BadRequestException);
+      service.assignStaff('booking-1', [
+        {
+          sourceKey: 'service:svc-photo',
+          staffId: 'STF-006',
+          serviceLabel: 'Photography',
+          job: 'Lead Photographer',
+        },
+      ]),
+    ).rejects.toThrow(BadRequestException);
 
     expect(databaseServiceMock.booking.update).not.toHaveBeenCalled();
+  });
+
+  it('allows assigning the same staff to multiple service rows in one booking', async () => {
+    databaseServiceMock.booking.findFirst
+      .mockResolvedValueOnce({
+        ...baseBooking,
+        status: BookingStatus.CONFIRMED,
+        assignedStaffs: [],
+      })
+      .mockResolvedValueOnce({
+        ...baseBooking,
+        status: BookingStatus.CONFIRMED,
+        assignedStaffs: [
+          {
+            sourceKey: 'service:svc-photo',
+            staffId: 'STF-007',
+            serviceLabel: 'Photography',
+            job: 'Lead Photographer',
+            staff: {
+              id: 'STF-007',
+              firstName: 'Reuse',
+              lastName: 'Staff',
+              email: 'reuse@example.com',
+              phoneNumber: '0900000007',
+              isActive: true,
+            },
+          },
+          {
+            sourceKey: 'service:svc-event',
+            staffId: 'STF-007',
+            serviceLabel: 'Event Planning',
+            job: 'Booking Coordinator',
+            staff: {
+              id: 'STF-007',
+              firstName: 'Reuse',
+              lastName: 'Staff',
+              email: 'reuse@example.com',
+              phoneNumber: '0900000007',
+              isActive: true,
+            },
+          },
+        ],
+      });
+    databaseServiceMock.staff.findMany.mockResolvedValue([
+      makeEligibleStaff('STF-007', ['job-photo', 'job-event']),
+    ]);
+    databaseServiceMock.booking.update.mockResolvedValue({
+      ...baseBooking,
+      status: BookingStatus.CONFIRMED,
+      assignedStaffs: [
+        {
+          sourceKey: 'service:svc-photo',
+          staffId: 'STF-007',
+          serviceLabel: 'Photography',
+          job: 'Lead Photographer',
+          staff: {
+            id: 'STF-007',
+            firstName: 'Reuse',
+            lastName: 'Staff',
+            email: 'reuse@example.com',
+            phoneNumber: '0900000007',
+            isActive: true,
+          },
+        },
+        {
+          sourceKey: 'service:svc-event',
+          staffId: 'STF-007',
+          serviceLabel: 'Event Planning',
+          job: 'Booking Coordinator',
+          staff: {
+            id: 'STF-007',
+            firstName: 'Reuse',
+            lastName: 'Staff',
+            email: 'reuse@example.com',
+            phoneNumber: '0900000007',
+            isActive: true,
+          },
+        },
+      ],
+    });
+
+    const result = await service.assignStaff('booking-1', [
+      {
+        sourceKey: 'service:svc-photo',
+        staffId: 'STF-007',
+        serviceLabel: 'Photography',
+        job: 'Lead Photographer',
+      },
+      {
+        sourceKey: 'service:svc-event',
+        staffId: 'STF-007',
+        serviceLabel: 'Event Planning',
+        job: 'Booking Coordinator',
+      },
+    ]);
+
+    expect(databaseServiceMock.booking.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'booking-1' },
+        data: expect.objectContaining({
+          assignedStaffs: {
+            deleteMany: {},
+            create: [
+              expect.objectContaining({
+                sourceKey: 'service:svc-photo',
+                staffId: 'STF-007',
+                serviceLabel: 'Photography',
+                job: 'Lead Photographer',
+              }),
+              expect.objectContaining({
+                sourceKey: 'service:svc-event',
+                staffId: 'STF-007',
+                serviceLabel: 'Event Planning',
+                job: 'Booking Coordinator',
+              }),
+            ],
+          },
+        }),
+      }),
+    );
+    expect(result.assignedStaffs).toEqual([
+      expect.objectContaining({
+        id: 'STF-007',
+        sourceKey: 'service:svc-photo',
+        serviceLabel: 'Photography',
+      }),
+      expect.objectContaining({
+        id: 'STF-007',
+        sourceKey: 'service:svc-event',
+        serviceLabel: 'Event Planning',
+      }),
+    ]);
   });
 
   it('cancels non-completed bookings through the dedicated cancel flow', async () => {

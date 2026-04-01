@@ -67,6 +67,15 @@ export class ViewBookingOrderDto {
 }
 
 export class ViewBookingAssignedStaffDto {
+  @ApiPropertyOptional({
+    description: 'Stable source key for the assignment row',
+    example: 'package:pkg-1:service:svc-1',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsString()
+  sourceKey?: string;
+
   @ApiProperty({
     description: 'Assigned staff ID',
     example: 'STF-ADMIN',
@@ -89,6 +98,15 @@ export class ViewBookingAssignedStaffDto {
   @IsOptional()
   @IsString()
   job?: string;
+
+  @ApiPropertyOptional({
+    description: 'Service label represented by this assignment row',
+    example: 'Seeded Assignment Package / Photography',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsString()
+  serviceLabel?: string;
 
   @ApiPropertyOptional({
     description: 'Assigned staff first name',

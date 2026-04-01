@@ -38,7 +38,9 @@ export interface BookingWithOrderSummary extends Booking {
 type BookingStaffAssignmentInput =
   | string
   | {
+      sourceKey?: string | null;
       staffId: string;
+      serviceLabel?: string | null;
       job?: string | null;
     };
 
@@ -70,36 +72,74 @@ export class BookingsService {
 
   private normalizeStaffAssignments(
     staffAssignments: BookingStaffAssignmentInput[],
-  ): Array<{ staffId: string; job: string | null }> {
-    const normalizedAssignments: Array<{
-      staffId: string;
-      job: string | null;
-    }> = staffAssignments
+  ): Array<{
+    sourceKey: string;
+    staffId: string;
+    serviceLabel: string | null;
+    job: string | null;
+  }> {
+    const normalizedAssignments = staffAssignments
       .map((assignment) => {
         if (typeof assignment === 'string') {
-          return { staffId: assignment.trim(), job: null };
+          const staffId = assignment.trim();
+          return staffId
+            ? {
+                sourceKey: `staff:${staffId}`,
+                staffId,
+                serviceLabel: null,
+                job: null,
+              }
+            : null;
+        }
+
+        const staffId = assignment.staffId.trim();
+        if (!staffId) {
+          return null;
         }
 
         return {
-          staffId: assignment.staffId.trim(),
+          sourceKey:
+            typeof assignment.sourceKey === 'string' &&
+            assignment.sourceKey.trim()
+              ? assignment.sourceKey.trim()
+              : `staff:${staffId}`,
+          staffId,
+          serviceLabel:
+            typeof assignment.serviceLabel === 'string' &&
+            assignment.serviceLabel.trim()
+              ? assignment.serviceLabel.trim()
+              : null,
           job:
             typeof assignment.job === 'string' && assignment.job.trim()
               ? assignment.job.trim()
               : null,
         };
       })
-      .filter((assignment) => Boolean(assignment.staffId));
+      .filter(
+        (
+          assignment,
+        ): assignment is {
+          sourceKey: string;
+          staffId: string;
+          serviceLabel: string | null;
+          job: string | null;
+        } => Boolean(assignment),
+      );
 
-    const uniqueAssignments: Array<{ staffId: string; job: string | null }> =
-      [];
-    const seenIds = new Set<string>();
+    const uniqueAssignments: Array<{
+      sourceKey: string;
+      staffId: string;
+      serviceLabel: string | null;
+      job: string | null;
+    }> = [];
+    const seenKeys = new Set<string>();
 
     for (const assignment of normalizedAssignments) {
-      if (seenIds.has(assignment.staffId)) {
+      if (seenKeys.has(assignment.sourceKey)) {
         continue;
       }
 
-      seenIds.add(assignment.staffId);
+      seenKeys.add(assignment.sourceKey);
       uniqueAssignments.push(assignment);
     }
 
@@ -112,44 +152,76 @@ export class BookingsService {
     ];
   }
 
-  private extractRequiredServiceJobIds(
+  private extractRequiredServiceAssignments(
     source:
       | {
-          services?: Array<{ service?: { jobId?: string | null } | null }>;
+          services?: Array<{
+            serviceId?: string;
+            service?: { id?: string; jobId?: string | null } | null;
+          }>;
           packages?: Array<{
+            packageId?: string;
             package?: {
-              services?: Array<{ service?: { jobId?: string | null } | null }>;
+              id?: string;
+              services?: Array<{
+                serviceId: string;
+                service?: { id?: string; jobId?: string | null } | null;
+              }>;
             } | null;
           }>;
         }
       | null
       | undefined,
-  ): string[] {
+  ): Array<{ sourceKey: string; jobId: string }> {
     if (!source) {
       return [];
     }
 
-    const requiredJobIds = [
-      ...(source.services ?? [])
-        .map((item) => item.service?.jobId)
-        .filter((jobId): jobId is string => Boolean(jobId)),
-      ...(source.packages ?? []).flatMap((item) =>
-        (item.package?.services ?? [])
-          .map((pkgService) => pkgService.service?.jobId)
-          .filter((jobId): jobId is string => Boolean(jobId)),
-      ),
-    ];
+    const assignments: Array<{ sourceKey: string; jobId: string }> = [];
 
-    return [...new Set(requiredJobIds)];
+    for (const item of source.services ?? []) {
+      const serviceId = item.service?.id || item.serviceId;
+      const jobId = item.service?.jobId;
+      if (!serviceId || !jobId) {
+        continue;
+      }
+
+      assignments.push({
+        sourceKey: `service:${serviceId}`,
+        jobId,
+      });
+    }
+
+    for (const item of source.packages ?? []) {
+      const packageId = item.package?.id || item.packageId;
+      if (!packageId) {
+        continue;
+      }
+
+      for (const pkgService of item.package?.services ?? []) {
+        const serviceId = pkgService.service?.id || pkgService.serviceId;
+        const jobId = pkgService.service?.jobId;
+        if (!serviceId || !jobId) {
+          continue;
+        }
+
+        assignments.push({
+          sourceKey: `package:${packageId}:service:${serviceId}`,
+          jobId,
+        });
+      }
+    }
+
+    return assignments;
   }
 
-  private async resolveRequiredServiceJobIds(params: {
+  private async resolveRequiredServiceAssignments(params: {
     packageIds?: string[];
     serviceIds?: string[];
-  }): Promise<string[]> {
+  }): Promise<Array<{ sourceKey: string; jobId: string }>> {
     const directServiceIds = this.normalizeStaffIds(params.serviceIds ?? []);
     const packageIds = this.normalizeStaffIds(params.packageIds ?? []);
-    const requiredJobIds = new Set<string>();
+    const assignments: Array<{ sourceKey: string; jobId: string }> = [];
 
     if (directServiceIds.length > 0) {
       const services = await this.databaseService.service.findMany({
@@ -158,13 +230,17 @@ export class BookingsService {
           deletedAt: null,
         },
         select: {
+          id: true,
           jobId: true,
         },
       });
 
       services.forEach((service) => {
         if (service.jobId) {
-          requiredJobIds.add(service.jobId);
+          assignments.push({
+            sourceKey: `service:${service.id}`,
+            jobId: service.jobId,
+          });
         }
       });
     }
@@ -176,10 +252,13 @@ export class BookingsService {
           deletedAt: null,
         },
         select: {
+          id: true,
           services: {
             select: {
+              serviceId: true,
               service: {
                 select: {
+                  id: true,
                   jobId: true,
                 },
               },
@@ -190,25 +269,42 @@ export class BookingsService {
 
       packages.forEach((pkg) => {
         (pkg.services ?? []).forEach((pkgService) => {
-          if (pkgService.service?.jobId) {
-            requiredJobIds.add(pkgService.service.jobId);
+          const serviceId = pkgService.service?.id || pkgService.serviceId;
+          const jobId = pkgService.service?.jobId;
+          if (!serviceId || !jobId) {
+            return;
           }
+
+          assignments.push({
+            sourceKey: `package:${pkg.id}:service:${serviceId}`,
+            jobId,
+          });
         });
       });
     }
 
-    return [...requiredJobIds];
+    return assignments;
   }
 
   private async validateStaffAssignments(
-    staffIds: string[],
-    requiredJobIds: string[] = [],
+    staffAssignments: Array<{
+      sourceKey: string;
+      staffId: string;
+      serviceLabel: string | null;
+      job: string | null;
+    }>,
+    requiredServiceAssignments: Array<{
+      sourceKey: string;
+      jobId: string;
+    }> = [],
   ): Promise<void> {
-    if (!staffIds.length) {
+    if (!staffAssignments.length) {
       return;
     }
 
-    const uniqueStaffIds = this.normalizeStaffIds(staffIds);
+    const uniqueStaffIds = this.normalizeStaffIds(
+      staffAssignments.map(({ staffId }) => staffId),
+    );
     const staffs = await this.databaseService.staff.findMany({
       where: {
         id: { in: uniqueStaffIds },
@@ -216,6 +312,7 @@ export class BookingsService {
       },
       select: {
         id: true,
+        isActive: true,
         roles: {
           select: { roleId: true },
           take: 1,
@@ -232,25 +329,58 @@ export class BookingsService {
 
     const invalidStaffIds = staffs
       .filter((staff) => {
-        if (staff.roles.length === 0 || staff.staffJobs.length === 0) {
+        if (
+          !staff.isActive ||
+          staff.roles.length === 0 ||
+          staff.staffJobs.length === 0
+        ) {
           return true;
         }
-
-        if (requiredJobIds.length === 0) {
-          return false;
-        }
-
-        return !staff.staffJobs.some((staffJob) =>
-          requiredJobIds.includes(staffJob.jobId),
-        );
+        return false;
       })
       .map((staff) => staff.id);
 
     if (invalidStaffIds.length > 0) {
       throw new BadRequestException(
-        requiredJobIds.length > 0
-          ? `Assigned staff must have at least one role and a managed job matching this booking's service jobs: ${invalidStaffIds.join(', ')}`
-          : `Assigned staff must have at least one role and one managed job: ${invalidStaffIds.join(', ')}`,
+        `Assigned staff must be active and have at least one role and one managed job: ${invalidStaffIds.join(', ')}`,
+      );
+    }
+
+    if (requiredServiceAssignments.length === 0) {
+      return;
+    }
+
+    const requiredJobBySourceKey = new Map(
+      requiredServiceAssignments.map((assignment) => [
+        assignment.sourceKey,
+        assignment.jobId,
+      ]),
+    );
+    const staffById = new Map(
+      staffs.map((staff) => [
+        staff.id,
+        new Set(staff.staffJobs.map((staffJob) => staffJob.jobId)),
+      ]),
+    );
+
+    const mismatchedAssignments = staffAssignments
+      .filter((assignment) => {
+        const requiredJobId = requiredJobBySourceKey.get(assignment.sourceKey);
+        if (!requiredJobId) {
+          return false;
+        }
+
+        const staffJobIds = staffById.get(assignment.staffId);
+        return !staffJobIds?.has(requiredJobId);
+      })
+      .map(
+        (assignment) =>
+          `${assignment.serviceLabel || assignment.sourceKey}: ${assignment.staffId}`,
+      );
+
+    if (mismatchedAssignments.length > 0) {
+      throw new BadRequestException(
+        `Assigned staff must have the matching managed job for each service row: ${mismatchedAssignments.join(', ')}`,
       );
     }
   }
@@ -258,7 +388,9 @@ export class BookingsService {
   private mapAssignedStaffs(
     booking: BookingWithOrderSummary & {
       assignedStaffs?: Array<{
+        sourceKey: string;
         staffId: string;
+        serviceLabel?: string | null;
         job?: string | null;
         staff: {
           id: string;
@@ -275,8 +407,10 @@ export class BookingsService {
       ...booking,
       assignedStaffs:
         booking.assignedStaffs?.map((assignment) => ({
+          sourceKey: assignment.sourceKey,
           ...assignment.staff,
           staffId: assignment.staffId,
+          serviceLabel: assignment.serviceLabel ?? null,
           job: assignment.job ?? null,
         })) ?? [],
     };
@@ -440,13 +574,24 @@ export class BookingsService {
 
   private async buildAssignedStaffData(
     staffAssignments: BookingStaffAssignmentInput[],
-    requiredJobIds: string[] = [],
-  ): Promise<Array<{ staffId: string; job: string | null }>> {
+    requiredServiceAssignments: Array<{
+      sourceKey: string;
+      jobId: string;
+    }> = [],
+  ): Promise<
+    Array<{
+      sourceKey: string;
+      staffId: string;
+      serviceLabel: string | null;
+      job: string | null;
+    }>
+  > {
     const normalizedAssignments =
       this.normalizeStaffAssignments(staffAssignments);
-    const staffIds = normalizedAssignments.map(({ staffId }) => staffId);
-
-    await this.validateStaffAssignments(staffIds, requiredJobIds);
+    await this.validateStaffAssignments(
+      normalizedAssignments,
+      requiredServiceAssignments,
+    );
 
     return normalizedAssignments;
   }
@@ -468,17 +613,23 @@ export class BookingsService {
     // Determine which packages/services to use
     const packageIds = createBookingDto.packageIds || [];
     const serviceIds = createBookingDto.serviceIds || [];
-    const requiredServiceJobIds = await this.resolveRequiredServiceJobIds({
-      packageIds,
-      serviceIds,
-    });
+    const requiredServiceAssignments =
+      await this.resolveRequiredServiceAssignments({
+        packageIds,
+        serviceIds,
+      });
     const staffAssignments = createBookingDto.staffAssignments
       ? await this.buildAssignedStaffData(
           createBookingDto.staffAssignments,
-          requiredServiceJobIds,
+          requiredServiceAssignments,
         )
       : this.normalizeStaffIds(createBookingDto.staffIds || []).map(
-          (staffId) => ({ staffId, job: null }),
+          (staffId) => ({
+            sourceKey: `staff:${staffId}`,
+            staffId,
+            serviceLabel: null,
+            job: null,
+          }),
         );
 
     // At least one package or service is required
@@ -525,10 +676,7 @@ export class BookingsService {
     }
 
     if (!createBookingDto.staffAssignments) {
-      await this.validateStaffAssignments(
-        staffAssignments.map(({ staffId }) => staffId),
-        requiredServiceJobIds,
-      );
+      await this.validateStaffAssignments(staffAssignments, []);
     }
 
     const isStaff = await this.isStaffUser(actorUserId);
@@ -581,10 +729,14 @@ export class BookingsService {
 
     if (staffAssignments.length > 0) {
       data.assignedStaffs = {
-        create: staffAssignments.map(({ staffId, job }) => ({
-          staffId,
-          job,
-        })),
+        create: staffAssignments.map(
+          ({ sourceKey, staffId, serviceLabel, job }) => ({
+            sourceKey,
+            staffId,
+            serviceLabel,
+            job,
+          }),
+        ),
       };
     }
 
@@ -818,7 +970,7 @@ export class BookingsService {
       updateBookingDto.staffAssignments !== undefined
         ? await this.buildAssignedStaffData(
             updateBookingDto.staffAssignments,
-            await this.resolveRequiredServiceJobIds({
+            await this.resolveRequiredServiceAssignments({
               packageIds:
                 updateBookingDto.packageIds ??
                 booking.packages?.map((item) => item.packageId),
@@ -829,22 +981,28 @@ export class BookingsService {
           )
         : updateBookingDto.staffIds !== undefined
           ? this.normalizeStaffIds(updateBookingDto.staffIds).map(
-              (staffId) => ({ staffId, job: null }),
+              (staffId) => ({
+                sourceKey: `staff:${staffId}`,
+                staffId,
+                serviceLabel: null,
+                job: null,
+              }),
             )
           : undefined;
 
     if (normalizedStaffAssignments) {
-      const requiredServiceJobIds = await this.resolveRequiredServiceJobIds({
-        packageIds:
-          updateBookingDto.packageIds ??
-          booking.packages?.map((item) => item.packageId),
-        serviceIds:
-          updateBookingDto.serviceIds ??
-          booking.services?.map((item) => item.serviceId),
-      });
+      const requiredServiceAssignments =
+        await this.resolveRequiredServiceAssignments({
+          packageIds:
+            updateBookingDto.packageIds ??
+            booking.packages?.map((item) => item.packageId),
+          serviceIds:
+            updateBookingDto.serviceIds ??
+            booking.services?.map((item) => item.serviceId),
+        });
       await this.validateStaffAssignments(
-        normalizedStaffAssignments.map(({ staffId }) => staffId),
-        requiredServiceJobIds,
+        normalizedStaffAssignments,
+        requiredServiceAssignments,
       );
     }
 
@@ -915,10 +1073,14 @@ export class BookingsService {
         deleteMany: {},
         ...(normalizedStaffAssignments.length > 0
           ? {
-              create: normalizedStaffAssignments.map(({ staffId, job }) => ({
-                staffId,
-                job,
-              })),
+              create: normalizedStaffAssignments.map(
+                ({ sourceKey, staffId, serviceLabel, job }) => ({
+                  sourceKey,
+                  staffId,
+                  serviceLabel,
+                  job,
+                }),
+              ),
             }
           : {}),
       };
@@ -974,10 +1136,11 @@ export class BookingsService {
 
     const normalizedStaffAssignments =
       this.normalizeStaffAssignments(staffAssignments);
-    const requiredServiceJobIds = this.extractRequiredServiceJobIds(booking);
+    const requiredServiceAssignments =
+      this.extractRequiredServiceAssignments(booking);
     await this.validateStaffAssignments(
-      normalizedStaffAssignments.map(({ staffId }) => staffId),
-      requiredServiceJobIds,
+      normalizedStaffAssignments,
+      requiredServiceAssignments,
     );
 
     const updatedBooking = await this.databaseService.booking.update({
@@ -987,10 +1150,14 @@ export class BookingsService {
           deleteMany: {},
           ...(normalizedStaffAssignments.length > 0
             ? {
-                create: normalizedStaffAssignments.map(({ staffId, job }) => ({
-                  staffId,
-                  job,
-                })),
+                create: normalizedStaffAssignments.map(
+                  ({ sourceKey, staffId, serviceLabel, job }) => ({
+                    sourceKey,
+                    staffId,
+                    serviceLabel,
+                    job,
+                  }),
+                ),
               }
             : {}),
         },

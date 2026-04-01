@@ -9,12 +9,30 @@ import {
 import { Type } from 'class-transformer';
 
 export class AssignBookingStaffItemDto {
+  @ApiPropertyOptional({
+    description: 'Stable source key for the service assignment row',
+    example: 'package:pkg-1:service:svc-1',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsString({ message: 'Source key must be a string' })
+  sourceKey?: string;
+
   @ApiProperty({
     description: 'Assigned staff ID',
     example: 'STF-ADMIN',
   })
   @IsString({ message: 'Staff ID must be a string' })
   staffId: string;
+
+  @ApiPropertyOptional({
+    description: 'Source service label for this assignment row',
+    example: 'Seeded Assignment Package / Photography',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsString({ message: 'Service label must be a string' })
+  serviceLabel?: string;
 
   @ApiPropertyOptional({
     description: 'Job or responsibility for the staff member on this booking',
