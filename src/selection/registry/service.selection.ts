@@ -5,7 +5,18 @@ export const ServiceSelection: SelectionRegistry = {
   services: {
     model: (prisma: DatabaseService) => prisma.service,
     searchable: ['name', 'id'],
-    select: ['id', 'name', 'price'],
+    select: {
+      id: true,
+      name: true,
+      price: true,
+      jobId: true,
+      job: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+    },
     where: { isActive: true, deletedAt: null },
   },
 };
