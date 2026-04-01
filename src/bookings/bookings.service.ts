@@ -42,6 +42,9 @@ type BookingStaffAssignmentInput =
       staffId: string;
       serviceLabel?: string | null;
       job?: string | null;
+      locationName?: string | null;
+      startTime?: string | null;
+      endTime?: string | null;
     };
 
 @Injectable()
@@ -77,6 +80,9 @@ export class BookingsService {
     staffId: string;
     serviceLabel: string | null;
     job: string | null;
+    locationName: string | null;
+    startTime: string | null;
+    endTime: string | null;
   }> {
     const normalizedAssignments = staffAssignments
       .map((assignment) => {
@@ -88,6 +94,9 @@ export class BookingsService {
                 staffId,
                 serviceLabel: null,
                 job: null,
+                locationName: null,
+                startTime: null,
+                endTime: null,
               }
             : null;
         }
@@ -113,6 +122,20 @@ export class BookingsService {
             typeof assignment.job === 'string' && assignment.job.trim()
               ? assignment.job.trim()
               : null,
+          locationName:
+            typeof assignment.locationName === 'string' &&
+            assignment.locationName.trim()
+              ? assignment.locationName.trim()
+              : null,
+          startTime:
+            typeof assignment.startTime === 'string' &&
+            assignment.startTime.trim()
+              ? assignment.startTime.trim()
+              : null,
+          endTime:
+            typeof assignment.endTime === 'string' && assignment.endTime.trim()
+              ? assignment.endTime.trim()
+              : null,
         };
       })
       .filter(
@@ -123,6 +146,9 @@ export class BookingsService {
           staffId: string;
           serviceLabel: string | null;
           job: string | null;
+          locationName: string | null;
+          startTime: string | null;
+          endTime: string | null;
         } => Boolean(assignment),
       );
 
@@ -131,6 +157,9 @@ export class BookingsService {
       staffId: string;
       serviceLabel: string | null;
       job: string | null;
+      locationName: string | null;
+      startTime: string | null;
+      endTime: string | null;
     }> = [];
     const seenKeys = new Set<string>();
 
@@ -292,6 +321,9 @@ export class BookingsService {
       staffId: string;
       serviceLabel: string | null;
       job: string | null;
+      locationName: string | null;
+      startTime: string | null;
+      endTime: string | null;
     }>,
     requiredServiceAssignments: Array<{
       sourceKey: string;
@@ -392,6 +424,9 @@ export class BookingsService {
         staffId: string;
         serviceLabel?: string | null;
         job?: string | null;
+        locationName?: string | null;
+        startTime?: string | null;
+        endTime?: string | null;
         staff: {
           id: string;
           firstName: string | null;
@@ -412,6 +447,9 @@ export class BookingsService {
           staffId: assignment.staffId,
           serviceLabel: assignment.serviceLabel ?? null,
           job: assignment.job ?? null,
+          locationName: assignment.locationName ?? null,
+          startTime: assignment.startTime ?? null,
+          endTime: assignment.endTime ?? null,
         })) ?? [],
     };
   }
@@ -488,6 +526,8 @@ export class BookingsService {
                         name: true,
                         description: true,
                         price: true,
+                        isLocation: true,
+                        isTime: true,
                         jobId: true,
                         job: {
                           select: {
@@ -584,6 +624,9 @@ export class BookingsService {
       staffId: string;
       serviceLabel: string | null;
       job: string | null;
+      locationName: string | null;
+      startTime: string | null;
+      endTime: string | null;
     }>
   > {
     const normalizedAssignments =
@@ -629,6 +672,9 @@ export class BookingsService {
             staffId,
             serviceLabel: null,
             job: null,
+            locationName: null,
+            startTime: null,
+            endTime: null,
           }),
         );
 
@@ -730,11 +776,22 @@ export class BookingsService {
     if (staffAssignments.length > 0) {
       data.assignedStaffs = {
         create: staffAssignments.map(
-          ({ sourceKey, staffId, serviceLabel, job }) => ({
+          ({
             sourceKey,
             staffId,
             serviceLabel,
             job,
+            locationName,
+            startTime,
+            endTime,
+          }) => ({
+            sourceKey,
+            staffId,
+            serviceLabel,
+            job,
+            ...(locationName ? { locationName } : {}),
+            ...(startTime ? { startTime } : {}),
+            ...(endTime ? { endTime } : {}),
           }),
         ),
       };
@@ -986,6 +1043,9 @@ export class BookingsService {
                 staffId,
                 serviceLabel: null,
                 job: null,
+                locationName: null,
+                startTime: null,
+                endTime: null,
               }),
             )
           : undefined;
@@ -1074,11 +1134,22 @@ export class BookingsService {
         ...(normalizedStaffAssignments.length > 0
           ? {
               create: normalizedStaffAssignments.map(
-                ({ sourceKey, staffId, serviceLabel, job }) => ({
+                ({
                   sourceKey,
                   staffId,
                   serviceLabel,
                   job,
+                  locationName,
+                  startTime,
+                  endTime,
+                }) => ({
+                  sourceKey,
+                  staffId,
+                  serviceLabel,
+                  job,
+                  ...(locationName ? { locationName } : {}),
+                  ...(startTime ? { startTime } : {}),
+                  ...(endTime ? { endTime } : {}),
                 }),
               ),
             }
@@ -1151,11 +1222,22 @@ export class BookingsService {
           ...(normalizedStaffAssignments.length > 0
             ? {
                 create: normalizedStaffAssignments.map(
-                  ({ sourceKey, staffId, serviceLabel, job }) => ({
+                  ({
                     sourceKey,
                     staffId,
                     serviceLabel,
                     job,
+                    locationName,
+                    startTime,
+                    endTime,
+                  }) => ({
+                    sourceKey,
+                    staffId,
+                    serviceLabel,
+                    job,
+                    ...(locationName ? { locationName } : {}),
+                    ...(startTime ? { startTime } : {}),
+                    ...(endTime ? { endTime } : {}),
                   }),
                 ),
               }

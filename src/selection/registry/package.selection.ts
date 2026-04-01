@@ -16,6 +16,8 @@ export const PackageSelection: SelectionRegistry = {
             select: {
               id: true,
               name: true,
+              isLocation: true,
+              isTime: true,
               jobId: true,
               job: {
                 select: {

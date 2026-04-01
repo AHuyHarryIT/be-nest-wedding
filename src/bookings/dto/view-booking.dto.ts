@@ -109,6 +109,35 @@ export class ViewBookingAssignedStaffDto {
   serviceLabel?: string;
 
   @ApiPropertyOptional({
+    description: 'Optional location stored for this service row',
+    example: 'Da Nang Beach Resort',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsString()
+  locationName?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Optional start time stored for this service row in HH:mm format',
+    example: '09:30',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsString()
+  startTime?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Optional end time stored for this service row in HH:mm format',
+    example: '11:30',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsString()
+  endTime?: string;
+
+  @ApiPropertyOptional({
     description: 'Assigned staff first name',
     example: 'Admin',
     nullable: true,

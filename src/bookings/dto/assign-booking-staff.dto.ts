@@ -42,6 +42,35 @@ export class AssignBookingStaffItemDto {
   @IsOptional()
   @IsString({ message: 'Job must be a string' })
   job?: string;
+
+  @ApiPropertyOptional({
+    description: 'Optional service location for this booking assignment row',
+    example: 'Da Nang Beach Resort',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsString({ message: 'Location name must be a string' })
+  locationName?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Optional service start time in HH:mm format for this assignment row',
+    example: '09:30',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsString({ message: 'Start time must be a string' })
+  startTime?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Optional service end time in HH:mm format for this assignment row',
+    example: '11:30',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsString({ message: 'End time must be a string' })
+  endTime?: string;
 }
 
 export class AssignBookingStaffDto {

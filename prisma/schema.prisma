@@ -367,6 +367,9 @@ model BookingStaff {
   staffId    String   @map("staff_id")
   job        String?  @map("job")
   serviceLabel String? @map("service_label")
+  locationName String? @map("location_name")
+  startTime    String? @map("start_time")
+  endTime      String? @map("end_time")
   assignedAt DateTime @default(now()) @map("assigned_at")
 
   booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)

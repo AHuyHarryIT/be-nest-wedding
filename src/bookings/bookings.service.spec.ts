@@ -216,6 +216,96 @@ describe('BookingsService', () => {
     ]);
   });
 
+  it('persists optional location and time on booking staff assignments', async () => {
+    databaseServiceMock.staffRole.findMany.mockResolvedValue([
+      {
+        role: { name: 'admin' },
+      },
+    ]);
+    databaseServiceMock.customer.findUnique.mockResolvedValue({
+      id: 'customer-1',
+    });
+    databaseServiceMock.service.findMany
+      .mockResolvedValueOnce([{ id: 'service-1', jobId: 'job-photo' }])
+      .mockResolvedValueOnce([{ id: 'service-1', price: 50000 }])
+      .mockResolvedValueOnce([{ id: 'service-1', price: 50000 }]);
+    databaseServiceMock.staff.findMany.mockResolvedValue([
+      makeEligibleStaff('STF-001', ['job-photo']),
+    ]);
+    databaseServiceMock.booking.create.mockResolvedValue({
+      ...baseBooking,
+      totalPrice: 50000,
+      assignedStaffs: [
+        {
+          sourceKey: 'service:service-1',
+          staffId: 'STF-001',
+          serviceLabel: 'Photography',
+          job: 'Lead Photographer',
+          locationName: 'Da Nang Beach Resort',
+          startTime: '09:30',
+          endTime: '11:30',
+          staff: {
+            id: 'STF-001',
+            firstName: 'Assigned',
+            lastName: 'Staff',
+            email: 'staff@example.com',
+            phoneNumber: '0900000001',
+            isActive: true,
+          },
+        },
+      ],
+    });
+
+    const result = await service.create(
+      {
+        customerId: 'customer-1',
+        serviceIds: ['service-1'],
+        totalPrice: 50000,
+        eventDate: '2026-12-20T10:00:00.000Z',
+        staffAssignments: [
+          {
+            sourceKey: 'service:service-1',
+            staffId: 'STF-001',
+            serviceLabel: 'Photography',
+            job: 'Lead Photographer',
+            locationName: 'Da Nang Beach Resort',
+            startTime: '09:30',
+            endTime: '11:30',
+          },
+        ],
+      } as any,
+      'STF-ADMIN',
+    );
+
+    expect(databaseServiceMock.booking.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          assignedStaffs: {
+            create: [
+              expect.objectContaining({
+                sourceKey: 'service:service-1',
+                staffId: 'STF-001',
+                serviceLabel: 'Photography',
+                job: 'Lead Photographer',
+                locationName: 'Da Nang Beach Resort',
+                startTime: '09:30',
+                endTime: '11:30',
+              }),
+            ],
+          },
+        }),
+      }),
+    );
+    expect(result.assignedStaffs).toEqual([
+      expect.objectContaining({
+        id: 'STF-001',
+        locationName: 'Da Nang Beach Resort',
+        startTime: '09:30',
+        endTime: '11:30',
+      }),
+    ]);
+  });
+
   it('rejects customer attempts to create bookings for another customer', async () => {
     databaseServiceMock.staffRole.findMany.mockResolvedValue([]);
 
