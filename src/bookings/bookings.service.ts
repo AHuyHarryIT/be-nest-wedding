@@ -545,7 +545,11 @@ export class BookingsService {
         },
         services: {
           include: {
-            service: true,
+            service: {
+              include: {
+                job: true,
+              },
+            },
           },
         },
         sessions: {
