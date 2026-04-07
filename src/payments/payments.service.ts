@@ -1,8 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from 'generated/prisma';
 import { DatabaseService } from '../database/database.service';
 import { CreatePaymentDto, UpdatePaymentDto } from './dto';
-
 @Injectable()
 export class PaymentsService {
   constructor(private readonly databaseService: DatabaseService) {}

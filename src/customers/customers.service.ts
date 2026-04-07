@@ -150,6 +150,196 @@ export class CustomersService {
     return this.toView(customer);
   }
 
+  async findOneWithDetails(id: string) {
+    const customer = await this.databaseService.customer.findFirst({
+      where: { id, deletedAt: null },
+      include: {
+        bookings: {
+          where: { deletedAt: null },
+          orderBy: { eventDate: 'desc' },
+          include: {
+            customer: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                phoneNumber: true,
+                email: true,
+              },
+            },
+            packages: {
+              include: {
+                package: {
+                  select: { id: true, name: true, price: true },
+                },
+              },
+            },
+            services: {
+              include: {
+                service: {
+                  select: { id: true, name: true, price: true },
+                },
+              },
+            },
+            orders: {
+              include: {
+                payments: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!customer) {
+      throw new NotFoundException(`Customer with ID "${id}" not found`);
+    }
+
+    // Calculate derived fields
+    const bookings = customer.bookings.map((booking: any) => {
+      const orders = booking.orders || [];
+      let totalSpent = 0;
+      let totalPrice = 0;
+
+      orders.forEach((order: any) => {
+        totalPrice += order.totalPrice || 0;
+        const payments = order.payments || [];
+        payments.forEach((p: any) => {
+          if (p.status === 'SUCCESSFUL') {
+            totalSpent += p.amount || 0;
+          }
+        });
+      });
+
+      // Include booking-level price if no orders
+      if (orders.length === 0) {
+        totalPrice = booking.totalPrice || 0;
+      }
+
+      const remainingBalance = totalPrice - totalSpent;
+
+      return {
+        ...booking,
+        totalPaid: totalSpent,
+        totalPrice,
+        remainingBalance,
+        orders: orders.map((order: any) => {
+          const orderPayments = order.payments || [];
+          const orderPaid = orderPayments
+            .filter((p: any) => p.status === 'SUCCESSFUL')
+            .reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
+          return {
+            ...order,
+            totalPaid: orderPaid,
+            balanceRemaining: order.balanceRemaining ?? (order.totalPrice - orderPaid),
+            payments: orderPayments,
+          };
+        }),
+      };
+    });
+
+    const totalSpent = bookings.reduce((sum: number, b: any) => sum + b.totalPaid, 0);
+    const visitCount = bookings.filter((b: any) =>
+      ['COMPLETED', 'CONFIRMED'].includes(b.status),
+    ).length;
+
+    return {
+      id: customer.id,
+      phoneNumber: customer.phoneNumber,
+      firstName: customer.firstName,
+      lastName: customer.lastName,
+      email: customer.email,
+      avatarUrl: customer.avatarUrl,
+      isActive: customer.isActive,
+      weddingDate: customer.weddingDate,
+      weddingVenue: customer.weddingVenue,
+      emailNotifications: customer.emailNotifications,
+      smsNotifications: customer.smsNotifications,
+      marketingEmails: customer.marketingEmails,
+      createdAt: customer.createdAt,
+      updatedAt: customer.updatedAt,
+      bookings,
+      totalSpent,
+      visitCount,
+    };
+  }
+
+  async findBookingsByCustomer(customerId: string, query?: any) {
+    // Verify customer exists
+    const customer = await this.databaseService.customer.findFirst({
+      where: { id: customerId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!customer) {
+      throw new NotFoundException(`Customer with ID "${customerId}" not found`);
+    }
+
+    const page = query?.page || 1;
+    const limit = query?.limit || 10;
+
+    const where: Prisma.BookingWhereInput = {
+      customerId,
+      deletedAt: null,
+    };
+
+    if (query?.status) {
+      where.status = query.status;
+    }
+
+    const total = await this.databaseService.booking.count({ where });
+
+    const bookings = await this.databaseService.booking.findMany({
+      where,
+      orderBy: { eventDate: 'desc' },
+      skip: (page - 1) * limit,
+      take: limit,
+      include: {
+        orders: {
+          include: {
+            payments: true,
+          },
+        },
+        packages: {
+          include: {
+            package: { select: { id: true, name: true, price: true } },
+          },
+        },
+        services: {
+          include: {
+            service: { select: { id: true, name: true, price: true } },
+          },
+        },
+      },
+    });
+
+    // Calculate payment info for each booking
+    const enrichedBookings = bookings.map((booking: any) => {
+      const orders = booking.orders || [];
+      let totalPaid = 0;
+      let totalPrice = booking.totalPrice || 0;
+
+      orders.forEach((order: any) => {
+        const payments = order.payments || [];
+        payments.forEach((p: any) => {
+          if (p.status === 'SUCCESSFUL') {
+            totalPaid += p.amount || 0;
+          }
+        });
+        if (order.totalPrice > 0) {
+          totalPrice = order.totalPrice;
+        }
+      });
+
+      return {
+        ...booking,
+        totalPaid,
+        remainingBalance: totalPrice - totalPaid,
+      };
+    });
+
+    return { bookings: enrichedBookings, total };
+  }
+
   async update(id: string, updateCustomerDto: UpdateCustomerDto) {
     const customer = await this.databaseService.customer.findFirst({
       where: { id, deletedAt: null },

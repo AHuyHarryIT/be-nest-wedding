@@ -41,6 +41,7 @@ import {
   ViewCustomerDto,
 } from './dto';
 import { CustomersService } from './customers.service';
+import { QueryBookingDto, ViewBookingDto } from '../bookings/dto';
 
 @ApiTags('Customers')
 @ApiExtraModels(
@@ -109,6 +110,50 @@ export class CustomersController {
   async findOne(@Param('id') id: string) {
     const customer = await this.customersService.findOne(id);
     return ResponseBuilder.success(customer, 'Customer retrieved successfully');
+  }
+
+  @Get(':id/detailed')
+  @RequirePermissions('customers:read')
+  @ApiOperation({
+    summary: 'Get a customer full profile with bookings, payments, and order history',
+  })
+  @ApiStandardResponse(ViewCustomerDto, {
+    description: 'Customer full profile retrieved successfully',
+  })
+  @ApiNotFoundResponse({ description: 'Customer not found' })
+  @ApiUnauthorizedResponse()
+  @ApiForbiddenResponse()
+  async findOneDetailed(@Param('id') id: string) {
+    const customer = await this.customersService.findOneWithDetails(id);
+    return ResponseBuilder.success(
+      customer,
+      'Customer full profile retrieved successfully',
+    );
+  }
+
+  @Get(':id/bookings')
+  @RequirePermissions('customers:read')
+  @ApiOperation({
+    summary: 'Get all bookings for a customer',
+  })
+  @ApiPaginatedResponse(ViewBookingDto, {
+    description: 'Paginated list of customer bookings',
+  })
+  @ApiNotFoundResponse({ description: 'Customer not found' })
+  @ApiUnauthorizedResponse()
+  @ApiForbiddenResponse()
+  async findCustomerBookings(
+    @Param('id') id: string,
+    @Query() query: QueryBookingDto,
+  ) {
+    // Verify customer exists
+    await this.customersService.findOne(id);
+    const { bookings, total } = await this.customersService.findBookingsByCustomer(id, query);
+    return ResponseBuilder.paginated(
+      bookings,
+      { page: query.page || 1, limit: query.limit || 10, total },
+      'Customer bookings retrieved successfully',
+    );
   }
 
   @Patch(':id')
