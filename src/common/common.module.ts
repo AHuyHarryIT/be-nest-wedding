@@ -3,8 +3,9 @@ import { PermissionsGuard } from './guards/permissions.guard';
 import { DatabaseModule } from '../database/database.module';
 import {
   BaseRepository,
-  UserRepository,
   BookingRepository,
+  PaymentRepository,
+  UserRepository,
 } from './repositories';
 
 @Global()
@@ -15,11 +16,13 @@ import {
     BaseRepository,
     UserRepository,
     BookingRepository,
+    PaymentRepository,
   ],
   exports: [
     PermissionsGuard,
     UserRepository,
     BookingRepository,
+    PaymentRepository,
   ],
 })
 export class CommonModule {}
