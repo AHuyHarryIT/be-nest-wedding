@@ -13,4 +13,6 @@ RUN npm ci && npx prisma generate
 
 EXPOSE 3000
 
-CMD ["sh", "-c", "if [ ! -d node_modules/.bin ]; then npm ci; fi && npx prisma generate && npm run start:dev"]
+# Always install dependencies on container start to pick up new packages
+# Then generate Prisma client and start the dev server
+CMD ["sh", "-c", "npm ci && npx prisma generate && npm run start:dev"]
