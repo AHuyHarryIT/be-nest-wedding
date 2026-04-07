@@ -63,7 +63,7 @@ export type PaymentHistoryResponse = {
 };
 
 @Injectable()
-export class PaymentService {
+export class PaymentCoreService {
   constructor(
     private readonly databaseService: DatabaseService,
     private readonly paymentRepository: PaymentRepository,

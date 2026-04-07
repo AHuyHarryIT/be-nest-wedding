@@ -19,7 +19,7 @@ import {
   MomoPaymentService,
 } from '../payments/momo.service';
 import { PaymentAttemptService } from '../payments/payment-attempt.service';
-import { PaymentService } from '../payments/payment-core.service';
+import { PaymentCoreService as PaymentService } from '../payments/payment-core.service';
 import { PaymentGatewayTransactionService } from '../payments/payment-gateway-transaction.service';
 import { MomoTransactionQueryResponse } from '../payments/momo.service';
 import { CheckoutDto } from './dto';

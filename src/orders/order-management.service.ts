@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { OrderStatus } from 'generated/prisma';
 import { DatabaseService } from '../database/database.service';
-import { PaymentService } from '../payments/payment-core.service';
+import { PaymentCoreService as PaymentService } from '../payments/payment-core.service';
 
 export interface CreateOrderDto {
   bookingId: string;

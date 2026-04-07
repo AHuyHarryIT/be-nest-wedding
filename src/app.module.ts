@@ -1,6 +1,7 @@
 import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DatabaseService } from './database/database.service';
@@ -21,10 +22,15 @@ import { UsersModule } from './users/users.module';
 import { CustomersModule } from './customers/customers.module';
 import { SelectionModule } from './selection/selection.module';
 import { ChatModule } from './chat/chat.module';
+import { InventoryModule } from './inventory/inventory.module';
+import { QuotationsModule } from './quotations/quotations.module';
 import { AutoRefreshMiddleware } from './auth/auto-refresh.middleware';
+import { RemindersModule } from './reminders/reminders.module';
+
 
 @Module({
   imports: [
+    ScheduleModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: [
@@ -50,6 +56,9 @@ import { AutoRefreshMiddleware } from './auth/auto-refresh.middleware';
     CustomersModule,
     SelectionModule,
     ChatModule,
+    InventoryModule,
+    QuotationsModule,
+    RemindersModule,
   ],
   controllers: [AppController],
   providers: [AppService, DatabaseService],
