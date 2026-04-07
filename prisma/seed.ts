@@ -1039,7 +1039,7 @@ async function seedBookingFixtures(
       customerId: seededCustomer.id,
       notes: 'Seed booking for service-job assignment and session testing',
       status: 'PENDING',
-      eventDate: new Date('2026-12-20T09:00:00.000Z'),
+      eventDate: new Date('2026-04-20T09:00:00.000Z'),
       totalPrice: 330000,
       cancelledAt: null,
       deletedAt: null,
@@ -1049,7 +1049,7 @@ async function seedBookingFixtures(
       customerId: seededCustomer.id,
       notes: 'Seed booking for service-job assignment and session testing',
       status: 'PENDING',
-      eventDate: new Date('2026-12-20T09:00:00.000Z'),
+      eventDate: new Date('2026-04-20T09:00:00.000Z'),
       totalPrice: 330000,
     },
   });
@@ -1105,8 +1105,8 @@ async function seedBookingFixtures(
         data: {
           locationName: 'Seed Ceremony Hall',
           address: '123 Seed Street, Ho Chi Minh City',
-          startsAt: new Date('2026-12-20T09:00:00.000Z'),
-          endsAt: new Date('2026-12-20T11:00:00.000Z'),
+          startsAt: new Date('2026-04-20T09:00:00.000Z'),
+          endsAt: new Date('2026-04-20T11:00:00.000Z'),
           status: 'PENDING',
         },
       })
@@ -1116,8 +1116,8 @@ async function seedBookingFixtures(
           title: SEEDED_SESSION_TITLE,
           locationName: 'Seed Ceremony Hall',
           address: '123 Seed Street, Ho Chi Minh City',
-          startsAt: new Date('2026-12-20T09:00:00.000Z'),
-          endsAt: new Date('2026-12-20T11:00:00.000Z'),
+          startsAt: new Date('2026-04-20T09:00:00.000Z'),
+          endsAt: new Date('2026-04-20T11:00:00.000Z'),
           status: 'PENDING',
         },
       });
