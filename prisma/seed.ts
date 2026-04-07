@@ -1156,6 +1156,265 @@ async function seedBookingFixtures(
 }
 
 /**
+ * Seed inventory categories and sample items
+ */
+async function seedInventory() {
+  console.log('📦 Seeding inventory...');
+
+  // Create categories
+  const [decoCategory, equipCategory, attireCategory] = await Promise.all(
+    ['Decoration', 'Equipment', 'Attire & Accessories'].map(async (name) => {
+      const existing = await prisma.inventoryCategory.findFirst({ where: { name } });
+      if (existing) return existing;
+      return prisma.inventoryCategory.create({ data: { name } });
+    }),
+  );
+
+  console.log(`  ✓ Created ${3} inventory categories`);
+
+  // Create inventory items
+  const items = await Promise.all([
+    prisma.inventoryItem.upsert({
+      where: { sku: 'DEC-FLOWER-001' },
+      update: {},
+      create: {
+        name: 'Premium Silk Flower Arrangement',
+        description: 'Large silk flower centerpieces for wedding tables',
+        type: 'RENTAL',
+        sku: 'DEC-FLOWER-001',
+        costPrice: 500000,
+        sellPrice: 0,
+        rentalPricePerDay: 150000,
+        rentalDeposit: 300000,
+        stockCount: 20,
+        checkedOutCount: 0,
+        rentalStatus: 'AVAILABLE',
+        lowStockThreshold: 5,
+        categoryId: decoCategory.id,
+        isActive: true,
+      },
+    }),
+    prisma.inventoryItem.upsert({
+      where: { sku: 'DEC-LIGHT-001' },
+      update: {},
+      create: {
+        name: 'LED String Lights (10m)',
+        description: 'Warm white LED fairy lights for venue decoration',
+        type: 'RENTAL',
+        sku: 'DEC-LIGHT-001',
+        costPrice: 200000,
+        sellPrice: 0,
+        rentalPricePerDay: 80000,
+        rentalDeposit: 150000,
+        stockCount: 50,
+        checkedOutCount: 0,
+        rentalStatus: 'AVAILABLE',
+        lowStockThreshold: 10,
+        categoryId: decoCategory.id,
+        isActive: true,
+      },
+    }),
+    prisma.inventoryItem.upsert({
+      where: { sku: 'EQ-CAMERA-001' },
+      update: {},
+      create: {
+        name: 'Canon EOS R5 Camera Body',
+        description: 'Full-frame mirrorless camera for wedding photography',
+        type: 'RENTAL',
+        sku: 'EQ-CAMERA-001',
+        costPrice: 85000000,
+        sellPrice: 0,
+        rentalPricePerDay: 2000000,
+        rentalDeposit: 5000000,
+        stockCount: 3,
+        checkedOutCount: 0,
+        rentalStatus: 'AVAILABLE',
+        lowStockThreshold: 1,
+        categoryId: equipCategory.id,
+        isActive: true,
+      },
+    }),
+    prisma.inventoryItem.upsert({
+      where: { sku: 'ATT-DRESS-001' },
+      update: {},
+      create: {
+        name: 'Bridal Gown - Classic White',
+        description: 'A-line wedding dress with lace detailing',
+        type: 'RENTAL',
+        sku: 'ATT-DRESS-001',
+        costPrice: 12000000,
+        sellPrice: 0,
+        rentalPricePerDay: 3000000,
+        rentalDeposit: 5000000,
+        stockCount: 2,
+        checkedOutCount: 0,
+        rentalStatus: 'AVAILABLE',
+        lowStockThreshold: 1,
+        categoryId: attireCategory.id,
+        isActive: true,
+      },
+    }),
+  ]);
+
+  console.log(`  ✓ Created ${items.length} inventory items`);
+  return items;
+}
+
+/**
+ * Seed chat threads with sample messages
+ */
+async function seedChatThreads(customers) {
+  console.log('💬 Seeding chat threads...');
+
+  const adminStaffId = 'STF-ADMIN';
+  const seededCustomer = customers?.[0];
+  if (!seededCustomer) {
+    console.log('  ⚠ No customers to seed chat threads');
+    return;
+  }
+
+  const chat = await prisma.chat.create({
+    data: {
+      customerId: seededCustomer.id,
+      staffId: adminStaffId,
+      chatType: 'DIRECT',
+      messages: {
+        create: [
+          {
+            senderCustomerId: seededCustomer.id,
+            content: 'Hi, I would like to inquire about your wedding photography packages.',
+          },
+          {
+            senderStaffId: adminStaffId,
+            content: 'Hello! Thank you for reaching out. We have several packages available. What kind of photography style are you interested in?',
+          },
+          {
+            senderCustomerId: seededCustomer.id,
+            content: 'We are looking for both photo and video coverage for our wedding in December. Could you share your pricing?',
+          },
+          {
+            senderStaffId: adminStaffId,
+            content: 'Absolutely! Please check our Packages page for full details. Our Ultimate Package includes both photo and video with a full day of coverage. I would also be happy to schedule a consultation call if you prefer.',
+          },
+        ],
+      },
+    },
+  });
+
+  console.log('  ✓ Created 1 chat thread with 4 sample messages');
+  return chat;
+}
+
+/**
+ * Seed reminder records
+ */
+async function seedReminders(customers, bookingId) {
+  console.log('⏰ Seeding reminders...');
+
+  const seededCustomer = customers?.[0];
+  const reminders = await Promise.all([
+    prisma.reminder.create({
+      data: {
+        type: 'BOOKING_REMINDER',
+        title: 'Booking Confirmation Reminder',
+        message: 'Follow up with customer to confirm booking details for April 20.',
+        status: 'PENDING',
+        scheduledAt: new Date('2026-04-10T09:00:00.000Z'),
+        customerId: seededCustomer?.id,
+        bookingId: bookingId,
+      },
+    }),
+    prisma.reminder.create({
+      data: {
+        type: 'PAYMENT_REMINDER',
+        title: 'Payment Due Reminder',
+        message: 'Customer deposit payment is pending. Send follow-up message.',
+        status: 'PENDING',
+        scheduledAt: new Date('2026-04-15T10:00:00.000Z'),
+        customerId: seededCustomer?.id,
+        bookingId: bookingId,
+      },
+    }),
+    prisma.reminder.create({
+      data: {
+        type: 'CUSTOM',
+        title: 'Venue Visit Scheduled',
+        message: 'Schedule venue visit with customer for final walkthrough before the wedding.',
+        status: 'PENDING',
+        scheduledAt: new Date('2026-04-18T14:00:00.000Z'),
+        customerId: seededCustomer?.id,
+      },
+    }),
+  ]);
+
+  console.log(`  ✓ Created ${reminders.length} reminders`);
+  return reminders;
+}
+
+/**
+ * Seed public albums with sample data for customer gallery
+ */
+async function seedAlbums(adminStaffId: string) {
+  console.log('📷 Seeding albums...');
+
+  // Create sample file records for album covers
+  const coverFile1 = await prisma.file.create({
+    data: {
+      uploaderId: adminStaffId,
+      name: 'wedding-ceremony-cover.jpg',
+      storageKey: 'seed/albums/ceremony-cover.jpg',
+      storageUrl: 'https://images.unsplash.com/photo-1519741497674-611481863552?w=800',
+      mimeType: 'image/jpeg',
+      byteSize: 245000,
+      width: 800,
+      height: 600,
+      usageType: 'album_cover',
+      visibility: 'PUBLIC',
+    },
+  });
+
+  const coverFile2 = await prisma.file.create({
+    data: {
+      uploaderId: adminStaffId,
+      name: 'wedding-reception-cover.jpg',
+      storageKey: 'seed/albums/reception-cover.jpg',
+      storageUrl: 'https://images.unsplash.com/photo-1511285560929-80b456fea0bc?w=800',
+      mimeType: 'image/jpeg',
+      byteSize: 312000,
+      width: 800,
+      height: 600,
+      usageType: 'album_cover',
+      visibility: 'PUBLIC',
+    },
+  });
+
+  // Create public albums
+  const [album1, album2] = await Promise.all([
+    prisma.album.create({
+      data: {
+        title: 'Sarah & Michael - Spring Wedding',
+        description: 'Beautiful spring ceremony with garden reception',
+        isPublic: true,
+        ownerStaffId: adminStaffId,
+        coverFileId: coverFile1.id,
+      },
+    }),
+    prisma.album.create({
+      data: {
+        title: 'Emma & James - Garden Reception',
+        description: 'Elegant outdoor reception with string lights',
+        isPublic: true,
+        ownerStaffId: adminStaffId,
+        coverFileId: coverFile2.id,
+      },
+    }),
+  ]);
+
+  console.log(`  ✓ Created ${2} public albums with cover images`);
+  return [album1, album2];
+}
+
+/**
  * Main seed function
  */
 async function main() {
@@ -1200,6 +1459,18 @@ async function main() {
 
     // Seed booking/session fixtures
     await seedBookingFixtures(customers, configuredServices, adminUser.id);
+
+    // Seed inventory items
+    await seedInventory();
+
+    // Seed chat threads
+    await seedChatThreads(customers);
+
+    // Seed reminders
+    await seedReminders(customers, SEEDED_BOOKING_ID);
+
+    // Seed albums
+    await seedAlbums(adminUser.id);
 
     console.log('\n✅ Database seeding completed successfully!');
   } catch (error) {
