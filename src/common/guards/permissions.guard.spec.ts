@@ -105,11 +105,69 @@ describe('PermissionsGuard contract', () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
-  it.todo(
-    'D-11: 403 payload details include requiredPermissions and missingPermissions for consistent frontend denial context',
-  );
+  it('D-11: 403 payload details include requiredPermissions and missingPermissions for consistent frontend denial context', async () => {
+    const guard = new PermissionsGuard(
+      reflectorMock as unknown as Reflector,
+      databaseServiceMock as unknown as DatabaseService,
+    );
 
-  it.todo(
-    'D-11: requiredPermissions and missingPermissions are surfaced in a stable details contract from backend authorization failures',
-  );
+    reflectorMock.getAllAndOverride.mockReturnValue([
+      'sessions:read',
+      'sessions:revoke',
+    ]);
+    databaseServiceMock.staffRole.findMany.mockResolvedValue([
+      {
+        role: {
+          permissions: [
+            {
+              permission: {
+                key: 'sessions:read',
+              },
+            },
+          ],
+        },
+      },
+    ]);
+
+    await expect(
+      guard.canActivate(
+        makeExecutionContext({ userId: 'staff-1', userType: 'staff' }),
+      ),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        message: 'Missing required permissions',
+        details: {
+          requiredPermissions: ['sessions:read', 'sessions:revoke'],
+          missingPermissions: ['sessions:revoke'],
+        },
+      }),
+    });
+  });
+
+  it('D-11: requiredPermissions and missingPermissions are surfaced in a stable details contract from backend authorization failures', async () => {
+    const guard = new PermissionsGuard(
+      reflectorMock as unknown as Reflector,
+      databaseServiceMock as unknown as DatabaseService,
+    );
+
+    reflectorMock.getAllAndOverride.mockReturnValue(['roles:delete']);
+    databaseServiceMock.staffRole.findMany.mockResolvedValue([]);
+
+    try {
+      await guard.canActivate(
+        makeExecutionContext({ userId: 'staff-99', userType: 'staff' }),
+      );
+      fail('Expected ForbiddenException');
+    } catch (error) {
+      expect(error).toBeInstanceOf(ForbiddenException);
+      expect(error.getResponse()).toEqual(
+        expect.objectContaining({
+          details: {
+            requiredPermissions: ['roles:delete'],
+            missingPermissions: ['roles:delete'],
+          },
+        }),
+      );
+    }
+  });
 });
