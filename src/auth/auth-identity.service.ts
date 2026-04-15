@@ -3,8 +3,13 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
+import * as crypto from 'crypto';
 import { DatabaseService } from '@/database/database.service';
 import { normalizeVietnamesePhoneNumber } from '@/common/utils/phone.util';
+import type {
+  AuthSessionIdentityLookup,
+  AuthSessionRecord,
+} from './session.types';
 
 export type AuthUserType = 'customer' | 'staff';
 
@@ -33,9 +38,147 @@ export interface AuthIdentityRecord {
   job?: AuthJobRecord | null;
 }
 
+type AuthSessionLookup = {
+  id: string;
+  tokenHash: string;
+  expiresAt: Date;
+  revokedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+  customer: {
+    id: string;
+    isActive: boolean;
+  } | null;
+  staff: {
+    id: string;
+    isActive: boolean;
+  } | null;
+};
+
+type AuthSessionOwnerRecord = {
+  id: string;
+  customerId: string | null;
+  staffId: string | null;
+  revokedAt: Date | null;
+};
+
+const AUTH_SESSION_SELECT = {
+  id: true,
+  tokenHash: true,
+  expiresAt: true,
+  revokedAt: true,
+  createdAt: true,
+  updatedAt: true,
+  customer: {
+    select: {
+      id: true,
+      isActive: true,
+    },
+  },
+  staff: {
+    select: {
+      id: true,
+      isActive: true,
+    },
+  },
+} as const;
+
+const AUTH_SESSION_OWNER_SELECT = {
+  id: true,
+  customerId: true,
+  staffId: true,
+  revokedAt: true,
+} as const;
+
+const STAFF_WITH_JOBS_INCLUDE = {
+  staffJobs: {
+    include: {
+      job: {
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          isActive: true,
+        },
+      },
+    },
+  },
+} as const;
+
 @Injectable()
 export class AuthIdentityService {
   constructor(private readonly databaseService: DatabaseService) {}
+
+  private hashRefreshToken(refreshToken: string): string {
+    return crypto
+      .createHash('sha256')
+      .update(refreshToken.trim())
+      .digest('hex');
+  }
+
+  private mapSessionIdentity(
+    session: AuthSessionLookup,
+  ): AuthSessionIdentityLookup {
+    if (session.customer) {
+      return {
+        userType: 'customer',
+        userId: session.customer.id,
+        isActive: session.customer.isActive,
+      };
+    }
+
+    if (session.staff) {
+      return {
+        userType: 'staff',
+        userId: session.staff.id,
+        isActive: session.staff.isActive,
+      };
+    }
+
+    throw new ConflictException(
+      'Auth session has no linked identity owner (customer/staff)',
+    );
+  }
+
+  private mapSessionRecord(session: AuthSessionLookup): AuthSessionRecord {
+    return {
+      id: session.id,
+      tokenHash: session.tokenHash,
+      expiresAt: session.expiresAt,
+      revokedAt: session.revokedAt,
+      createdAt: session.createdAt,
+      updatedAt: session.updatedAt,
+      identity: this.mapSessionIdentity(session),
+    };
+  }
+
+  private sessionOwnerWhere(userType: AuthUserType, userId: string) {
+    if (userType === 'customer') {
+      return {
+        customerId: userId,
+      };
+    }
+
+    return {
+      staffId: userId,
+    };
+  }
+
+  private isSessionOwnedByPrincipal(
+    session: AuthSessionOwnerRecord,
+    userType: AuthUserType,
+    userId: string,
+  ): boolean {
+    if (userType === 'customer') {
+      return session.customerId === userId;
+    }
+
+    return session.staffId === userId;
+  }
+
+  private get authSessionModel() {
+    return (this.databaseService as any).authSession;
+  }
 
   async assertPhoneNumberAvailable(phoneNumber: string): Promise<void> {
     const normalizedPhoneNumber = normalizeVietnamesePhoneNumber(phoneNumber);
@@ -157,6 +300,163 @@ export class AuthIdentityService {
     };
   }
 
+  async createAuthSession(
+    userType: AuthUserType,
+    userId: string,
+    refreshToken: string,
+    expiresAt: Date,
+  ): Promise<AuthSessionRecord> {
+    const trimmedToken = refreshToken.trim();
+
+    const ownerData =
+      userType === 'customer'
+        ? {
+            customerId: userId,
+            staffId: null,
+          }
+        : {
+            customerId: null,
+            staffId: userId,
+          };
+
+    const session = (await this.authSessionModel.upsert({
+      where: {
+        tokenHash: this.hashRefreshToken(trimmedToken),
+      },
+      update: {
+        ...ownerData,
+        expiresAt,
+        revokedAt: null,
+      },
+      create: {
+        tokenHash: this.hashRefreshToken(trimmedToken),
+        expiresAt,
+        ...ownerData,
+      },
+      select: AUTH_SESSION_SELECT,
+    })) as AuthSessionLookup;
+
+    return this.mapSessionRecord(session);
+  }
+
+  async findAuthSessionByRefreshToken(
+    refreshToken: string,
+  ): Promise<AuthSessionRecord | null> {
+    const trimmedToken = refreshToken.trim();
+
+    if (!trimmedToken) {
+      return null;
+    }
+
+    const session = (await this.authSessionModel.findFirst({
+      where: {
+        tokenHash: this.hashRefreshToken(trimmedToken),
+        revokedAt: null,
+        expiresAt: {
+          gt: new Date(),
+        },
+      },
+      select: AUTH_SESSION_SELECT,
+    })) as AuthSessionLookup | null;
+
+    if (!session) {
+      return null;
+    }
+
+    return this.mapSessionRecord(session);
+  }
+
+  async revokeAuthSessionByRefreshToken(
+    refreshToken: string,
+    principal?: {
+      userType: AuthUserType;
+      userId: string;
+    },
+  ): Promise<boolean> {
+    const trimmedToken = refreshToken.trim();
+
+    if (!trimmedToken) {
+      return false;
+    }
+
+    const session = (await this.authSessionModel.findUnique({
+      where: {
+        tokenHash: this.hashRefreshToken(trimmedToken),
+      },
+      select: AUTH_SESSION_OWNER_SELECT,
+    })) as AuthSessionOwnerRecord | null;
+
+    if (!session) {
+      return false;
+    }
+
+    if (principal) {
+      const owned = this.isSessionOwnedByPrincipal(
+        session,
+        principal.userType,
+        principal.userId,
+      );
+      if (!owned) {
+        throw new UnauthorizedException(
+          'Refresh token does not belong to user',
+        );
+      }
+    }
+
+    if (session.revokedAt) {
+      return false;
+    }
+
+    await this.authSessionModel.update({
+      where: {
+        id: session.id,
+      },
+      data: {
+        revokedAt: new Date(),
+      },
+    });
+
+    return true;
+  }
+
+  async revokeAllActiveAuthSessionsForPrincipal(
+    userType: AuthUserType,
+    userId: string,
+  ): Promise<number> {
+    const result = await this.authSessionModel.updateMany({
+      where: {
+        ...this.sessionOwnerWhere(userType, userId),
+        revokedAt: null,
+      },
+      data: {
+        revokedAt: new Date(),
+      },
+    });
+
+    return result.count;
+  }
+
+  async findActiveAuthSessionsForPrincipal(
+    userType: AuthUserType,
+    userId: string,
+  ): Promise<AuthSessionRecord[]> {
+    const sessions = (await this.authSessionModel.findMany({
+      where: {
+        ...this.sessionOwnerWhere(userType, userId),
+        revokedAt: null,
+        expiresAt: {
+          gt: new Date(),
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+      select: AUTH_SESSION_SELECT,
+    })) as AuthSessionLookup[];
+
+    return sessions.map((session) => this.mapSessionRecord(session));
+  }
+
   async findByPhoneNumber(
     phoneNumber: string,
   ): Promise<AuthIdentityRecord | null> {
@@ -168,20 +468,7 @@ export class AuthIdentityService {
       }),
       this.databaseService.staff.findUnique({
         where: { phoneNumber: normalizedPhoneNumber },
-        include: {
-          staffJobs: {
-            include: {
-              job: {
-                select: {
-                  id: true,
-                  name: true,
-                  description: true,
-                  isActive: true,
-                },
-              },
-            },
-          },
-        },
+        include: STAFF_WITH_JOBS_INCLUDE,
       }),
     ]);
 
@@ -215,20 +502,7 @@ export class AuthIdentityService {
 
     const staff = await this.databaseService.staff.findUnique({
       where: { id },
-      include: {
-        staffJobs: {
-          include: {
-            job: {
-              select: {
-                id: true,
-                name: true,
-                description: true,
-                isActive: true,
-              },
-            },
-          },
-        },
-      },
+      include: STAFF_WITH_JOBS_INCLUDE,
     });
 
     return staff ? this.normalizeStaffIdentity(staff) : null;
@@ -238,26 +512,37 @@ export class AuthIdentityService {
     refreshToken: string,
   ): Promise<AuthIdentityRecord | null> {
     const trimmedToken = refreshToken.trim();
+
+    if (!trimmedToken) {
+      return null;
+    }
+
+    const session = await this.findAuthSessionByRefreshToken(trimmedToken);
+
+    if (session) {
+      const identity = await this.findById(
+        session.identity.userType,
+        session.identity.userId,
+      );
+
+      if (!identity) {
+        return null;
+      }
+
+      return {
+        ...identity,
+        refreshToken: trimmedToken,
+        refreshTokenExpiry: session.expiresAt,
+      };
+    }
+
     const [customer, staff] = await Promise.all([
       this.databaseService.customer.findFirst({
         where: { refreshToken: trimmedToken },
       }),
       this.databaseService.staff.findFirst({
         where: { refreshToken: trimmedToken },
-        include: {
-          staffJobs: {
-            include: {
-              job: {
-                select: {
-                  id: true,
-                  name: true,
-                  description: true,
-                  isActive: true,
-                },
-              },
-            },
-          },
-        },
+        include: STAFF_WITH_JOBS_INCLUDE,
       }),
     ]);
 
@@ -284,18 +569,39 @@ export class AuthIdentityService {
     refreshToken: string | null,
     refreshTokenExpiry?: Date | null,
   ): Promise<void> {
+    const normalizedToken = refreshToken?.trim() ?? null;
+
     if (userType === 'customer') {
       await this.databaseService.customer.update({
         where: { id },
-        data: { refreshToken, refreshTokenExpiry: refreshTokenExpiry ?? null },
+        data: {
+          refreshToken: normalizedToken,
+          refreshTokenExpiry: refreshTokenExpiry ?? null,
+        },
       });
+    } else {
+      await this.databaseService.staff.update({
+        where: { id },
+        data: {
+          refreshToken: normalizedToken,
+          refreshTokenExpiry: refreshTokenExpiry ?? null,
+        },
+      });
+    }
+
+    if (normalizedToken && refreshTokenExpiry) {
+      await this.createAuthSession(
+        userType,
+        id,
+        normalizedToken,
+        refreshTokenExpiry,
+      );
       return;
     }
 
-    await this.databaseService.staff.update({
-      where: { id },
-      data: { refreshToken, refreshTokenExpiry: refreshTokenExpiry ?? null },
-    });
+    if (!normalizedToken) {
+      await this.revokeAllActiveAuthSessionsForPrincipal(userType, id);
+    }
   }
 
   async validateActiveIdentity(

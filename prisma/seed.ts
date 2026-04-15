@@ -223,6 +223,10 @@ async function seedRBAC() {
     { key: 'files:read', description: 'View files' },
     { key: 'files:update', description: 'Update file information' },
     { key: 'files:delete', description: 'Delete files' },
+
+    // Session permissions
+    { key: 'sessions:read', description: 'View active user sessions' },
+    { key: 'sessions:revoke', description: 'Revoke active user sessions' },
   ];
 
   // Create permissions
