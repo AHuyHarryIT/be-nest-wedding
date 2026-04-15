@@ -66,15 +66,18 @@ export class PermissionsGuard implements CanActivate {
       });
     });
 
-    // Check if user has all required permissions
-    const hasAllPermissions = requiredPermissions.every((permission) =>
-      userPermissions.has(permission),
+    const missingPermissions = requiredPermissions.filter(
+      (permission) => !userPermissions.has(permission),
     );
 
-    if (!hasAllPermissions) {
-      throw new ForbiddenException(
-        `Missing required permissions: ${requiredPermissions.join(', ')}`,
-      );
+    if (missingPermissions.length > 0) {
+      throw new ForbiddenException({
+        message: 'Missing required permissions',
+        details: {
+          requiredPermissions,
+          missingPermissions,
+        },
+      });
     }
 
     return true;

@@ -63,6 +63,14 @@ export class GlobalExceptionFilter implements ExceptionFilter {
           (response.message as string) || (response.error as string) || message;
         code = this.mapHttpStatusToCode(statusCode);
 
+        if (
+          response.details &&
+          typeof response.details === 'object' &&
+          !Array.isArray(response.details)
+        ) {
+          details = response.details as GenericRecord<unknown>;
+        }
+
         // Handle validation errors from class-validator
         if (
           statusCode === HttpStatus.BAD_REQUEST &&
