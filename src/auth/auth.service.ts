@@ -245,26 +245,47 @@ export class AuthService {
   ): Promise<{ accessToken: string; refreshToken: string }> {
     const { refreshToken } = refreshTokenDto;
 
-    if (!refreshToken) {
+    if (!refreshToken?.trim()) {
       throw new UnauthorizedException('Refresh token is missing');
     }
 
-    const user =
-      await this.authIdentityService.findByRefreshToken(refreshToken);
+    const session =
+      await this.authIdentityService.findAuthSessionByRefreshToken(
+        refreshToken,
+      );
 
-    if (!user) {
+    if (!session) {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
-    if (!user.isActive) {
+    if (!session.identity.isActive) {
       throw new UnauthorizedException('User account is inactive');
     }
 
-    if (!user.refreshTokenExpiry || user.refreshTokenExpiry < new Date()) {
-      throw new UnauthorizedException('Refresh token has expired');
+    const user = await this.authIdentityService.findById(
+      session.identity.userType,
+      session.identity.userId,
+    );
+
+    if (!user) {
+      throw new UnauthorizedException('User not found or inactive');
     }
 
-    return this.generateTokens(user.id, user.phoneNumber, user.userType);
+    const accessToken = await this.jwtService.signAsync(
+      {
+        sub: user.id,
+        phoneNumber: user.phoneNumber,
+        userType: user.userType,
+      },
+      {
+        expiresIn: JWT_ACCESS_CONFIG.expiresIn,
+      },
+    );
+
+    return {
+      accessToken,
+      refreshToken: refreshToken.trim(),
+    };
   }
 
   async validateOrRefreshAccessToken(
@@ -312,6 +333,7 @@ export class AuthService {
   }
 
   async logout(
+    refreshToken: string,
     userId: string,
     userType?: AuthUserType,
   ): Promise<MessageResponseDto> {
@@ -323,12 +345,18 @@ export class AuthService {
       throw new UnauthorizedException('User not found');
     }
 
-    await this.authIdentityService.updateRefreshToken(
-      user.userType,
-      userId,
-      null,
-      null,
-    );
+    const revoked =
+      await this.authIdentityService.revokeAuthSessionByRefreshToken(
+        refreshToken,
+        {
+          userType: user.userType,
+          userId: user.id,
+        },
+      );
+
+    if (!revoked) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
 
     return {
       message: 'Successfully logged out',

@@ -8,6 +8,7 @@ import {
   Put,
   Req,
   Res,
+  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -226,14 +227,13 @@ export class AuthController {
       (request.cookies?.['staff_refresh_token'] as string | undefined);
 
     if (!refreshToken) {
-      throw new Error('Refresh token not found in cookies');
+      throw new UnauthorizedException('Refresh token not found in cookies');
     }
 
     const tokens = await this.authService.refreshTokens({
       refreshToken,
     });
 
-    // Set new cookies
     this.setCookies(request, response, tokens.accessToken, tokens.refreshToken);
 
     return { message: 'Tokens refreshed successfully' };
@@ -254,16 +254,23 @@ export class AuthController {
   })
   async logout(
     @GetUser() user: AuthenticatedUser,
+    @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ): Promise<MessageResponseDto> {
-    // Clear both cookie variants to avoid stale cross-host sessions.
+    const refreshToken =
+      (request.cookies?.['refresh_token'] as string | undefined) ||
+      (request.cookies?.['staff_refresh_token'] as string | undefined);
+
+    if (!refreshToken) {
+      throw new UnauthorizedException('Refresh token not found in cookies');
+    }
+
     response.clearCookie('access_token');
     response.clearCookie('refresh_token');
     response.clearCookie('staff_access_token');
     response.clearCookie('staff_refresh_token');
 
-    // Invalidate refresh token in database
-    return this.authService.logout(user.userId, user.userType);
+    return this.authService.logout(refreshToken, user.userId, user.userType);
   }
 
   @Get('me')
