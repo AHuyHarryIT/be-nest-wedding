@@ -26,7 +26,7 @@ import { InventoryModule } from './inventory/inventory.module';
 import { QuotationsModule } from './quotations/quotations.module';
 import { AutoRefreshMiddleware } from './auth/auto-refresh.middleware';
 import { RemindersModule } from './reminders/reminders.module';
-
+import { PublicInquiriesModule } from './public-inquiries/public-inquiries.module';
 
 @Module({
   imports: [
@@ -59,6 +59,7 @@ import { RemindersModule } from './reminders/reminders.module';
     InventoryModule,
     QuotationsModule,
     RemindersModule,
+    PublicInquiriesModule,
   ],
   controllers: [AppController],
   providers: [AppService, DatabaseService],

@@ -175,6 +175,21 @@ model AuthSession {
   @@map("auth_sessions")
 }
 
+model PublicInquiry {
+  id              String   @id @default(uuid()) @map("id")
+  name            String   @map("name")
+  email           String   @map("email")
+  message         String   @map("message")
+  phone           String?  @map("phone")
+  packageInterest String?  @map("package_interest")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([email])
+  @@index([createdAt])
+  @@map("public_inquiries")
+}
+
 model Staff {
   id                 String         @id
   phoneNumber        String         @unique @map("phone_number")
