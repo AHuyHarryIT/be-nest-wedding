@@ -1,4 +1,5 @@
 import { UnauthorizedException } from '@nestjs/common';
+import { ConflictException } from '@/common/exceptions/app.exception';
 import { Test, TestingModule } from '@nestjs/testing';
 import { AuthService } from './auth.service';
 import { DatabaseService } from '../database/database.service';
@@ -17,6 +18,10 @@ describe('AuthService', () => {
   const databaseServiceMock = {
     customer: {
       create: jest.fn(),
+      update: jest.fn(),
+    },
+    staff: {
+      update: jest.fn(),
     },
   };
   const authIdentityServiceMock = {
@@ -177,6 +182,200 @@ describe('AuthService', () => {
     ).rejects.toThrow(UnauthorizedException);
 
     expect(authIdentityServiceMock.findByRefreshToken).not.toHaveBeenCalled();
+  });
+
+  it('updateProfile normalizes phone and persists normalized value for customer updates', async () => {
+    authIdentityServiceMock.findById.mockResolvedValue({
+      id: 'customer-1',
+      userType: 'customer',
+      phoneNumber: '0911222333',
+      passwordHash: 'hashed-password',
+      firstName: 'Old',
+      lastName: 'Name',
+      email: 'old@example.com',
+      isActive: true,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    });
+
+    authIdentityServiceMock.assertPhoneNumberAvailable.mockResolvedValue(
+      undefined,
+    );
+
+    databaseServiceMock.customer.update.mockResolvedValue({
+      id: 'customer-1',
+      phoneNumber: '0981234567',
+      passwordHash: 'hashed-password',
+      firstName: 'New',
+      lastName: 'Name',
+      email: 'new@example.com',
+      isActive: true,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    });
+
+    await service.updateProfile(
+      'customer-1',
+      {
+        firstName: 'New',
+        lastName: 'Name',
+        email: 'new@example.com',
+        phoneNumber: '+84981234567',
+      },
+      'customer',
+    );
+
+    expect(
+      authIdentityServiceMock.assertPhoneNumberAvailable,
+    ).toHaveBeenCalledWith('0981234567');
+    expect(databaseServiceMock.customer.update).toHaveBeenCalledWith({
+      where: { id: 'customer-1' },
+      data: {
+        firstName: 'New',
+        lastName: 'Name',
+        email: 'new@example.com',
+        phoneNumber: '0981234567',
+      },
+    });
+  });
+
+  it('updateProfile skips availability assertions when email and phone are unchanged', async () => {
+    authIdentityServiceMock.findById.mockResolvedValue({
+      id: 'customer-1',
+      userType: 'customer',
+      phoneNumber: '0981234567',
+      passwordHash: 'hashed-password',
+      firstName: 'Old',
+      lastName: 'Name',
+      email: 'same@example.com',
+      isActive: true,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    });
+
+    databaseServiceMock.customer.update.mockResolvedValue({
+      id: 'customer-1',
+      phoneNumber: '0981234567',
+      passwordHash: 'hashed-password',
+      firstName: 'Old',
+      lastName: 'Name',
+      email: 'same@example.com',
+      isActive: true,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    });
+
+    await service.updateProfile(
+      'customer-1',
+      {
+        firstName: 'Old',
+        lastName: 'Name',
+        email: 'same@example.com',
+        phoneNumber: '+84981234567',
+      },
+      'customer',
+    );
+
+    expect(authIdentityServiceMock.assertEmailAvailable).not.toHaveBeenCalled();
+    expect(
+      authIdentityServiceMock.assertPhoneNumberAvailable,
+    ).not.toHaveBeenCalled();
+  });
+
+  it('updateProfile maps email conflict to deterministic details.fields metadata', async () => {
+    authIdentityServiceMock.findById.mockResolvedValue({
+      id: 'customer-1',
+      userType: 'customer',
+      phoneNumber: '0981234567',
+      passwordHash: 'hashed-password',
+      firstName: 'Old',
+      lastName: 'Name',
+      email: 'old@example.com',
+      isActive: true,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    });
+
+    authIdentityServiceMock.assertEmailAvailable.mockRejectedValue(
+      new ConflictException('existing'),
+    );
+
+    await expect(
+      service.updateProfile(
+        'customer-1',
+        {
+          email: 'taken@example.com',
+        },
+        'customer',
+      ),
+    ).rejects.toMatchObject({
+      message: 'User with this email already exists',
+      getResponse: expect.any(Function),
+    });
+
+    await service
+      .updateProfile(
+        'customer-1',
+        {
+          email: 'taken@example.com',
+        },
+        'customer',
+      )
+      .catch((error) => {
+        const response = error.getResponse();
+        expect(response.details.fields).toEqual([
+          {
+            field: 'email',
+            code: 'CONFLICT',
+            message: 'User with this email already exists',
+          },
+        ]);
+      });
+  });
+
+  it('updateProfile maps phone conflict to deterministic details.fields metadata', async () => {
+    authIdentityServiceMock.findById.mockResolvedValue({
+      id: 'customer-1',
+      userType: 'customer',
+      phoneNumber: '0911222333',
+      passwordHash: 'hashed-password',
+      firstName: 'Old',
+      lastName: 'Name',
+      email: 'old@example.com',
+      isActive: true,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    });
+
+    authIdentityServiceMock.assertPhoneNumberAvailable.mockRejectedValue(
+      new ConflictException('existing'),
+    );
+
+    await expect(
+      service.updateProfile(
+        'customer-1',
+        {
+          phoneNumber: '+84981234567',
+        },
+        'customer',
+      ),
+    ).rejects.toMatchObject({
+      message: 'User with this phone number already exists',
+      getResponse: expect.any(Function),
+    });
+
+    await service
+      .updateProfile(
+        'customer-1',
+        {
+          phoneNumber: '+84981234567',
+        },
+        'customer',
+      )
+      .catch((error) => {
+        const response = error.getResponse();
+        expect(response.details.fields).toEqual([
+          {
+            field: 'phoneNumber',
+            code: 'CONFLICT',
+            message: 'User with this phone number already exists',
+          },
+        ]);
+      });
   });
 
   it('D-04: revokes only cookie-bound current session on logout', async () => {
