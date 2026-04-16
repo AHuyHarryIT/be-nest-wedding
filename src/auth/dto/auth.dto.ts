@@ -139,6 +139,17 @@ export class UpdateProfileDto {
   @IsEmail()
   @IsOptional()
   email?: string;
+
+  @ApiPropertyOptional({
+    description: 'Vietnamese phone number for profile updates',
+    example: '+84981234567',
+    format: 'phone',
+  })
+  @IsPhoneNumber('VN', {
+    message: 'Phone number must be a valid Vietnamese phone number',
+  })
+  @IsOptional()
+  phoneNumber?: string;
 }
 
 export class AuthResponseDto {

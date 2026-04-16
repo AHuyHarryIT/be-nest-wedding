@@ -1,8 +1,5 @@
-import {
-  Injectable,
-  UnauthorizedException,
-  ConflictException,
-} from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { ConflictException } from '@/common/exceptions/app.exception';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
@@ -203,7 +200,7 @@ export class AuthService {
     updateProfileDto: UpdateProfileDto,
     userType?: AuthUserType,
   ) {
-    const { firstName, lastName, email } = updateProfileDto;
+    const { firstName, lastName, email, phoneNumber } = updateProfileDto;
     const user = userType
       ? await this.authIdentityService.findById(userType, userId)
       : await this.findAnyIdentityById(userId);
@@ -212,26 +209,76 @@ export class AuthService {
       throw new UnauthorizedException('User not found');
     }
 
+    const normalizedPhoneNumber = phoneNumber
+      ? normalizeVietnamesePhoneNumber(phoneNumber)
+      : undefined;
+
     if (email && email !== user.email) {
       try {
         await this.authIdentityService.assertEmailAvailable(email);
       } catch (error) {
-        if (error instanceof ConflictException) {
-          throw new ConflictException('User with this email already exists');
+        if (this.isConflictError(error)) {
+          throw new ConflictException(
+            'User with this email already exists',
+            'CONFLICT',
+            {
+              fields: [
+                {
+                  field: 'email',
+                  code: 'CONFLICT',
+                  message: 'User with this email already exists',
+                },
+              ],
+            },
+          );
         }
+
         throw error;
       }
     }
+
+    if (normalizedPhoneNumber && normalizedPhoneNumber !== user.phoneNumber) {
+      try {
+        await this.authIdentityService.assertPhoneNumberAvailable(
+          normalizedPhoneNumber,
+        );
+      } catch (error) {
+        if (this.isConflictError(error)) {
+          throw new ConflictException(
+            'User with this phone number already exists',
+            'CONFLICT',
+            {
+              fields: [
+                {
+                  field: 'phoneNumber',
+                  code: 'CONFLICT',
+                  message: 'User with this phone number already exists',
+                },
+              ],
+            },
+          );
+        }
+
+        throw error;
+      }
+    }
+
+    const updateData = {
+      firstName,
+      lastName,
+      email,
+      phoneNumber: normalizedPhoneNumber,
+    };
 
     const updatedUser =
       user.userType === 'customer'
         ? await this.databaseService.customer.update({
             where: { id: userId },
-            data: { firstName, lastName, email },
+            data: updateData,
           })
         : await this.databaseService.staff.update({
             where: { id: userId },
-            data: { firstName, lastName, email },
+            data: updateData,
           });
 
     return this.toPublicUser({
@@ -395,6 +442,23 @@ export class AuthService {
     );
     if (customer) return customer;
     return this.authIdentityService.findById('staff', userId);
+  }
+
+  private isConflictError(error: unknown): boolean {
+    if (error instanceof ConflictException) {
+      return true;
+    }
+
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'getStatus' in error &&
+      typeof (error as { getStatus?: () => unknown }).getStatus === 'function'
+    ) {
+      return (error as { getStatus: () => number }).getStatus() === 409;
+    }
+
+    return false;
   }
 
   private toPublicUser(user: AuthIdentityRecord) {
