@@ -875,6 +875,79 @@ export class AlbumsService {
     return this.oneDriveService.getThumbnailStream(file.storageKey);
   }
 
+  private async assertCustomerAlbumFileAccess(
+    customerId: string,
+    fileId: string,
+  ): Promise<{ storageKey: string }> {
+    const denial = 'Album not found or you do not have access.';
+
+    const file = await this.databaseService.file.findFirst({
+      where: {
+        id: fileId,
+        deletedAt: null,
+        albums: {
+          some: {
+            album: {
+              deletedAt: null,
+              isPublic: false,
+              booking: {
+                is: {
+                  customerId,
+                  deletedAt: null,
+                },
+              },
+            },
+          },
+        },
+      },
+      select: {
+        storageKey: true,
+      },
+    });
+
+    if (!file) {
+      throw new NotFoundException(denial);
+    }
+
+    return file;
+  }
+
+  async getCustomerThumbnailStream(
+    customerId: string,
+    fileId: string,
+  ): Promise<{ stream: NodeJS.ReadableStream; contentType: string }> {
+    const { storageKey } = await this.assertCustomerAlbumFileAccess(
+      customerId,
+      fileId,
+    );
+
+    return this.oneDriveService.getThumbnailStream(storageKey);
+  }
+
+  async getCustomerFileStream(customerId: string, fileId: string) {
+    const { storageKey } = await this.assertCustomerAlbumFileAccess(
+      customerId,
+      fileId,
+    );
+
+    const file = await this.databaseService.file.findUnique({
+      where: { id: fileId },
+    });
+
+    if (!file) {
+      throw new NotFoundException('Album not found or you do not have access.');
+    }
+
+    const stream = await this.oneDriveService.getFileStream(storageKey);
+
+    return {
+      stream,
+      mimeType: file.mimeType,
+      byteSize: file.byteSize,
+      name: file.name,
+    };
+  }
+
   async getThumbnailUrl(fileId: string): Promise<string> {
     // Get file info from database
     const file = await this.databaseService.file.findUnique({

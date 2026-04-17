@@ -1,8 +1,24 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  Controller,
+  Get,
+  InternalServerErrorException,
+  Param,
+  Query,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
+import type { Response } from 'express';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { GetUser, type AuthenticatedUser } from '../auth/get-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { ApiPaginatedResponse } from '../common/decorators/api-response.decorator';
+import {
+  ApiPaginatedResponse,
+  ApiSuccessResponse,
+} from '../common/decorators/api-response.decorator';
 import { ResponseBuilder } from '../common/utils/response-builder.util';
 import { AlbumsService } from './albums.service';
 import { QueryCustomerAlbumsDto } from './dto/query-customer-albums.dto';
@@ -33,5 +49,70 @@ export class CustomerAlbumsController {
       result.pagination,
       'Customer private albums retrieved successfully',
     );
+  }
+
+  @Get('file/:fileId/thumbnail')
+  @ApiOperation({
+    summary: 'Get thumbnail for a customer-owned private album file',
+  })
+  @ApiSuccessResponse({ description: 'Thumbnail stream retrieved successfully' })
+  async getThumbnail(
+    @GetUser() user: AuthenticatedUser,
+    @Param('fileId') fileId: string,
+    @Res() res: Response,
+  ) {
+    try {
+      const result = await this.albumsService.getCustomerThumbnailStream(
+        user.userId,
+        fileId,
+      );
+
+      res.set({
+        'Content-Type': result.contentType || 'image/jpeg',
+        'Cache-Control': 'private, max-age=3600',
+      });
+
+      result.stream.pipe(res);
+    } catch (error: unknown) {
+      if (error instanceof Error && error.name === 'NotFoundException') {
+        throw error;
+      }
+
+      const errorMessage =
+        error instanceof Error ? error.message : 'Failed to get thumbnail';
+      throw new InternalServerErrorException(errorMessage);
+    }
+  }
+
+  @Get('file/:fileId/content')
+  @ApiOperation({
+    summary: 'Get full content stream for a customer-owned private album file',
+  })
+  @ApiSuccessResponse({ description: 'File content streamed successfully' })
+  async getFileContent(
+    @GetUser() user: AuthenticatedUser,
+    @Param('fileId') fileId: string,
+    @Res() res: Response,
+  ) {
+    try {
+      const { stream, mimeType, name } =
+        await this.albumsService.getCustomerFileStream(user.userId, fileId);
+
+      res.set({
+        'Content-Type': mimeType || 'application/octet-stream',
+        'Content-Disposition': `inline; filename="${encodeURIComponent(name)}"`,
+        'Cache-Control': 'private, max-age=3600',
+      });
+
+      stream.pipe(res);
+    } catch (error: unknown) {
+      if (error instanceof Error && error.name === 'NotFoundException') {
+        throw error;
+      }
+
+      const errorMessage =
+        error instanceof Error ? error.message : 'Failed to get file';
+      throw new InternalServerErrorException(errorMessage);
+    }
   }
 }
