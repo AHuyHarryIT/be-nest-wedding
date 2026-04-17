@@ -354,6 +354,26 @@ export class OrdersService {
     );
   }
 
+  private buildOrderSummary(order: {
+    totalPrice: number;
+    payments: Array<{ amount: number; status: PaymentStatus }>;
+  }) {
+    const totalPaid = order.payments
+      .filter((payment) => payment.status === PaymentStatus.SUCCESSFUL)
+      .reduce((sum, payment) => sum + payment.amount, 0);
+
+    const balanceRemaining = Math.max(0, order.totalPrice - totalPaid);
+
+    return {
+      totalPrice: order.totalPrice,
+      totalPaid,
+      remainingAmount: balanceRemaining,
+      balanceRemaining,
+      pendingAmount: balanceRemaining,
+      isPaid: balanceRemaining === 0,
+    };
+  }
+
   /**
    * Get all orders
    */
@@ -373,28 +393,10 @@ export class OrdersService {
       orderBy: { createdAt: 'desc' },
     });
 
-    // Calculate summary for each order
-    return orders.map((order) => {
-      const totalPaid = order.payments
-        .filter((p) => p.status === 'SUCCESSFUL')
-        .reduce((sum, p) => sum + p.amount, 0);
-
-      const remainingAmount = Math.max(0, order.totalPrice - totalPaid);
-
-      return {
-        ...order,
-        summary: {
-          totalPrice: order.totalPrice,
-          depositAmount: 0,
-          remainingAmount,
-          depositPaid: 0,
-          remainingPaid: 0,
-          totalPaid,
-          isPaid: remainingAmount === 0,
-          pendingAmount: remainingAmount,
-        },
-      };
-    });
+    return orders.map((order) => ({
+      ...order,
+      summary: this.buildOrderSummary(order),
+    }));
   }
 
   /**
@@ -428,25 +430,9 @@ export class OrdersService {
       throw new NotFoundException(`Order ${orderId} not found`);
     }
 
-    // Calculate summaries
-    const totalPaid = order.payments
-      .filter((p) => p.status === 'SUCCESSFUL')
-      .reduce((sum, p) => sum + p.amount, 0);
-
-    const balanceRemaining = Math.max(0, order.totalPrice - totalPaid);
-
     return {
       ...order,
-      summary: {
-        totalPrice: order.totalPrice,
-        depositAmount: 0,
-        remainingAmount: balanceRemaining,
-        depositPaid: 0,
-        remainingPaid: 0,
-        totalPaid,
-        isPaid: balanceRemaining === 0,
-        pendingAmount: balanceRemaining,
-      },
+      summary: this.buildOrderSummary(order),
     };
   }
 
