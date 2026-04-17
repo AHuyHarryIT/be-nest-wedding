@@ -126,6 +126,7 @@ describe('Customer Orders deposit checkout (e2e)', () => {
       fixture.ownerCustomer.phoneNumber,
       '123456',
     );
+    const expectedDepositAmount = 300_000;
 
     const response = await request(app.getHttpServer())
       .post(`/customer/orders/${fixture.ownerBookingId}/deposit`)
@@ -145,6 +146,12 @@ describe('Customer Orders deposit checkout (e2e)', () => {
           orderId: expect.any(String),
           payUrl: expect.any(String),
         }),
+      }),
+    );
+    expect(momoCreatePaymentMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bookingId: fixture.ownerBookingId,
+        amount: expectedDepositAmount,
       }),
     );
   });
