@@ -17,6 +17,8 @@ import {
   QueryAlbumDto,
   RemoveFilesFromAlbumDto,
   UpdateAlbumDto,
+  CustomerAlbumSortBy,
+  QueryCustomerAlbumsDto,
   UploadImageToAlbumDto,
 } from './dto';
 
@@ -199,6 +201,85 @@ export class AlbumsService {
       },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  async findCustomerPrivateAlbums(
+    customerId: string,
+    params?: QueryCustomerAlbumsDto,
+  ) {
+    const { page, limit, search, sortBy, sortOrder } =
+      PaginationHelper.mergeWithDefaults(params || {});
+
+    const where: Prisma.AlbumWhereInput = {
+      deletedAt: null,
+      isPublic: false,
+      booking: {
+        customerId,
+        deletedAt: null,
+      },
+    };
+
+    if (search) {
+      where.OR = [
+        { title: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    if (params?.bookingId) {
+      where.bookingId = params.bookingId;
+    }
+
+    const allowedSortBy = new Set<string>(Object.values(CustomerAlbumSortBy));
+    const normalizedSortBy =
+      sortBy && allowedSortBy.has(sortBy)
+        ? (sortBy as CustomerAlbumSortBy)
+        : CustomerAlbumSortBy.CREATED_AT;
+
+    const orderBy: Prisma.AlbumOrderByWithRelationInput =
+      normalizedSortBy === CustomerAlbumSortBy.EVENT_DATE
+        ? { booking: { eventDate: sortOrder } }
+        : { [normalizedSortBy]: sortOrder };
+
+    const total = await this.databaseService.album.count({ where });
+    const skip = (page - 1) * limit;
+
+    const albums = await this.databaseService.album.findMany({
+      where,
+      include: {
+        booking: {
+          select: {
+            id: true,
+            eventDate: true,
+          },
+        },
+        coverFile: {
+          select: {
+            id: true,
+            name: true,
+            mimeType: true,
+            byteSize: true,
+          },
+        },
+        _count: {
+          select: { files: true },
+        },
+      },
+      orderBy,
+      skip,
+      take: limit,
+    });
+
+    const data = albums.map((album) => ({
+      id: album.id,
+      title: album.title,
+      bookingId: album.booking?.id ?? null,
+      eventDate: album.booking?.eventDate?.toISOString() ?? null,
+      deliveredAssetCount: album._count.files,
+      coverFile: album.coverFile,
+    }));
+
+    return PaginationHelper.createPaginatedResponse(data, page, limit, total);
   }
 
   async findByShareToken(token: string) {
