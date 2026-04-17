@@ -169,6 +169,33 @@ describe('Orders payment visibility summary contract (e2e)', () => {
     const callbackData = extractData<{ resultCode: number }>(callbackResponse.body);
     expect(callbackData.resultCode).toBe(0);
 
+    const repeatedCallbackResponse = await request(app.getHttpServer())
+      .post('/orders/momo/callback')
+      .send({
+        partnerCode: 'MOMO',
+        orderId: `${fixture.bookingId}_momo_reconciliation`,
+        requestId: `req_${fixture.bookingId}`,
+        amount: fixture.paidAmount,
+        orderInfo: 'Deposit payment callback',
+        orderType: 'wedding-booking',
+        transId: now,
+        resultCode: 0,
+        message: 'Success',
+        payType: 'qr',
+        responseTime: Date.now(),
+        extraData: JSON.stringify({
+          bookingId: fixture.bookingId,
+          paymentId: fixture.paymentId,
+        }),
+        signature: 'valid-mock-signature',
+      })
+      .expect(200);
+
+    const repeatedCallbackData = extractData<{ resultCode: number }>(
+      repeatedCallbackResponse.body,
+    );
+    expect(repeatedCallbackData.resultCode).toBe(0);
+
     const listResponse = await request(app.getHttpServer())
       .get('/orders')
       .set('Authorization', `Bearer ${staffToken}`)
