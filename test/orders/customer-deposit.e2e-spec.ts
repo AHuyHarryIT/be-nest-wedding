@@ -154,6 +154,25 @@ describe('Customer Orders deposit checkout (e2e)', () => {
         amount: expectedDepositAmount,
       }),
     );
+
+    const createdPayment = await databaseService.payment.findUnique({
+      where: {
+        id: response.body.data.paymentId as string,
+      },
+      select: {
+        amount: true,
+        paymentType: true,
+        status: true,
+      },
+    });
+
+    expect(createdPayment).toEqual(
+      expect.objectContaining({
+        amount: expectedDepositAmount,
+        paymentType: 'DEPOSIT',
+        status: 'PENDING',
+      }),
+    );
   });
 
   it('denies non-owner booking access with deterministic 403 message', async () => {
