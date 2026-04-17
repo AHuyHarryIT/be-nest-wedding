@@ -112,8 +112,12 @@ describe('Customer Orders deposit checkout (e2e)', () => {
   });
 
   afterAll(async () => {
-    await cleanupFixture(databaseService, now);
-    await app.close();
+    if (databaseService) {
+      await cleanupFixture(databaseService, now);
+    }
+    if (app) {
+      await app.close();
+    }
   });
 
   it('returns 201 + envelope + momo payload for eligible booking owner', async () => {
