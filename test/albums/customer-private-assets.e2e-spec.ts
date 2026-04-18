@@ -13,37 +13,35 @@ import { JwtAuthGuard } from '../../src/auth/guards/jwt-auth.guard';
 
 const DENY_MESSAGE = 'Album not found or you do not have access.';
 
-describe('Customer private album ownership denial (e2e)', () => {
+describe('Customer private album assets (e2e)', () => {
   let app: INestApplication<App>;
   let guardSpy: jest.SpiedFunction<JwtAuthGuard['canActivate']>;
 
+  const ownerAssets = [
+    {
+      id: 'file-1',
+      name: 'photo-1.jpg',
+      mimeType: 'image/jpeg',
+      byteSize: 1200,
+    },
+    {
+      id: 'file-2',
+      name: 'photo-2.jpg',
+      mimeType: 'image/jpeg',
+      byteSize: 1400,
+    },
+  ];
+
   const albumsServiceMock = {
-    getCustomerThumbnailStream: jest.fn(async (_customerId: string, fileId: string) => {
-      if (fileId === 'file-owner') {
-        return {
-          stream: {
-            pipe: (_: unknown) => _,
-          } as unknown as NodeJS.ReadableStream,
-          contentType: 'image/jpeg',
-        };
-      }
+    findCustomerPrivateAlbumAssets: jest.fn(
+      async (_customerId: string, albumId: string) => {
+        if (albumId === 'album-owner') {
+          return ownerAssets;
+        }
 
-      throw new ForbiddenException(DENY_MESSAGE);
-    }),
-    getCustomerFileStream: jest.fn(async (_customerId: string, fileId: string) => {
-      if (fileId === 'file-owner') {
-        return {
-          stream: {
-            pipe: (_: unknown) => _,
-          } as unknown as NodeJS.ReadableStream,
-          mimeType: 'image/jpeg',
-          byteSize: 12,
-          name: 'owner.jpg',
-        };
-      }
-
-      throw new ForbiddenException(DENY_MESSAGE);
-    }),
+        throw new ForbiddenException(DENY_MESSAGE);
+      },
+    ),
   };
 
   const mockGuardCanActivate = (context: ExecutionContext): boolean => {
@@ -91,31 +89,48 @@ describe('Customer private album ownership denial (e2e)', () => {
   });
 
   beforeEach(() => {
-    albumsServiceMock.getCustomerThumbnailStream.mockClear();
-    albumsServiceMock.getCustomerFileStream.mockClear();
+    albumsServiceMock.findCustomerPrivateAlbumAssets.mockClear();
   });
 
-  it('non-owner using leaked fileId is denied on thumbnail with non-enumerating message', async () => {
+  it('GET /customer/albums/:albumId/assets returns owned album file metadata for owner', async () => {
     const response = await request(app.getHttpServer())
-      .get('/customer/albums/file/file-foreign/thumbnail')
+      .get('/customer/albums/album-owner/assets')
+      .set('x-user-id', 'customer-owner')
+      .expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(response.body.data).toEqual(ownerAssets);
+    expect(response.body.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: expect.any(String),
+          name: expect.any(String),
+          mimeType: expect.any(String),
+          byteSize: expect.any(Number),
+        }),
+      ]),
+    );
+
+    expect(albumsServiceMock.findCustomerPrivateAlbumAssets).toHaveBeenCalledWith(
+      'customer-owner',
+      'album-owner',
+    );
+  });
+
+  it('foreign albumId returns 403 explicit non-enumerating denial', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/customer/albums/album-foreign/assets')
       .set('x-user-id', 'customer-owner')
       .expect(403);
 
     expect(response.body.message).toBe(DENY_MESSAGE);
+    expect(response.body).not.toHaveProperty('details.customerId');
+    expect(response.body).not.toHaveProperty('details.bookingId');
   });
 
-  it('non-owner using leaked fileId is denied on content with non-enumerating message', async () => {
+  it('nonexistent albumId returns the same 403 explicit non-enumerating denial', async () => {
     const response = await request(app.getHttpServer())
-      .get('/customer/albums/file/file-foreign/content')
-      .set('x-user-id', 'customer-owner')
-      .expect(403);
-
-    expect(response.body.message).toBe(DENY_MESSAGE);
-  });
-
-  it('nonexistent and foreign IDs do not leak existence metadata', async () => {
-    const response = await request(app.getHttpServer())
-      .get('/customer/albums/file/file-nonexistent/content')
+      .get('/customer/albums/album-missing/assets')
       .set('x-user-id', 'customer-owner')
       .expect(403);
 
