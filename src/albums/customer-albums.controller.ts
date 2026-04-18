@@ -8,6 +8,7 @@ import {
   Res,
   UseGuards,
 } from '@nestjs/common';
+import contentDisposition from 'content-disposition';
 import type { Response } from 'express';
 import {
   ApiBearerAuth,
@@ -70,6 +71,40 @@ export class CustomerAlbumsController {
       assets,
       'Customer private album assets retrieved successfully',
     );
+  }
+
+  @Get(':albumId/download.zip')
+  @ApiOperation({
+    summary: 'Download customer-owned private album as zip attachment',
+  })
+  @ApiSuccessResponse({ description: 'Album zip streamed successfully' })
+  async downloadAlbumZip(
+    @GetUser() user: AuthenticatedUser,
+    @Param('albumId') albumId: string,
+    @Res() res: Response,
+  ) {
+    try {
+      const { stream, fileName } = await this.albumsService.getCustomerAlbumZipStream(
+        user.userId,
+        albumId,
+      );
+
+      res.set({
+        'Content-Type': 'application/zip',
+        'Content-Disposition': contentDisposition(fileName),
+        'Cache-Control': 'private, no-store',
+      });
+
+      stream.pipe(res);
+    } catch (error: unknown) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+
+      const errorMessage =
+        error instanceof Error ? error.message : 'Failed to download album zip';
+      throw new InternalServerErrorException(errorMessage);
+    }
   }
 
   @Get('file/:fileId/thumbnail')

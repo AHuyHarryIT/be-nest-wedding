@@ -4,9 +4,11 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import archiver from 'archiver';
 import * as crypto from 'crypto';
 import { Prisma, VisibilityLevel } from 'generated/prisma';
 import sharp, { Metadata } from 'sharp';
+import { PassThrough } from 'stream';
 import { PaginationHelper } from '../common/utils/pagination.helper';
 import { DatabaseService } from '../database/database.service';
 import { OneDriveService } from '../storage/onedrive.service';
@@ -22,6 +24,8 @@ import {
   QueryCustomerAlbumsDto,
   UploadImageToAlbumDto,
 } from './dto';
+
+const DENIAL_MESSAGE = 'Album not found or you do not have access.';
 
 const albumOwnerSelect = {
   id: true,
@@ -286,7 +290,7 @@ export class AlbumsService {
   private async assertCustomerAlbumAccess(
     customerId: string,
     albumId: string,
-  ): Promise<void> {
+  ): Promise<{ id: string; title: string; bookingId: string | null }> {
     const album = await this.databaseService.album.findFirst({
       where: {
         id: albumId,
@@ -299,12 +303,18 @@ export class AlbumsService {
           },
         },
       },
-      select: { id: true },
+      select: {
+        id: true,
+        title: true,
+        bookingId: true,
+      },
     });
 
     if (!album) {
-      throw new ForbiddenException('Album not found or you do not have access.');
+      throw new ForbiddenException(DENIAL_MESSAGE);
     }
+
+    return album;
   }
 
   async findCustomerPrivateAlbumAssets(customerId: string, albumId: string) {
@@ -333,6 +343,90 @@ export class AlbumsService {
     });
 
     return albumFiles.map((entry) => entry.file);
+  }
+
+  private sanitizeZipName(value: string): string {
+    const sanitized = value
+      .trim()
+      .replace(/[^a-zA-Z0-9._-]+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
+
+    return sanitized || 'private-album';
+  }
+
+  async getCustomerAlbumZipStream(
+    customerId: string,
+    albumId: string,
+  ): Promise<{ stream: NodeJS.ReadableStream; fileName: string }> {
+    const album = await this.assertCustomerAlbumAccess(customerId, albumId);
+
+    const albumFiles = await this.databaseService.albumFile.findMany({
+      where: {
+        albumId,
+        file: {
+          deletedAt: null,
+        },
+      },
+      select: {
+        file: {
+          select: {
+            id: true,
+            name: true,
+            storageKey: true,
+          },
+        },
+      },
+      orderBy: {
+        sortOrder: 'asc',
+      },
+    });
+
+    const output = new PassThrough();
+    const archive = archiver('zip', {
+      zlib: { level: 9 },
+    });
+
+    archive.on('warning', (error: Error & { code?: string }) => {
+      if (error.code !== 'ENOENT') {
+        output.destroy(error);
+      }
+    });
+
+    archive.on('error', (error: Error) => {
+      output.destroy(error);
+    });
+
+    archive.pipe(output);
+
+    const usedNames = new Set<string>();
+
+    for (const albumFile of albumFiles) {
+      const oneDriveStream = await this.oneDriveService.getFileStream(
+        albumFile.file.storageKey,
+      );
+
+      const baseName = this.sanitizeZipName(
+        albumFile.file.name || `asset-${albumFile.file.id}`,
+      );
+
+      let entryName = baseName;
+      let duplicateCounter = 1;
+      while (usedNames.has(entryName)) {
+        entryName = `${baseName}-${duplicateCounter}`;
+        duplicateCounter += 1;
+      }
+      usedNames.add(entryName);
+
+      archive.append(oneDriveStream, { name: entryName });
+    }
+
+    void archive.finalize();
+
+    return {
+      stream: output,
+      fileName: `${this.sanitizeZipName(album.title)}.zip`,
+    };
   }
 
   async findByShareToken(token: string) {
@@ -932,8 +1026,6 @@ export class AlbumsService {
     customerId: string,
     fileId: string,
   ): Promise<{ storageKey: string }> {
-    const denial = 'Album not found or you do not have access.';
-
     const file = await this.databaseService.file.findFirst({
       where: {
         id: fileId,
