@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -280,6 +281,58 @@ export class AlbumsService {
     }));
 
     return PaginationHelper.createPaginatedResponse(data, page, limit, total);
+  }
+
+  private async assertCustomerAlbumAccess(
+    customerId: string,
+    albumId: string,
+  ): Promise<void> {
+    const album = await this.databaseService.album.findFirst({
+      where: {
+        id: albumId,
+        deletedAt: null,
+        isPublic: false,
+        booking: {
+          is: {
+            customerId,
+            deletedAt: null,
+          },
+        },
+      },
+      select: { id: true },
+    });
+
+    if (!album) {
+      throw new ForbiddenException('Album not found or you do not have access.');
+    }
+  }
+
+  async findCustomerPrivateAlbumAssets(customerId: string, albumId: string) {
+    await this.assertCustomerAlbumAccess(customerId, albumId);
+
+    const albumFiles = await this.databaseService.albumFile.findMany({
+      where: {
+        albumId,
+        file: {
+          deletedAt: null,
+        },
+      },
+      select: {
+        file: {
+          select: {
+            id: true,
+            name: true,
+            mimeType: true,
+            byteSize: true,
+          },
+        },
+      },
+      orderBy: {
+        sortOrder: 'asc',
+      },
+    });
+
+    return albumFiles.map((entry) => entry.file);
   }
 
   async findByShareToken(token: string) {
@@ -906,7 +959,7 @@ export class AlbumsService {
     });
 
     if (!file) {
-      throw new NotFoundException(denial);
+      throw new ForbiddenException(denial);
     }
 
     return file;
@@ -935,7 +988,7 @@ export class AlbumsService {
     });
 
     if (!file) {
-      throw new NotFoundException('Album not found or you do not have access.');
+      throw new ForbiddenException('Album not found or you do not have access.');
     }
 
     const stream = await this.oneDriveService.getFileStream(storageKey);

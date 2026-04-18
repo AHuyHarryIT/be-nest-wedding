@@ -1,6 +1,7 @@
 import {
   Controller,
   Get,
+  HttpException,
   InternalServerErrorException,
   Param,
   Query,
@@ -51,6 +52,26 @@ export class CustomerAlbumsController {
     );
   }
 
+  @Get(':albumId/assets')
+  @ApiOperation({
+    summary: 'List file metadata for a customer-owned private album',
+  })
+  @ApiSuccessResponse({ description: 'Album assets retrieved successfully' })
+  async getPrivateAlbumAssets(
+    @GetUser() user: AuthenticatedUser,
+    @Param('albumId') albumId: string,
+  ) {
+    const assets = await this.albumsService.findCustomerPrivateAlbumAssets(
+      user.userId,
+      albumId,
+    );
+
+    return ResponseBuilder.success(
+      assets,
+      'Customer private album assets retrieved successfully',
+    );
+  }
+
   @Get('file/:fileId/thumbnail')
   @ApiOperation({
     summary: 'Get thumbnail for a customer-owned private album file',
@@ -74,7 +95,7 @@ export class CustomerAlbumsController {
 
       result.stream.pipe(res);
     } catch (error: unknown) {
-      if (error instanceof Error && error.name === 'NotFoundException') {
+      if (error instanceof HttpException) {
         throw error;
       }
 
@@ -106,7 +127,7 @@ export class CustomerAlbumsController {
 
       stream.pipe(res);
     } catch (error: unknown) {
-      if (error instanceof Error && error.name === 'NotFoundException') {
+      if (error instanceof HttpException) {
         throw error;
       }
 
