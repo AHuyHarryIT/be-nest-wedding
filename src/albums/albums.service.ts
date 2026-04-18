@@ -8,7 +8,7 @@ import archiver from 'archiver';
 import * as crypto from 'crypto';
 import { Prisma, VisibilityLevel } from 'generated/prisma';
 import sharp, { Metadata } from 'sharp';
-import { PassThrough } from 'stream';
+import { PassThrough, Readable } from 'stream';
 import { PaginationHelper } from '../common/utils/pagination.helper';
 import { DatabaseService } from '../database/database.service';
 import { OneDriveService } from '../storage/onedrive.service';
@@ -418,7 +418,9 @@ export class AlbumsService {
       }
       usedNames.add(entryName);
 
-      archive.append(oneDriveStream, { name: entryName });
+      archive.append(oneDriveStream as Readable, {
+        name: entryName,
+      });
     }
 
     void archive.finalize();
@@ -1051,7 +1053,7 @@ export class AlbumsService {
     });
 
     if (!file) {
-      throw new ForbiddenException(denial);
+      throw new ForbiddenException(DENIAL_MESSAGE);
     }
 
     return file;

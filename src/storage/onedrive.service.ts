@@ -562,7 +562,7 @@ export class OneDriveService {
     }
   }
 
-  async getFileStream(fileId: string) {
+  async getFileStream(fileId: string): Promise<NodeJS.ReadableStream> {
     const token = await this.authService.getAccessToken();
     const userId = this.configService.get<string>('AZURE_USER_ID');
 
