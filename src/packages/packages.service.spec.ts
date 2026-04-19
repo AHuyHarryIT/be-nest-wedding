@@ -132,4 +132,84 @@ describe('PackagesService', () => {
 
     await service.updatePackageServices('pkg-2', { serviceIds: [] });
   });
+
+  it('denies inactive packages for customer/public package detail reads', async () => {
+    databaseService.package.findFirst.mockResolvedValue(null);
+
+    await expect(service.findOneActiveForPublic('pkg-inactive')).rejects.toThrow(
+      'Package with ID pkg-inactive not found',
+    );
+    expect(databaseService.package.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'pkg-inactive',
+        isActive: true,
+        deletedAt: null,
+      },
+      include: {
+        services: {
+          include: {
+            service: true,
+          },
+        },
+        images: {
+          orderBy: { sortOrder: 'asc' },
+        },
+      },
+    });
+  });
+
+  it('returns active packages for customer/public package detail reads', async () => {
+    const activePackage = {
+      id: 'pkg-active',
+      name: 'Active Package',
+      isActive: true,
+      deletedAt: null,
+      services: [],
+      images: [],
+    };
+
+    databaseService.package.findFirst.mockResolvedValue(activePackage);
+
+    await expect(service.findOneActiveForPublic('pkg-active')).resolves.toEqual(
+      activePackage,
+    );
+    expect(databaseService.package.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'pkg-active',
+        isActive: true,
+        deletedAt: null,
+      },
+      include: {
+        services: {
+          include: {
+            service: true,
+          },
+        },
+        images: {
+          orderBy: { sortOrder: 'asc' },
+        },
+      },
+    });
+  });
+
+  it('keeps staff management package detail reads available for inactive records', async () => {
+    const inactivePackage = {
+      id: 'pkg-staff',
+      name: 'Inactive Package',
+      isActive: false,
+      deletedAt: null,
+      services: [],
+      images: [],
+    };
+
+    databaseService.package.findFirst.mockResolvedValue(inactivePackage);
+
+    await expect(service.findOne('pkg-staff')).resolves.toEqual(inactivePackage);
+
+    const firstCall = databaseService.package.findFirst.mock.calls[0][0];
+    expect(firstCall.where).toEqual({
+      id: 'pkg-staff',
+      deletedAt: null,
+    });
+  });
 });
