@@ -30,6 +30,9 @@ export const PackageSelection: SelectionRegistry = {
         },
       },
     },
-    where: { isActive: true, deletedAt: null },
+    where: (query) => ({
+      deletedAt: null,
+      ...(query?.includeInactive ? {} : { isActive: true }),
+    }),
   },
 };

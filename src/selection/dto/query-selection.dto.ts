@@ -1,5 +1,5 @@
-import { IsString, IsOptional, IsInt, Min } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsString, IsOptional, IsInt, Min, IsBoolean } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
 
 export class SelectionQueryDto {
   @IsString()
@@ -24,4 +24,15 @@ export class SelectionQueryDto {
   @IsOptional()
   @IsString()
   bookingId?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value.toLowerCase() === 'true';
+    }
+
+    return value as boolean;
+  })
+  includeInactive?: boolean;
 }
