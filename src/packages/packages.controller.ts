@@ -269,6 +269,22 @@ export class PackagesController {
     );
   }
 
+  @Patch(':id/deactivate')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @ApiBearerAuth('JWT-auth')
+  @RequirePermissions('packages:update')
+  @ApiOperation({ summary: 'Deactivate a package by ID' })
+  @ApiUpdatedSuccessResponse({
+    description: 'Package deactivated successfully',
+  })
+  @ApiNotFoundResponse({ description: 'Package not found' })
+  @ApiUnauthorizedResponse()
+  @ApiForbiddenResponse()
+  async deactivate(@Param('id') id: string) {
+    const package_ = await this.packagesService.deactivate(id);
+    return ResponseBuilder.updated(package_, 'Package deactivated successfully');
+  }
+
   @Delete(':id')
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @ApiBearerAuth('JWT-auth')

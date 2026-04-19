@@ -179,6 +179,18 @@ export class ServicesService {
     });
   }
 
+  async deactivate(id: string) {
+    await this.findOne(id);
+
+    return this.databaseService.service.update({
+      where: { id },
+      data: {
+        isActive: false,
+      },
+      include: this.serviceInclude,
+    });
+  }
+
   async restore(id: string) {
     const service = await this.databaseService.service.findUnique({
       where: { id },

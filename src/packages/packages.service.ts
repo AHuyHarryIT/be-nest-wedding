@@ -402,6 +402,25 @@ export class PackagesService {
     });
   }
 
+  async deactivate(id: string) {
+    await this.findOne(id);
+
+    return this.databaseService.package.update({
+      where: { id },
+      data: {
+        isActive: false,
+      },
+      include: {
+        services: {
+          include: { service: true },
+        },
+        images: {
+          orderBy: { sortOrder: 'asc' },
+        },
+      },
+    });
+  }
+
   /**
    * Get all soft-deleted packages with pagination and filtering
    */

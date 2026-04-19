@@ -217,6 +217,18 @@ export class ServicesController {
     return ResponseBuilder.updated(service, 'Service updated successfully');
   }
 
+  @Patch(':id/deactivate')
+  @RequirePermissions('services:update')
+  @ApiOperation({ summary: 'Deactivate a service by ID' })
+  @ApiUpdatedSuccessResponse({ description: 'Service deactivated successfully' })
+  @ApiNotFoundResponse({ description: 'Service not found' })
+  @ApiUnauthorizedResponse()
+  @ApiForbiddenResponse()
+  async deactivate(@Param('id') id: string) {
+    const service = await this.servicesService.deactivate(id);
+    return ResponseBuilder.updated(service, 'Service deactivated successfully');
+  }
+
   @Delete(':id')
   @RequirePermissions('services:delete')
   @ApiOperation({ summary: 'Soft delete a service by ID' })
