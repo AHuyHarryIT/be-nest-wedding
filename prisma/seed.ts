@@ -227,6 +227,10 @@ async function seedRBAC() {
     // Session permissions
     { key: 'sessions:read', description: 'View active user sessions' },
     { key: 'sessions:revoke', description: 'Revoke active user sessions' },
+
+    // Chat permissions
+    { key: 'chat.read', description: 'Read staff chat queue and threads' },
+    { key: 'chat.reply', description: 'Reply to customer chat threads' },
   ];
 
   // Create permissions
@@ -331,6 +335,8 @@ async function seedRBAC() {
     'orders:update',
     'payments:create',
     'payments:read',
+    'chat.read',
+    'chat.reply',
   ];
 
   const managerPermissions = await prisma.permission.findMany({
@@ -367,6 +373,8 @@ async function seedRBAC() {
     'bookings:read',
     'bookings:create',
     'orders:read',
+    'chat.read',
+    'chat.reply',
   ];
 
   const staffPermissions = await prisma.permission.findMany({

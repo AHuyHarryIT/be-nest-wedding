@@ -16,6 +16,8 @@ import { ChatService } from './chat.service';
 import { ChatGateway } from './chat.gateway';
 import { CreateChatDto, SendMessageDto, UpdateChatDto } from './dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RequirePermissions } from '../common/decorators/permissions.decorator';
+import { PermissionsGuard } from '../common/guards/permissions.guard';
 import { ChatEntity, MessageEntity } from './entities';
 
 interface AuthenticatedRequest {
@@ -115,6 +117,8 @@ export class ChatController {
   }
 
   @Get('staff')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions('chat.read')
   async getChatsByStaff(
     @Request() req: unknown,
     @Query('skip') skip?: string,

@@ -69,6 +69,10 @@ async function seedRBACPermissions() {
     { key: 'payments:read', description: 'View payment records' },
     { key: 'payments:update', description: 'Update payment information' },
     { key: 'payments:refund', description: 'Process refunds' },
+
+    // Chat permissions
+    { key: 'chat.read', description: 'Read staff chat queue and threads' },
+    { key: 'chat.reply', description: 'Reply to customer chat threads' },
   ];
 
   // Create permissions
@@ -156,6 +160,8 @@ async function seedRBACPermissions() {
     'orders:update',
     'payments:create',
     'payments:read',
+    'chat.read',
+    'chat.reply',
   ];
 
   const managerPermissions = await prisma.permission.findMany({
@@ -189,6 +195,8 @@ async function seedRBACPermissions() {
     'bookings:read',
     'bookings:create',
     'orders:read',
+    'chat.read',
+    'chat.reply',
   ];
 
   const staffPermissions = await prisma.permission.findMany({
