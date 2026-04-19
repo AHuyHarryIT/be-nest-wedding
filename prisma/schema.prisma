@@ -827,13 +827,14 @@ enum ChatType {
 }
 
 model Chat {
-  id            String    @id @default(uuid())
-  customerId    String    @map("customer_id")
-  staffId       String?   @map("staff_id")
-  bookingId     String?   @map("booking_id")
-  chatType      ChatType  @default(DIRECT)
-  lastMessageAt DateTime? @map("last_message_at")
-  isArchived    Boolean   @default(false) @map("is_archived")
+  id                 String    @id @default(uuid())
+  customerId         String    @map("customer_id")
+  staffId            String?   @map("staff_id")
+  bookingId          String?   @map("booking_id")
+  canonicalThreadKey String    @unique @map("canonical_thread_key")
+  chatType           ChatType  @default(DIRECT)
+  lastMessageAt      DateTime? @map("last_message_at")
+  isArchived         Boolean   @default(false) @map("is_archived")
 
   // relation
   customer Customer  @relation("chat_customer", fields: [customerId], references: [id], onDelete: Cascade)
@@ -849,6 +850,7 @@ model Chat {
   @@index([customerId, staffId])
   @@index([bookingId])
   @@index([lastMessageAt])
+  @@index([canonicalThreadKey])
   @@map("chats")
 }
 

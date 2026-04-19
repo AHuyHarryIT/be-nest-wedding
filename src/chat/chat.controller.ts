@@ -9,6 +9,8 @@ import {
   UseGuards,
   Request,
   Query,
+  ForbiddenException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { ChatService } from './chat.service';
 import { ChatGateway } from './chat.gateway';
@@ -17,7 +19,17 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ChatEntity, MessageEntity } from './entities';
 
 interface AuthenticatedRequest {
-  user: { id: string };
+  user?: {
+    id?: string;
+    userId?: string;
+    userType?: 'customer' | 'staff';
+  };
+}
+
+interface RequestUser {
+  id?: string;
+  userId?: string;
+  userType?: 'customer' | 'staff';
 }
 
 @Controller('chats')
@@ -28,42 +40,92 @@ export class ChatController {
     private chatGateway: ChatGateway,
   ) {}
 
-  private getUserId(req: any): string {
-    return (req as AuthenticatedRequest).user.id;
+  private getUser(req: unknown): RequestUser {
+    const user = (req as AuthenticatedRequest)?.user;
+
+    if (!user) {
+      throw new UnauthorizedException('User not authenticated');
+    }
+
+    return user;
+  }
+
+  private getUserId(req: unknown): string {
+    const user = this.getUser(req);
+    const resolvedUserId = user.id ?? user.userId;
+
+    if (!resolvedUserId) {
+      throw new UnauthorizedException('User not authenticated');
+    }
+
+    return resolvedUserId;
+  }
+
+  private ensureCustomerOwnsChatCreate(req: unknown, customerId: string): void {
+    const user = this.getUser(req);
+
+    if (user.userType === 'customer') {
+      const requestCustomerId = user.id ?? user.userId;
+      if (!requestCustomerId || requestCustomerId !== customerId) {
+        throw new ForbiddenException('Customers can only create chats for their own account');
+      }
+    }
+  }
+
+  private async enforceStaffReadPermission(req: unknown): Promise<void> {
+    const user = this.getUser(req);
+
+    if (user.userType === 'staff') {
+      const userId = user.id ?? user.userId;
+      if (!userId) {
+        throw new UnauthorizedException('User not authenticated');
+      }
+
+      await this.chatService.ensureStaffReadPermission(userId);
+    }
   }
 
   // Chat endpoints
   @Post()
-  async createChat(@Body() createChatDto: CreateChatDto): Promise<ChatEntity> {
+  async createChat(
+    @Body() createChatDto: CreateChatDto,
+    @Request() req: unknown,
+  ): Promise<ChatEntity> {
+    this.ensureCustomerOwnsChatCreate(req, createChatDto.customerId);
     return this.chatService.createChat(createChatDto);
   }
 
   @Get()
   async getChats(
-    @Request() req: any,
+    @Request() req: unknown,
     @Query('skip') skip?: string,
     @Query('take') take?: string,
   ): Promise<ChatEntity[]> {
+    const user = this.getUser(req);
     const userId = this.getUserId(req);
     const skipNum = skip ? parseInt(skip, 10) : 0;
     const takeNum = take ? parseInt(take, 10) : 20;
 
-    // Check if user is staff or customer based on roles
-    // For now, return chats for the user as customer
+    if (user.userType === 'staff') {
+      await this.enforceStaffReadPermission(req);
+      return this.chatService.getChatsByStaff(userId, skipNum, takeNum);
+    }
+
     return this.chatService.getChatsByCustomer(userId, skipNum, takeNum);
   }
 
   @Get('staff')
   async getChatsByStaff(
-    @Request() req: any,
+    @Request() req: unknown,
     @Query('skip') skip?: string,
     @Query('take') take?: string,
   ): Promise<ChatEntity[]> {
+    await this.enforceStaffReadPermission(req);
+
     const staffId = this.getUserId(req);
     const skipNum = skip ? parseInt(skip, 10) : 0;
     const takeNum = take ? parseInt(take, 10) : 20;
 
-    await this.chatService.ensureStaffUser(staffId);
     return this.chatService.getChatsByStaff(staffId, skipNum, takeNum);
   }
 
@@ -75,8 +137,12 @@ export class ChatController {
   }
 
   @Get(':chatId')
-  async getChat(@Param('chatId') chatId: string): Promise<ChatEntity> {
-    return this.chatService.getChat(chatId);
+  async getChat(
+    @Param('chatId') chatId: string,
+    @Request() req: unknown,
+  ): Promise<ChatEntity> {
+    const userId = this.getUserId(req);
+    return this.chatService.getChatForUser(chatId, userId);
   }
 
   @Put(':chatId')
@@ -145,9 +211,14 @@ export class ChatController {
     @Param('chatId') chatId: string,
     @Query('skip') skip?: string,
     @Query('take') take?: string,
+    @Request() req: unknown,
   ): Promise<MessageEntity[]> {
+    const userId = this.getUserId(req);
     const skipNum = skip ? parseInt(skip, 10) : 0;
     const takeNum = take ? parseInt(take, 10) : 50;
+
+    await this.chatService.getChatForUser(chatId, userId);
+
     return this.chatService.getMessages(chatId, skipNum, takeNum);
   }
 

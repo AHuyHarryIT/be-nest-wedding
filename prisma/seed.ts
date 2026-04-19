@@ -1277,10 +1277,38 @@ async function seedChatThreads(customers) {
     return;
   }
 
-  const chat = await prisma.chat.create({
-    data: {
+  const chat = await prisma.chat.upsert({
+    where: {
+      canonicalThreadKey: `general:${seededCustomer.id}`,
+    },
+    update: {
+      staffId: adminStaffId,
+      chatType: 'DIRECT',
+      messages: {
+        create: [
+          {
+            senderCustomerId: seededCustomer.id,
+            content: 'Hi, I would like to inquire about your wedding photography packages.',
+          },
+          {
+            senderStaffId: adminStaffId,
+            content: 'Hello! Thank you for reaching out. We have several packages available. What kind of photography style are you interested in?',
+          },
+          {
+            senderCustomerId: seededCustomer.id,
+            content: 'We are looking for both photo and video coverage for our wedding in December. Could you share your pricing?',
+          },
+          {
+            senderStaffId: adminStaffId,
+            content: 'Absolutely! Please check our Packages page for full details. Our Ultimate Package includes both photo and video with a full day of coverage. I would also be happy to schedule a consultation call if you prefer.',
+          },
+        ],
+      },
+    },
+    create: {
       customerId: seededCustomer.id,
       staffId: adminStaffId,
+      canonicalThreadKey: `general:${seededCustomer.id}`,
       chatType: 'DIRECT',
       messages: {
         create: [

@@ -171,17 +171,19 @@ describe('Chat unread + latest ordering synchronization contract (e2e)', () => {
 
     await new Promise((resolve) => setTimeout(resolve, 20));
 
+    const newerBookingId = `11111111-1111-4111-8111-${(now + 99)
+      .toString()
+      .slice(-12)
+      .padStart(12, '0')}`;
+
+    await ensureBookingExists(databaseService, fixture.customerId, newerBookingId);
+
     const newerThread = await createChatAsCustomer(
       app,
       customerToken,
       fixture.customerId,
-      `11111111-1111-4111-8111-${(now + 99)
-        .toString()
-        .slice(-12)
-        .padStart(12, '0')}`,
+      newerBookingId,
     );
-
-    await ensureBookingExists(databaseService, fixture.customerId, newerThread.bookingId as string);
 
     await sendMessageAsStaff(app, staffToken, newerThread.id, 'Newer thread latest activity');
 

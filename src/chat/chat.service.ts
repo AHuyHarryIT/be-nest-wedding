@@ -7,14 +7,57 @@ import {
 import { DatabaseService } from '../database/database.service';
 import { CreateChatDto, SendMessageDto, UpdateChatDto } from './dto';
 import { ChatEntity, MessageEntity } from './entities';
+import { Prisma } from 'generated/prisma';
+
+const STAFF_ROLE_NAMES = ['super-admin', 'admin', 'manager', 'staff'];
+
+type ChatWithUnreadCount = ChatEntity & {
+  unreadCount: number;
+};
+
+type ChatListArgs = {
+  where: Prisma.ChatWhereInput;
+  skip: number;
+  take: number;
+  currentUserId: string;
+};
+
+type ActiveParticipant =
+  | { userType: 'customer'; customerId: string }
+  | { userType: 'staff'; staffId: string };
 
 @Injectable()
 export class ChatService {
   constructor(private prisma: DatabaseService) {}
 
-  private async isStaffUser(userId: string): Promise<boolean> {
-    const user = await this.prisma.staff.findUnique({
+  private canonicalThreadKey(customerId: string, bookingId?: string | null): string {
+    if (bookingId) {
+      return `booking:${customerId}:${bookingId}`;
+    }
+
+    return `general:${customerId}`;
+  }
+
+  private async resolveActiveParticipant(userId: string): Promise<ActiveParticipant> {
+    const customer = await this.prisma.customer.findUnique({ where: { id: userId } });
+
+    if (customer?.isActive) {
+      return { userType: 'customer', customerId: userId };
+    }
+
+    const staff = await this.prisma.staff.findUnique({
       where: { id: userId },
+    });
+
+    if (staff?.isActive) {
+      return { userType: 'staff', staffId: userId };
+    }
+
+    throw new BadRequestException('User is not active or does not exist');
+  }
+
+  private async resolveDefaultStaffId(): Promise<string | null> {
+    const staff = await this.prisma.staff.findFirst({
       include: {
         roles: {
           include: {
@@ -22,15 +65,167 @@ export class ChatService {
           },
         },
       },
+      where: {
+        isActive: true,
+        roles: {
+          some: {
+            role: {
+              name: {
+                in: STAFF_ROLE_NAMES,
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'asc',
+      },
     });
 
-    if (!user || !user.isActive) {
-      return false;
+    return staff?.id ?? null;
+  }
+
+  private async assertChatAccess(chatId: string, userId: string): Promise<ChatEntity> {
+    const chat = await this.getChat(chatId);
+
+    if (chat.customerId === userId) {
+      return chat;
     }
 
-    return user.roles?.some((ur) =>
-      ['super-admin', 'admin', 'manager', 'staff'].includes(ur.role.name),
+    await this.ensureStaffUser(userId);
+    return chat;
+  }
+
+  private async getChatsWithThreadUnread({
+    where,
+    skip,
+    take,
+    currentUserId,
+  }: ChatListArgs): Promise<ChatEntity[]> {
+    const chats = await this.prisma.chat.findMany({
+      where,
+      include: {
+        customer: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
+        messages: {
+          where: {
+            isRead: false,
+            AND: [
+              {
+                OR: [
+                  { senderCustomerId: null },
+                  { senderCustomerId: { not: currentUserId } },
+                ],
+              },
+              {
+                OR: [
+                  { senderStaffId: null },
+                  { senderStaffId: { not: currentUserId } },
+                ],
+              },
+            ],
+          },
+          select: {
+            id: true,
+          },
+        },
+      },
+      orderBy: [{ lastMessageAt: 'desc' }, { createdAt: 'desc' }],
+      skip,
+      take,
+    });
+
+    return chats.map((chat) => {
+      const typed = chat as unknown as ChatWithUnreadCount & {
+        messages: Array<{ id: string }>;
+      };
+
+      const { messages, ...chatWithoutMessages } = typed as ChatWithUnreadCount & {
+        messages: Array<{ id: string }>;
+      };
+
+      return {
+        ...chatWithoutMessages,
+        unreadCount: messages.length,
+      } as ChatEntity;
+    });
+  }
+
+  private async ensureStaffPermission(
+    staffId: string,
+    permissionKey: 'chat.read' | 'chat.reply',
+  ): Promise<void> {
+    const isStaff = await this.isStaffUser(staffId);
+    if (!isStaff) {
+      throw new ForbiddenException('Staff role is required for this endpoint');
+    }
+
+    const userRoles = await this.prisma.staffRole.findMany({
+      where: {
+        staffId,
+      },
+      include: {
+        role: {
+          include: {
+            permissions: {
+              include: {
+                permission: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const permissionKeys = new Set<string>();
+    userRoles.forEach((staffRole) => {
+      staffRole.role.permissions.forEach((rolePermission) => {
+        permissionKeys.add(rolePermission.permission.key);
+      });
+    });
+
+    if (!permissionKeys.has(permissionKey)) {
+      throw new ForbiddenException({
+        message: 'Missing required permissions',
+        details: {
+          requiredPermissions: [permissionKey],
+          missingPermissions: [permissionKey],
+        },
+      });
+    }
+  }
+
+  private async assertStaffCanRead(staffId: string): Promise<void> {
+    await this.ensureStaffPermission(staffId, 'chat.read');
+  }
+
+  private async assertStaffCanReply(staffId: string): Promise<void> {
+    await this.ensureStaffPermission(staffId, 'chat.reply');
+  }
+
+  private isUniqueViolation(error: unknown): boolean {
+    return (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002'
     );
+  }
+
+  private async isStaffUser(userId: string): Promise<boolean> {
+    const user = await this.prisma.staff.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        isActive: true,
+      },
+    });
+
+    return Boolean(user?.isActive);
   }
 
   async ensureStaffUser(userId: string): Promise<void> {
@@ -40,10 +235,27 @@ export class ChatService {
     }
   }
 
+  async ensureStaffReadPermission(staffId: string): Promise<void> {
+    await this.assertStaffCanRead(staffId);
+  }
+
+  async ensureStaffReplyPermission(staffId: string): Promise<void> {
+    await this.assertStaffCanReply(staffId);
+  }
+
+  async getChatForUser(chatId: string, userId: string): Promise<ChatEntity> {
+    const chat = await this.assertChatAccess(chatId, userId);
+
+    if (await this.isStaffUser(userId)) {
+      await this.assertStaffCanRead(userId);
+    }
+
+    return chat;
+  }
+
   // Chat operations
   async createChat(createChatDto: CreateChatDto): Promise<ChatEntity> {
     const { customerId, bookingId } = createChatDto;
-    let { staffId } = createChatDto;
 
     // Verify customer exists
     const customer = await this.prisma.customer.findUnique({
@@ -51,49 +263,6 @@ export class ChatService {
     });
     if (!customer) {
       throw new NotFoundException('Customer not found');
-    }
-
-    // If staffId not provided, auto-assign the first admin/staff user
-    if (!staffId) {
-      // Try to find any admin user first
-      const adminUser = await this.prisma.staff.findFirst({
-        include: {
-          roles: {
-            include: {
-              role: true,
-            },
-          },
-        },
-        where: {
-          isActive: true,
-          roles: {
-            some: {
-              role: {
-                name: {
-                  in: ['super-admin', 'admin', 'manager', 'staff'],
-                },
-              },
-            },
-          },
-        },
-        orderBy: {
-          createdAt: 'asc',
-        },
-      });
-
-      if (adminUser) {
-        staffId = adminUser.id;
-      }
-    }
-
-    // If staffId provided, verify staff exists
-    if (staffId) {
-      const staff = await this.prisma.staff.findUnique({
-        where: { id: staffId },
-      });
-      if (!staff) {
-        throw new NotFoundException('Staff not found');
-      }
     }
 
     // If bookingId provided, verify booking exists and belongs to customer
@@ -105,35 +274,49 @@ export class ChatService {
         throw new NotFoundException('Booking not found');
       }
       if (booking.customerId !== customerId) {
-        throw new BadRequestException(
-          'Booking does not belong to the customer',
-        );
+        throw new BadRequestException('Booking does not belong to the customer');
       }
     }
 
-    // Check if chat already exists between customer and staff
-    if (staffId) {
-      const existingChat = await this.prisma.chat.findFirst({
-        where: {
-          customerId,
-          staffId,
-        },
-      });
-      if (existingChat) {
-        return existingChat as ChatEntity;
-      }
-    }
+    const canonicalKey = this.canonicalThreadKey(customerId, bookingId);
 
-    const chat = await this.prisma.chat.create({
-      data: {
-        customerId,
-        staffId,
-        bookingId,
-        chatType: 'DIRECT',
-      },
+    const existingChat = await this.prisma.chat.findUnique({
+      where: { canonicalThreadKey: canonicalKey },
     });
 
-    return chat as ChatEntity;
+    if (existingChat) {
+      return existingChat as ChatEntity;
+    }
+
+    const defaultStaffId = await this.resolveDefaultStaffId();
+
+    try {
+      const chat = await this.prisma.chat.create({
+        data: {
+          customerId,
+          staffId: defaultStaffId,
+          bookingId: bookingId ?? null,
+          canonicalThreadKey: canonicalKey,
+          chatType: 'DIRECT',
+        },
+      });
+
+      return chat as ChatEntity;
+    } catch (error) {
+      if (!this.isUniqueViolation(error)) {
+        throw error;
+      }
+
+      const conflicted = await this.prisma.chat.findUnique({
+        where: { canonicalThreadKey: canonicalKey },
+      });
+
+      if (!conflicted) {
+        throw error;
+      }
+
+      return conflicted as ChatEntity;
+    }
   }
 
   async getChat(chatId: string): Promise<ChatEntity> {
@@ -163,27 +346,15 @@ export class ChatService {
     skip: number = 0,
     take: number = 20,
   ): Promise<ChatEntity[]> {
-    const chats = await this.prisma.chat.findMany({
+    return this.getChatsWithThreadUnread({
       where: {
         customerId,
         deletedAt: null,
       },
-      include: {
-        customer: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-          },
-        },
-      },
-      orderBy: { lastMessageAt: 'desc' },
       skip,
       take,
+      currentUserId: customerId,
     });
-
-    return chats as ChatEntity[];
   }
 
   async getChatsByStaff(
@@ -191,28 +362,16 @@ export class ChatService {
     skip: number = 0,
     take: number = 20,
   ): Promise<ChatEntity[]> {
-    await this.ensureStaffUser(staffId);
+    await this.assertStaffCanRead(staffId);
 
-    const chats = await this.prisma.chat.findMany({
+    return this.getChatsWithThreadUnread({
       where: {
         deletedAt: null,
       },
-      include: {
-        customer: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-          },
-        },
-      },
-      orderBy: { lastMessageAt: 'desc' },
       skip,
       take,
+      currentUserId: staffId,
     });
-
-    return chats as ChatEntity[];
   }
 
   async updateChat(
@@ -276,57 +435,34 @@ export class ChatService {
   ): Promise<MessageEntity> {
     const { chatId, content } = sendMessageDto;
 
-    // Verify chat exists
-    const chatData = await this.getChat(chatId);
+    // Verify chat exists and sender access
+    const chatData = await this.assertChatAccess(chatId, senderId);
 
-    // Verify sender is an active user
-    const senderCustomer = await this.prisma.customer.findUnique({
-      where: { id: senderId },
-    });
-    const senderStaff = senderCustomer
-      ? null
-      : await this.prisma.staff.findUnique({
-          where: { id: senderId },
-          include: {
-            roles: {
-              include: {
-                role: true,
-              },
-            },
-          },
-        });
+    const participant = await this.resolveActiveParticipant(senderId);
 
-    if (
-      (!senderCustomer || !senderCustomer.isActive) &&
-      (!senderStaff || !senderStaff.isActive)
-    ) {
-      throw new BadRequestException('Sender is not active');
-    }
-
-    const isStaff = Boolean(senderStaff);
-
-    if (chatData.customerId !== senderId && !isStaff) {
-      throw new BadRequestException('User is not part of this chat');
+    if (participant.userType === 'staff') {
+      await this.assertStaffCanReply(senderId);
     }
 
     const message = await this.prisma.message.create({
       data: {
         chatId,
-        senderCustomerId: senderCustomer ? senderId : null,
-        senderStaffId: senderStaff ? senderId : null,
+        senderCustomerId:
+          participant.userType === 'customer' ? participant.customerId : null,
+        senderStaffId: participant.userType === 'staff' ? participant.staffId : null,
         content,
       },
     });
 
     // Update chat's lastMessageAt
     await this.prisma.chat.update({
-      where: { id: chatId },
+      where: { id: chatData.id },
       data: { lastMessageAt: new Date() },
     });
 
     return {
       ...(message as any),
-      senderId: senderCustomer ? senderId : senderStaff?.id,
+      senderId: message.senderCustomerId ?? message.senderStaffId,
     } as MessageEntity;
   }
 
@@ -354,18 +490,27 @@ export class ChatService {
     chatId: string,
     userId: string,
   ): Promise<MessageEntity[]> {
-    const chat = await this.getChat(chatId);
+    await this.assertChatAccess(chatId, userId);
 
-    // Verify user is part of the chat
-    if (chat.customerId !== userId && chat.staffId !== userId) {
-      throw new BadRequestException('User is not part of this chat');
+    if (await this.isStaffUser(userId)) {
+      await this.assertStaffCanRead(userId);
     }
 
     const messages = await this.prisma.message.findMany({
       where: {
         chatId,
         isRead: false,
-        NOT: [{ senderCustomerId: userId }, { senderStaffId: userId }],
+        AND: [
+          {
+            OR: [
+              { senderCustomerId: null },
+              { senderCustomerId: { not: userId } },
+            ],
+          },
+          {
+            OR: [{ senderStaffId: null }, { senderStaffId: { not: userId } }],
+          },
+        ],
       },
       orderBy: { createdAt: 'asc' },
     });
@@ -377,33 +522,27 @@ export class ChatService {
   }
 
   async markMessagesAsRead(chatId: string, userId: string): Promise<void> {
-    const chat = await this.getChat(chatId);
+    await this.assertChatAccess(chatId, userId);
 
-    // Verify chat exists and user is either customer or can access as staff
-    const customer = await this.prisma.customer.findUnique({
-      where: { id: userId },
-    });
-    const staff = customer
-      ? null
-      : await this.prisma.staff.findUnique({
-          where: { id: userId },
-        });
-
-    if ((!customer || !customer.isActive) && (!staff || !staff.isActive)) {
-      throw new BadRequestException('User is not active or does not exist');
-    }
-
-    const isStaff = Boolean(staff);
-
-    if (chat.customerId !== userId && !isStaff) {
-      throw new BadRequestException('User is not part of this chat');
+    if (await this.isStaffUser(userId)) {
+      await this.assertStaffCanRead(userId);
     }
 
     await this.prisma.message.updateMany({
       where: {
         chatId,
         isRead: false,
-        NOT: [{ senderCustomerId: userId }, { senderStaffId: userId }],
+        AND: [
+          {
+            OR: [
+              { senderCustomerId: null },
+              { senderCustomerId: { not: userId } },
+            ],
+          },
+          {
+            OR: [{ senderStaffId: null }, { senderStaffId: { not: userId } }],
+          },
+        ],
       },
       data: {
         isRead: true,
@@ -439,7 +578,17 @@ export class ChatService {
           OR: [{ customerId: userId }, { staffId: userId }],
         },
         isRead: false,
-        NOT: [{ senderCustomerId: userId }, { senderStaffId: userId }],
+        AND: [
+          {
+            OR: [
+              { senderCustomerId: null },
+              { senderCustomerId: { not: userId } },
+            ],
+          },
+          {
+            OR: [{ senderStaffId: null }, { senderStaffId: { not: userId } }],
+          },
+        ],
       },
     });
 
