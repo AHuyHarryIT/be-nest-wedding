@@ -426,6 +426,314 @@ describe('BookingsService', () => {
     expect(result.status).toBe(BookingStatus.COMPLETED);
   });
 
+  it('rejects completing a booking from non-CONFIRMED states through generic updates', async () => {
+    databaseServiceMock.booking.findFirst.mockResolvedValue({
+      ...baseBooking,
+      status: BookingStatus.PENDING,
+      assignedStaffs: [],
+    });
+
+    await expect(
+      service.update('booking-1', {
+        status: BookingStatus.COMPLETED,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(databaseServiceMock.booking.update).not.toHaveBeenCalled();
+  });
+
+  it('allows confirming a booking from PENDING status', async () => {
+    databaseServiceMock.booking.findFirst
+      .mockResolvedValueOnce({
+        ...baseBooking,
+        status: BookingStatus.PENDING,
+        assignedStaffs: [],
+      })
+      .mockResolvedValueOnce({
+        ...baseBooking,
+        status: BookingStatus.CONFIRMED,
+        assignedStaffs: [],
+      });
+
+    databaseServiceMock.booking.update.mockResolvedValue({
+      ...baseBooking,
+      status: BookingStatus.CONFIRMED,
+      assignedStaffs: [],
+    });
+
+    const result = await service.confirmBooking('booking-1');
+
+    expect(databaseServiceMock.booking.update).toHaveBeenCalledWith({
+      where: { id: 'booking-1' },
+      data: { status: BookingStatus.CONFIRMED },
+    });
+    expect(result.status).toBe(BookingStatus.CONFIRMED);
+  });
+
+  it('rejects confirming a booking from CANCELLED status', async () => {
+    databaseServiceMock.booking.findFirst.mockResolvedValue({
+      ...baseBooking,
+      status: BookingStatus.CANCELLED,
+      assignedStaffs: [],
+    });
+
+    await expect(service.confirmBooking('booking-1')).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+
+    expect(databaseServiceMock.booking.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects confirming a booking from COMPLETED status', async () => {
+    databaseServiceMock.booking.findFirst.mockResolvedValue({
+      ...baseBooking,
+      status: BookingStatus.COMPLETED,
+      assignedStaffs: [],
+    });
+
+    await expect(service.confirmBooking('booking-1')).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+
+    expect(databaseServiceMock.booking.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects cancelling a booking that is already cancelled', async () => {
+    databaseServiceMock.booking.findFirst.mockResolvedValue({
+      ...baseBooking,
+      status: BookingStatus.CANCELLED,
+      cancelledAt: new Date('2026-03-31T10:00:00.000Z'),
+      assignedStaffs: [],
+    });
+
+    await expect(service.cancelBooking('booking-1')).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+
+    expect(databaseServiceMock.booking.update).not.toHaveBeenCalled();
+  });
+
+  it('allows confirming a booking from DEPOSIT_PAID status', async () => {
+    databaseServiceMock.booking.findFirst
+      .mockResolvedValueOnce({
+        ...baseBooking,
+        status: BookingStatus.DEPOSIT_PAID,
+        assignedStaffs: [],
+      })
+      .mockResolvedValueOnce({
+        ...baseBooking,
+        status: BookingStatus.CONFIRMED,
+        assignedStaffs: [],
+      });
+
+    databaseServiceMock.booking.update.mockResolvedValue({
+      ...baseBooking,
+      status: BookingStatus.CONFIRMED,
+      assignedStaffs: [],
+    });
+
+    const result = await service.confirmBooking('booking-1');
+
+    expect(databaseServiceMock.booking.update).toHaveBeenCalledWith({
+      where: { id: 'booking-1' },
+      data: { status: BookingStatus.CONFIRMED },
+    });
+    expect(result.status).toBe(BookingStatus.CONFIRMED);
+  });
+
+  it('rejects status-only confirm updates from CANCELLED status', async () => {
+    databaseServiceMock.booking.findFirst.mockResolvedValue({
+      ...baseBooking,
+      status: BookingStatus.CANCELLED,
+      assignedStaffs: [],
+    });
+
+    await expect(
+      service.update('booking-1', {
+        status: BookingStatus.CONFIRMED,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(databaseServiceMock.booking.update).not.toHaveBeenCalled();
+  });
+
+  it('allows status-only confirm updates from PENDING status', async () => {
+    databaseServiceMock.booking.findFirst.mockResolvedValue({
+      ...baseBooking,
+      status: BookingStatus.PENDING,
+      assignedStaffs: [],
+    });
+    databaseServiceMock.booking.update.mockResolvedValue({
+      ...baseBooking,
+      status: BookingStatus.CONFIRMED,
+      assignedStaffs: [],
+    });
+
+    const result = await service.update('booking-1', {
+      status: BookingStatus.CONFIRMED,
+    });
+
+    expect(databaseServiceMock.booking.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'booking-1' },
+        data: expect.objectContaining({
+          status: BookingStatus.CONFIRMED,
+        }),
+      }),
+    );
+    expect(result.status).toBe(BookingStatus.CONFIRMED);
+  });
+
+  it('rejects status-only completion updates from DEPOSIT_PAID status', async () => {
+    databaseServiceMock.booking.findFirst.mockResolvedValue({
+      ...baseBooking,
+      status: BookingStatus.DEPOSIT_PAID,
+      assignedStaffs: [],
+    });
+
+    await expect(
+      service.update('booking-1', {
+        status: BookingStatus.COMPLETED,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(databaseServiceMock.booking.update).not.toHaveBeenCalled();
+  });
+
+  it('retains cancelledAt stamping when cancellation succeeds', async () => {
+    databaseServiceMock.booking.findFirst
+      .mockResolvedValueOnce({
+        ...baseBooking,
+        status: BookingStatus.CONFIRMED,
+        assignedStaffs: [],
+      })
+      .mockResolvedValueOnce({
+        ...baseBooking,
+        status: BookingStatus.CANCELLED,
+        cancelledAt: new Date('2026-03-31T10:00:00.000Z'),
+        assignedStaffs: [],
+      });
+
+    databaseServiceMock.booking.update.mockResolvedValue({
+      ...baseBooking,
+      status: BookingStatus.CANCELLED,
+      cancelledAt: new Date('2026-03-31T10:00:00.000Z'),
+      assignedStaffs: [],
+    });
+
+    await service.cancelBooking('booking-1');
+
+    expect(databaseServiceMock.booking.update).toHaveBeenCalledWith({
+      where: { id: 'booking-1' },
+      data: {
+        status: BookingStatus.CANCELLED,
+        cancelledAt: expect.any(Date),
+      },
+    });
+  });
+
+  it('rejects completing a booking from CANCELLED status', async () => {
+    databaseServiceMock.booking.findFirst.mockResolvedValue({
+      ...baseBooking,
+      status: BookingStatus.CANCELLED,
+      assignedStaffs: [],
+    });
+
+    await expect(
+      service.update('booking-1', {
+        status: BookingStatus.COMPLETED,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(databaseServiceMock.booking.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects confirming a booking from COMPLETED status through generic update', async () => {
+    databaseServiceMock.booking.findFirst.mockResolvedValue({
+      ...baseBooking,
+      status: BookingStatus.COMPLETED,
+      assignedStaffs: [],
+    });
+
+    await expect(
+      service.update('booking-1', {
+        status: BookingStatus.CONFIRMED,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(databaseServiceMock.booking.update).not.toHaveBeenCalled();
+  });
+
+  it('allows status-only confirm updates from DEPOSIT_PAID status', async () => {
+    databaseServiceMock.booking.findFirst.mockResolvedValue({
+      ...baseBooking,
+      status: BookingStatus.DEPOSIT_PAID,
+      assignedStaffs: [],
+    });
+    databaseServiceMock.booking.update.mockResolvedValue({
+      ...baseBooking,
+      status: BookingStatus.CONFIRMED,
+      assignedStaffs: [],
+    });
+
+    const result = await service.update('booking-1', {
+      status: BookingStatus.CONFIRMED,
+    });
+
+    expect(databaseServiceMock.booking.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'booking-1' },
+        data: expect.objectContaining({
+          status: BookingStatus.CONFIRMED,
+        }),
+      }),
+    );
+    expect(result.status).toBe(BookingStatus.CONFIRMED);
+  });
+
+  it('rejects status-only completion updates from RESCHEDULED status', async () => {
+    databaseServiceMock.booking.findFirst.mockResolvedValue({
+      ...baseBooking,
+      status: BookingStatus.RESCHEDULED,
+      assignedStaffs: [],
+    });
+
+    await expect(
+      service.update('booking-1', {
+        status: BookingStatus.COMPLETED,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(databaseServiceMock.booking.update).not.toHaveBeenCalled();
+  });
+
+  it('allows status-only confirm updates from RESCHEDULED status', async () => {
+    databaseServiceMock.booking.findFirst.mockResolvedValue({
+      ...baseBooking,
+      status: BookingStatus.RESCHEDULED,
+      assignedStaffs: [],
+    });
+    databaseServiceMock.booking.update.mockResolvedValue({
+      ...baseBooking,
+      status: BookingStatus.CONFIRMED,
+      assignedStaffs: [],
+    });
+
+    const result = await service.update('booking-1', {
+      status: BookingStatus.CONFIRMED,
+    });
+
+    expect(databaseServiceMock.booking.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'booking-1' },
+        data: expect.objectContaining({
+          status: BookingStatus.CONFIRMED,
+        }),
+      }),
+    );
+    expect(result.status).toBe(BookingStatus.CONFIRMED);
+  });
+
   it('rejects direct status updates to CANCELLED through generic booking updates', async () => {
     databaseServiceMock.booking.findFirst.mockResolvedValue({
       ...baseBooking,
