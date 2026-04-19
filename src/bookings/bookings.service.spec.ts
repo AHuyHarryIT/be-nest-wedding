@@ -1,4 +1,8 @@
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { BookingStatus } from 'generated/prisma';
 import { DatabaseService } from '../database/database.service';
@@ -31,6 +35,9 @@ describe('BookingsService', () => {
       create: jest.fn(),
       update: jest.fn(),
       delete: jest.fn(),
+    },
+    bookingSession: {
+      findMany: jest.fn(),
     },
   };
 
@@ -787,6 +794,206 @@ describe('BookingsService', () => {
         sourceKey: 'service:svc-event',
         serviceLabel: 'Event Planning',
       }),
+    ]);
+  });
+
+  it('blocks overlapping assignment save when override context is not provided', async () => {
+    databaseServiceMock.booking.findFirst.mockResolvedValue({
+      ...baseBooking,
+      status: BookingStatus.CONFIRMED,
+      services: [
+        {
+          serviceId: 'svc-photo',
+          service: {
+            id: 'svc-photo',
+            jobId: 'job-photo',
+          },
+        },
+      ],
+      packages: [],
+      assignedStaffs: [],
+    });
+    databaseServiceMock.staff.findMany.mockResolvedValue([
+      makeEligibleStaff('STF-008', ['job-photo']),
+    ]);
+    databaseServiceMock.booking.findMany.mockResolvedValue([
+      {
+        id: 'booking-2',
+        eventDate: new Date('2026-12-20T00:00:00.000Z'),
+        assignedStaffs: [
+          {
+            sourceKey: 'service:svc-existing',
+            staffId: 'STF-008',
+            serviceLabel: 'Existing coverage',
+            startTime: '2026-12-20T09:30:00.000Z',
+            endTime: '2026-12-20T11:30:00.000Z',
+          },
+        ],
+      },
+    ]);
+    databaseServiceMock.bookingSession.findMany.mockResolvedValue([]);
+
+    await expect(
+      service.assignStaff('booking-1', [
+        {
+          sourceKey: 'service:svc-photo',
+          staffId: 'STF-008',
+          serviceLabel: 'Photography',
+          startTime: '2026-12-20T10:00:00.000Z',
+          endTime: '2026-12-20T12:00:00.000Z',
+        },
+      ]),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(databaseServiceMock.booking.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects overlap override when override reason is missing or blank', async () => {
+    databaseServiceMock.booking.findFirst.mockResolvedValue({
+      ...baseBooking,
+      status: BookingStatus.CONFIRMED,
+      services: [
+        {
+          serviceId: 'svc-photo',
+          service: {
+            id: 'svc-photo',
+            jobId: 'job-photo',
+          },
+        },
+      ],
+      packages: [],
+      assignedStaffs: [],
+    });
+    databaseServiceMock.staff.findMany.mockResolvedValue([
+      makeEligibleStaff('STF-009', ['job-photo']),
+    ]);
+    databaseServiceMock.booking.findMany.mockResolvedValue([
+      {
+        id: 'booking-3',
+        eventDate: new Date('2026-12-20T00:00:00.000Z'),
+        assignedStaffs: [
+          {
+            sourceKey: 'service:svc-existing',
+            staffId: 'STF-009',
+            serviceLabel: 'Existing coverage',
+            startTime: '2026-12-20T09:30:00.000Z',
+            endTime: '2026-12-20T11:30:00.000Z',
+          },
+        ],
+      },
+    ]);
+    databaseServiceMock.bookingSession.findMany.mockResolvedValue([]);
+
+    await expect(
+      (service.assignStaff as any)(
+        'booking-1',
+        [
+          {
+            sourceKey: 'service:svc-photo',
+            staffId: 'STF-009',
+            serviceLabel: 'Photography',
+            startTime: '2026-12-20T10:00:00.000Z',
+            endTime: '2026-12-20T12:00:00.000Z',
+          },
+        ],
+        {
+          allowConflictOverride: true,
+          overrideReason: '   ',
+        },
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(databaseServiceMock.booking.update).not.toHaveBeenCalled();
+  });
+
+  it('allows overlap override with non-empty reason and returns updated assignment', async () => {
+    databaseServiceMock.booking.findFirst.mockResolvedValue({
+      ...baseBooking,
+      status: BookingStatus.CONFIRMED,
+      services: [
+        {
+          serviceId: 'svc-photo',
+          service: {
+            id: 'svc-photo',
+            jobId: 'job-photo',
+          },
+        },
+      ],
+      packages: [],
+      assignedStaffs: [],
+    });
+    databaseServiceMock.staff.findMany.mockResolvedValue([
+      makeEligibleStaff('STF-010', ['job-photo']),
+    ]);
+    databaseServiceMock.booking.findMany.mockResolvedValue([
+      {
+        id: 'booking-4',
+        eventDate: new Date('2026-12-20T00:00:00.000Z'),
+        assignedStaffs: [
+          {
+            sourceKey: 'service:svc-existing',
+            staffId: 'STF-010',
+            serviceLabel: 'Existing coverage',
+            startTime: '2026-12-20T09:30:00.000Z',
+            endTime: '2026-12-20T11:30:00.000Z',
+          },
+        ],
+      },
+    ]);
+    databaseServiceMock.bookingSession.findMany.mockResolvedValue([
+      {
+        id: 'session-1',
+        title: 'Morning Ceremony',
+        bookingId: 'booking-5',
+        startsAt: new Date('2026-12-20T08:30:00.000Z'),
+        endsAt: new Date('2026-12-20T10:30:00.000Z'),
+        staffs: [{ staffId: 'STF-010' }],
+      },
+    ]);
+    databaseServiceMock.booking.update.mockResolvedValue({
+      ...baseBooking,
+      status: BookingStatus.CONFIRMED,
+      assignedStaffs: [
+        {
+          sourceKey: 'service:svc-photo',
+          staffId: 'STF-010',
+          serviceLabel: 'Photography',
+          startTime: '2026-12-20T10:00:00.000Z',
+          endTime: '2026-12-20T12:00:00.000Z',
+          staff: {
+            id: 'STF-010',
+            firstName: 'Override',
+            lastName: 'Allowed',
+            email: 'override@example.com',
+            phoneNumber: '0900000010',
+            isActive: true,
+          },
+        },
+      ],
+    });
+
+    const result = await (service.assignStaff as any)(
+      'booking-1',
+      [
+        {
+          sourceKey: 'service:svc-photo',
+          staffId: 'STF-010',
+          serviceLabel: 'Photography',
+          startTime: '2026-12-20T10:00:00.000Z',
+          endTime: '2026-12-20T12:00:00.000Z',
+        },
+      ],
+      {
+        allowConflictOverride: true,
+        overrideReason: 'Coverage handoff required for ceremony transition',
+      },
+    );
+
+    expect(databaseServiceMock.booking.findMany).toHaveBeenCalled();
+    expect(databaseServiceMock.bookingSession.findMany).toHaveBeenCalled();
+    expect(databaseServiceMock.booking.update).toHaveBeenCalled();
+    expect(result.assignedStaffs).toEqual([
+      expect.objectContaining({ id: 'STF-010' }),
     ]);
   });
 
