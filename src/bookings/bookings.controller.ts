@@ -156,6 +156,10 @@ export class BookingsController {
       assignBookingStaffDto.staffAssignments ??
         assignBookingStaffDto.staffIds ??
         [],
+      {
+        allowConflictOverride: assignBookingStaffDto.allowConflictOverride,
+        overrideReason: assignBookingStaffDto.overrideReason,
+      },
     );
     return ResponseBuilder.updated(
       booking,

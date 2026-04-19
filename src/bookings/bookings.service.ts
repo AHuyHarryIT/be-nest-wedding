@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   BadRequestException,
   ForbiddenException,
@@ -47,6 +48,32 @@ type BookingStaffAssignmentInput =
       endTime?: string | null;
     };
 
+type AssignStaffConflictOptions = {
+  allowConflictOverride?: boolean;
+  overrideReason?: string;
+};
+
+type StaffConflictDetail = {
+  staffId: string;
+  source: 'booking' | 'session';
+  sourceId: string;
+  sourceTitle: string | null;
+  overlapStart: string;
+  overlapEnd: string;
+  assignmentStart: string;
+  assignmentEnd: string;
+};
+
+type StaffAssignmentConflict = {
+  staffId: string;
+  sourceKey: string;
+  requestedStartTime: string;
+  requestedEndTime: string;
+  conflicts: StaffConflictDetail[];
+};
+
+const OVERLAP_REASON_MAX_LENGTH = 500;
+
 @Injectable()
 export class BookingsService {
   private readonly staffRoleNames = new Set([
@@ -55,6 +82,8 @@ export class BookingsService {
     'manager',
     'staff',
   ]);
+
+  private readonly logger = new Logger(BookingsService.name);
 
   constructor(private readonly databaseService: DatabaseService) {}
 
@@ -415,6 +444,256 @@ export class BookingsService {
         `Assigned staff must have the matching managed job for each service row: ${mismatchedAssignments.join(', ')}`,
       );
     }
+  }
+
+  private parseAssignmentDate(value: string | null | undefined): Date | null {
+    if (!value || typeof value !== 'string') {
+      return null;
+    }
+
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      return null;
+    }
+
+    return parsed;
+  }
+
+  private hasTimeOverlap(
+    startA: Date,
+    endA: Date,
+    startB: Date,
+    endB: Date,
+  ): boolean {
+    return startA < endB && startB < endA;
+  }
+
+  private buildOverlapWindow(
+    startA: Date,
+    endA: Date,
+    startB: Date,
+    endB: Date,
+  ): { overlapStart: string; overlapEnd: string } {
+    const overlapStart = new Date(
+      Math.max(startA.getTime(), startB.getTime()),
+    ).toISOString();
+    const overlapEnd = new Date(Math.min(endA.getTime(), endB.getTime())).toISOString();
+
+    return {
+      overlapStart,
+      overlapEnd,
+    };
+  }
+
+  private async detectAssignmentConflicts(
+    bookingId: string,
+    staffAssignments: Array<{
+      sourceKey: string;
+      staffId: string;
+      serviceLabel: string | null;
+      job: string | null;
+      locationName: string | null;
+      startTime: string | null;
+      endTime: string | null;
+    }>,
+  ): Promise<StaffAssignmentConflict[]> {
+    const assignmentsWithWindow = staffAssignments
+      .map((assignment) => {
+        const startAt = this.parseAssignmentDate(assignment.startTime);
+        const endAt = this.parseAssignmentDate(assignment.endTime);
+        if (!startAt || !endAt || startAt >= endAt) {
+          return null;
+        }
+
+        return {
+          ...assignment,
+          startAt,
+          endAt,
+        };
+      })
+      .filter(
+        (
+          assignment,
+        ): assignment is {
+          sourceKey: string;
+          staffId: string;
+          serviceLabel: string | null;
+          job: string | null;
+          locationName: string | null;
+          startTime: string | null;
+          endTime: string | null;
+          startAt: Date;
+          endAt: Date;
+        } => Boolean(assignment),
+      );
+
+    if (assignmentsWithWindow.length === 0) {
+      return [];
+    }
+
+    const staffIds = this.normalizeStaffIds(
+      assignmentsWithWindow.map((assignment) => assignment.staffId),
+    );
+
+    const [bookingConflicts, sessionConflicts] = await Promise.all([
+      this.databaseService.booking.findMany({
+        where: {
+          id: { not: bookingId },
+          deletedAt: null,
+          assignedStaffs: {
+            some: {
+              staffId: { in: staffIds },
+            },
+          },
+        },
+        select: {
+          id: true,
+          eventDate: true,
+          assignedStaffs: {
+            where: {
+              staffId: { in: staffIds },
+            },
+            select: {
+              sourceKey: true,
+              staffId: true,
+              serviceLabel: true,
+              startTime: true,
+              endTime: true,
+            },
+          },
+        },
+      }),
+      this.databaseService.bookingSession.findMany({
+        where: {
+          bookingId: { not: bookingId },
+          staffs: {
+            some: {
+              staffId: { in: staffIds },
+            },
+          },
+        },
+        select: {
+          id: true,
+          bookingId: true,
+          title: true,
+          startsAt: true,
+          endsAt: true,
+          staffs: {
+            where: {
+              staffId: { in: staffIds },
+            },
+            select: {
+              staffId: true,
+            },
+          },
+        },
+      }),
+    ]);
+
+    const conflicts: StaffAssignmentConflict[] = [];
+
+    assignmentsWithWindow.forEach((assignment) => {
+      const details: StaffConflictDetail[] = [];
+
+      bookingConflicts.forEach((existingBooking) => {
+        existingBooking.assignedStaffs.forEach((existingAssignment) => {
+          if (existingAssignment.staffId !== assignment.staffId) {
+            return;
+          }
+
+          const existingStart = this.parseAssignmentDate(existingAssignment.startTime);
+          const existingEnd = this.parseAssignmentDate(existingAssignment.endTime);
+          if (!existingStart || !existingEnd || existingStart >= existingEnd) {
+            return;
+          }
+
+          if (
+            !this.hasTimeOverlap(
+              assignment.startAt,
+              assignment.endAt,
+              existingStart,
+              existingEnd,
+            )
+          ) {
+            return;
+          }
+
+          const overlapWindow = this.buildOverlapWindow(
+            assignment.startAt,
+            assignment.endAt,
+            existingStart,
+            existingEnd,
+          );
+
+          details.push({
+            staffId: assignment.staffId,
+            source: 'booking',
+            sourceId: existingBooking.id,
+            sourceTitle: existingAssignment.serviceLabel || existingAssignment.sourceKey,
+            overlapStart: overlapWindow.overlapStart,
+            overlapEnd: overlapWindow.overlapEnd,
+            assignmentStart: assignment.startAt.toISOString(),
+            assignmentEnd: assignment.endAt.toISOString(),
+          });
+        });
+      });
+
+      sessionConflicts.forEach((session) => {
+        const hasStaff = session.staffs.some(
+          (sessionStaff) => sessionStaff.staffId === assignment.staffId,
+        );
+        if (!hasStaff || !session.startsAt || !session.endsAt) {
+          return;
+        }
+
+        const sessionStart = new Date(session.startsAt);
+        const sessionEnd = new Date(session.endsAt);
+        if (sessionStart >= sessionEnd) {
+          return;
+        }
+
+        if (
+          !this.hasTimeOverlap(
+            assignment.startAt,
+            assignment.endAt,
+            sessionStart,
+            sessionEnd,
+          )
+        ) {
+          return;
+        }
+
+        const overlapWindow = this.buildOverlapWindow(
+          assignment.startAt,
+          assignment.endAt,
+          sessionStart,
+          sessionEnd,
+        );
+
+        details.push({
+          staffId: assignment.staffId,
+          source: 'session',
+          sourceId: session.id,
+          sourceTitle: session.title,
+          overlapStart: overlapWindow.overlapStart,
+          overlapEnd: overlapWindow.overlapEnd,
+          assignmentStart: assignment.startAt.toISOString(),
+          assignmentEnd: assignment.endAt.toISOString(),
+        });
+      });
+
+      if (details.length > 0) {
+        conflicts.push({
+          staffId: assignment.staffId,
+          sourceKey: assignment.sourceKey,
+          requestedStartTime: assignment.startAt.toISOString(),
+          requestedEndTime: assignment.endAt.toISOString(),
+          conflicts: details,
+        });
+      }
+    });
+
+    return conflicts;
   }
 
   private mapAssignedStaffs(
@@ -1197,6 +1476,7 @@ export class BookingsService {
   async assignStaff(
     id: string,
     staffAssignments: BookingStaffAssignmentInput[],
+    conflictOptions: AssignStaffConflictOptions = {},
   ) {
     const booking = await this.findBookingById(id);
 
@@ -1217,6 +1497,45 @@ export class BookingsService {
       normalizedStaffAssignments,
       requiredServiceAssignments,
     );
+
+    const conflicts = await this.detectAssignmentConflicts(
+      id,
+      normalizedStaffAssignments,
+    );
+
+    if (conflicts.length > 0) {
+      const allowConflictOverride = conflictOptions.allowConflictOverride === true;
+      const overrideReason =
+        typeof conflictOptions.overrideReason === 'string'
+          ? conflictOptions.overrideReason.trim()
+          : '';
+
+      if (!allowConflictOverride) {
+        throw new BadRequestException({
+          message:
+            'Staff assignment has overlap conflicts and requires explicit override',
+          code: 'BOOKING_STAFF_CONFLICT',
+          details: {
+            conflicts,
+            requiresOverride: true,
+            requiredPermission: 'bookings:update',
+          },
+        });
+      }
+
+      if (
+        overrideReason.length < 1 ||
+        overrideReason.length > OVERLAP_REASON_MAX_LENGTH
+      ) {
+        throw new BadRequestException(
+          `Override reason must be between 1 and ${OVERLAP_REASON_MAX_LENGTH} characters`,
+        );
+      }
+
+      this.logger.warn(
+        `Booking ${id} staff overlap override accepted: ${overrideReason}`,
+      );
+    }
 
     const updatedBooking = await this.databaseService.booking.update({
       where: { id },

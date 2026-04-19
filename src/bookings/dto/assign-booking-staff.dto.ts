@@ -2,11 +2,14 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   ArrayUnique,
   IsArray,
+  IsBoolean,
   IsOptional,
   IsString,
+  Length,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 
 export class AssignBookingStaffItemDto {
   @ApiPropertyOptional({
@@ -96,4 +99,32 @@ export class AssignBookingStaffDto {
   @Type(() => AssignBookingStaffItemDto)
   @IsOptional()
   staffAssignments?: AssignBookingStaffItemDto[];
+
+  @ApiPropertyOptional({
+    description:
+      'Allow assignment save even when overlap conflicts are detected',
+    example: false,
+  })
+  @IsOptional()
+  @IsBoolean({ message: 'allowConflictOverride must be a boolean value' })
+  allowConflictOverride?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Mandatory reason when override is used for overlap conflicts',
+    example: 'Photographer handoff requires temporary overlap for coverage.',
+    maxLength: 500,
+  })
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @ValidateIf((dto: AssignBookingStaffDto) => dto.allowConflictOverride === true)
+  @IsString({
+    message:
+      'Override reason is required when allowing conflict override on assignment',
+  })
+  @Length(1, 500, {
+    message: 'Override reason must be between 1 and 500 characters',
+  })
+  overrideReason?: string;
 }
