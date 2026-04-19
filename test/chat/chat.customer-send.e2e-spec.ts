@@ -130,19 +130,23 @@ describe('Chat customer send + canonical thread contract (e2e)', () => {
       fixture.customerPassword,
     );
 
-    const chatResponse = await request(app.getHttpServer())
+    const createResponse = await request(app.getHttpServer())
       .post('/chats')
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({ customerId: fixture.customerId })
-      .expect(201);
+      .send({ customerId: fixture.customerId });
 
-    const chatId = chatResponse.body?.data?.id as string;
+    expect(createResponse.status).not.toBe(500);
+    expect(createResponse.status).toBe(201);
+
+    const chatId = createResponse.body?.data?.id as string;
 
     const sendResponse = await request(app.getHttpServer())
       .post(`/chats/${chatId}/messages`)
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({ content: 'Customer hello from e2e contract' })
-      .expect(201);
+      .send({ content: 'Customer hello from e2e contract' });
+
+    expect(sendResponse.status).not.toBe(500);
+    expect(sendResponse.status).toBe(201);
 
     expect(sendResponse.body.success).toBe(true);
     expect(sendResponse.body.data).toEqual(
@@ -173,6 +177,55 @@ describe('Chat customer send + canonical thread contract (e2e)', () => {
         content: 'Customer hello from e2e contract',
       }),
     );
+  });
+
+  it('returns controlled 4xx envelope instead of runtime 500 for invalid first-message create request', async () => {
+    const accessToken = await loginCustomer(
+      app,
+      fixture.customerPhone,
+      fixture.customerPassword,
+    );
+
+    const response = await request(app.getHttpServer())
+      .post('/chats')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        customerId: fixture.customerId,
+        bookingId: 'not-a-uuid',
+      });
+
+    expect(response.status).toBeGreaterThanOrEqual(400);
+    expect(response.status).toBeLessThan(500);
+    expect(response.status).not.toBe(500);
+    expect(response.body?.success).toBe(false);
+    expect(response.body?.message).toBeDefined();
+  });
+
+  it('returns controlled 4xx envelope instead of runtime 500 for invalid first-message send payload', async () => {
+    const accessToken = await loginCustomer(
+      app,
+      fixture.customerPhone,
+      fixture.customerPassword,
+    );
+
+    const chatResponse = await request(app.getHttpServer())
+      .post('/chats')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ customerId: fixture.customerId })
+      .expect(201);
+
+    const chatId = chatResponse.body?.data?.id as string;
+
+    const response = await request(app.getHttpServer())
+      .post(`/chats/${chatId}/messages`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ content: '' });
+
+    expect(response.status).toBeGreaterThanOrEqual(400);
+    expect(response.status).toBeLessThan(500);
+    expect(response.status).not.toBe(500);
+    expect(response.body?.success).toBe(false);
+    expect(response.body?.message).toBeDefined();
   });
 });
 
