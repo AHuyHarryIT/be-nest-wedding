@@ -1260,6 +1260,33 @@ export class BookingsService {
     const hasStatusUpdate = updateBookingDto.status !== undefined;
     const isOnlyStatusUpdate =
       Object.keys(updateBookingDto).length === 1 && hasStatusUpdate;
+
+    if (hasStatusUpdate && !hasBookingFieldUpdates) {
+      const nextStatus = updateBookingDto.status as BookingStatus;
+
+      if (nextStatus === BookingStatus.COMPLETED) {
+        if (booking.status !== BookingStatus.CONFIRMED) {
+          throw new BadRequestException(
+            `Only bookings with CONFIRMED status can be completed. Current status: ${booking.status}`,
+          );
+        }
+      }
+
+      if (nextStatus === BookingStatus.CONFIRMED) {
+        const confirmableStatuses = new Set<BookingStatus>([
+          BookingStatus.PENDING,
+          BookingStatus.DEPOSIT_PAID,
+          BookingStatus.RESCHEDULED,
+        ]);
+
+        if (!confirmableStatuses.has(booking.status as BookingStatus)) {
+          throw new BadRequestException(
+            `Only PENDING, DEPOSIT_PAID, or RESCHEDULED bookings can be confirmed. Current status: ${booking.status}`,
+          );
+        }
+      }
+    }
+
     const requiresPendingStatus =
       hasBookingFieldUpdates || (hasStatusUpdate && !isOnlyStatusUpdate);
     if (requiresPendingStatus && booking.status !== BookingStatus.PENDING) {
@@ -1675,7 +1702,19 @@ export class BookingsService {
   }
 
   async confirmBooking(id: string) {
-    await this.findBookingById(id);
+    const booking = await this.findBookingById(id);
+    const confirmableStatuses = new Set<BookingStatus>([
+      BookingStatus.PENDING,
+      BookingStatus.DEPOSIT_PAID,
+      BookingStatus.RESCHEDULED,
+    ]);
+
+    if (!confirmableStatuses.has(booking.status as BookingStatus)) {
+      throw new BadRequestException(
+        `Only PENDING, DEPOSIT_PAID, or RESCHEDULED bookings can be confirmed. Current status: ${booking.status}`,
+      );
+    }
+
     await this.databaseService.booking.update({
       where: { id },
       data: { status: BookingStatus.CONFIRMED },
