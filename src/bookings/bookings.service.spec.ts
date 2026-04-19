@@ -39,6 +39,12 @@ describe('BookingsService', () => {
     bookingSession: {
       findMany: jest.fn(),
     },
+    bookingPackage: {
+      deleteMany: jest.fn(),
+    },
+    bookingService: {
+      deleteMany: jest.fn(),
+    },
   };
 
   const baseBooking = {
@@ -398,6 +404,241 @@ describe('BookingsService', () => {
     expect(result.assignedStaffs).toEqual([
       expect.objectContaining({ id: 'STF-002' }),
     ]);
+  });
+
+  it('returns BOOK-01 core detail references after creating a booking', async () => {
+    databaseServiceMock.staffRole.findMany.mockResolvedValue([
+      {
+        role: {
+          name: 'admin',
+        },
+      },
+    ]);
+    databaseServiceMock.customer.findUnique.mockResolvedValue({
+      id: 'customer-1',
+    });
+    databaseServiceMock.package.findMany.mockResolvedValue([
+      { id: 'package-1', price: 250000, isActive: true, services: [] },
+    ]);
+    databaseServiceMock.service.findMany.mockResolvedValue([
+      { id: 'service-1', price: 50000, isActive: true, jobId: 'job-photo' },
+    ]);
+    databaseServiceMock.staff.findMany.mockResolvedValue([
+      makeEligibleStaff('STF-001', ['job-photo']),
+    ]);
+    databaseServiceMock.booking.create.mockResolvedValue({
+      ...baseBooking,
+      customerId: 'customer-1',
+      notes: 'Garden wedding',
+      status: BookingStatus.PENDING,
+      eventDate: new Date('2026-12-20T10:00:00.000Z'),
+      totalPrice: 350000,
+      customer: {
+        id: 'customer-1',
+        firstName: 'Jane',
+        lastName: 'Doe',
+        email: 'jane@example.com',
+        phoneNumber: '0900111222',
+      },
+      packages: [
+        {
+          packageId: 'package-1',
+          price: 250000,
+          package: { id: 'package-1', name: 'Wedding Basic' },
+        },
+      ],
+      services: [
+        {
+          serviceId: 'service-1',
+          price: 50000,
+          service: { id: 'service-1', name: 'Photography' },
+        },
+      ],
+      assignedStaffs: [
+        {
+          sourceKey: 'service:service-1',
+          staffId: 'STF-001',
+          serviceLabel: 'Photography',
+          staff: {
+            id: 'STF-001',
+            firstName: 'Assigned',
+            lastName: 'Staff',
+            email: 'staff@example.com',
+            phoneNumber: '0900000001',
+            isActive: true,
+          },
+        },
+      ],
+    });
+
+    const result = await service.create(
+      {
+        customerId: 'customer-1',
+        packageIds: ['package-1'],
+        serviceIds: ['service-1'],
+        eventDate: '2026-12-20T10:00:00.000Z',
+        notes: 'Garden wedding',
+        totalPrice: 350000,
+      } as any,
+      'staff-1',
+    );
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        customerId: 'customer-1',
+        status: BookingStatus.PENDING,
+        totalPrice: 350000,
+        notes: 'Garden wedding',
+        packages: expect.arrayContaining([
+          expect.objectContaining({ packageId: 'package-1' }),
+        ]),
+        services: expect.arrayContaining([
+          expect.objectContaining({ serviceId: 'service-1' }),
+        ]),
+      }),
+    );
+  });
+
+  it('preserves assignment/session references while updating editable BOOK-01 core fields', async () => {
+    databaseServiceMock.booking.findFirst.mockResolvedValue({
+      ...baseBooking,
+      status: BookingStatus.PENDING,
+      packages: [
+        {
+          packageId: 'package-1',
+          package: {
+            id: 'package-1',
+            services: [{ serviceId: 'service-1', service: { id: 'service-1', jobId: 'job-photo' } }],
+          },
+        },
+      ],
+      services: [{ serviceId: 'service-1', service: { id: 'service-1', jobId: 'job-photo' } }],
+      sessions: [
+        {
+          id: 'session-1',
+          title: 'Morning Session',
+          staffs: [{ staffId: 'STF-001' }],
+        },
+      ],
+      assignedStaffs: [
+        {
+          sourceKey: 'service:service-1',
+          staffId: 'STF-001',
+          serviceLabel: 'Photography',
+          staff: {
+            id: 'STF-001',
+            firstName: 'Assigned',
+            lastName: 'Staff',
+            email: 'staff@example.com',
+            phoneNumber: '0900000001',
+            isActive: true,
+          },
+        },
+      ],
+    });
+    databaseServiceMock.booking.update.mockResolvedValue({
+      ...baseBooking,
+      status: BookingStatus.PENDING,
+      notes: 'Updated note',
+      eventDate: new Date('2026-12-21T10:00:00.000Z'),
+      totalPrice: 360000,
+      sessions: [
+        {
+          id: 'session-1',
+          title: 'Morning Session',
+        },
+      ],
+      assignedStaffs: [
+        {
+          sourceKey: 'service:service-1',
+          staffId: 'STF-001',
+          serviceLabel: 'Photography',
+          staff: {
+            id: 'STF-001',
+            firstName: 'Assigned',
+            lastName: 'Staff',
+            email: 'staff@example.com',
+            phoneNumber: '0900000001',
+            isActive: true,
+          },
+        },
+      ],
+    });
+
+    const result = await service.update('booking-1', {
+      notes: 'Updated note',
+      eventDate: '2026-12-21T10:00:00.000Z',
+      totalPrice: 360000,
+    } as any);
+
+    expect(databaseServiceMock.booking.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        include: expect.objectContaining({
+          sessions: expect.any(Object),
+          assignedStaffs: expect.any(Object),
+        }),
+      }),
+    );
+    expect(result).toEqual(
+      expect.objectContaining({
+        notes: 'Updated note',
+        totalPrice: 360000,
+        assignedStaffs: expect.arrayContaining([
+          expect.objectContaining({ staffId: 'STF-001' }),
+        ]),
+      }),
+    );
+  });
+
+  it('returns BOOK-01 core details in booking list rows when include flags are enabled', async () => {
+    databaseServiceMock.staffRole.findMany.mockResolvedValue([
+      {
+        role: {
+          name: 'admin',
+        },
+      },
+    ]);
+    databaseServiceMock.booking.count.mockResolvedValue(1);
+    databaseServiceMock.booking.findMany.mockResolvedValue([
+      {
+        ...baseBooking,
+        customer: {
+          id: 'customer-1',
+          firstName: 'Jane',
+          lastName: 'Doe',
+          email: 'jane@example.com',
+          phoneNumber: '0900111222',
+        },
+        packages: [{ packageId: 'package-1' }],
+        services: [{ serviceId: 'service-1' }],
+      },
+    ]);
+
+    const result = await service.findAll(
+      {
+        includeCustomer: true,
+        includePackages: true,
+        includeServices: true,
+        page: 1,
+        limit: 10,
+      } as any,
+      'staff-1',
+    );
+
+    expect(result.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          customerId: 'customer-1',
+          customer: expect.objectContaining({ id: 'customer-1' }),
+          packages: expect.arrayContaining([
+            expect.objectContaining({ packageId: 'package-1' }),
+          ]),
+          services: expect.arrayContaining([
+            expect.objectContaining({ serviceId: 'service-1' }),
+          ]),
+        }),
+      ]),
+    );
   });
 
   it('allows a status-only update from CONFIRMED to COMPLETED', async () => {

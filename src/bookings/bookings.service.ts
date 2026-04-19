@@ -1489,6 +1489,29 @@ export class BookingsService {
             service: true,
           },
         },
+        sessions: {
+          include: {
+            staffs: {
+              include: {
+                staff: {
+                  select: {
+                    id: true,
+                    firstName: true,
+                    lastName: true,
+                    email: true,
+                    phoneNumber: true,
+                    isActive: true,
+                  },
+                },
+              },
+            },
+            services: {
+              include: {
+                service: true,
+              },
+            },
+          },
+        },
         assignedStaffs: this.assignedStaffInclude,
       } as any,
     });
