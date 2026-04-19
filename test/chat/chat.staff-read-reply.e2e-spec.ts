@@ -128,6 +128,46 @@ describe('Chat staff read/reply + websocket identity contract (e2e)', () => {
       }),
     );
   });
+
+  it('rejects websocket join_chat with Required permission: chat.read for staff without permission', async () => {
+    const customerToken = await login(app, fixture.customerPhone, fixture.customerPassword);
+    const noReadToken = await login(app, fixture.noReadStaff.phone, fixture.noReadStaff.password);
+
+    const chat = await createChatAsCustomer(app, customerToken, fixture.customerId);
+
+    const socket = await connectSocketWithToken(socketBaseUrl, noReadToken);
+
+    await expectSocketEventError(socket, 'join_chat', { chatId: chat.id }, {
+      requiredPermissions: ['chat.read'],
+      missingPermissions: ['chat.read'],
+    });
+
+    socket.disconnect();
+  });
+
+  it('rejects websocket send_message with Required permission: chat.reply for staff without permission', async () => {
+    const customerToken = await login(app, fixture.customerPhone, fixture.customerPassword);
+    const noReplyToken = await login(app, fixture.noReplyStaff.phone, fixture.noReplyStaff.password);
+
+    const chat = await createChatAsCustomer(app, customerToken, fixture.customerId);
+
+    const socket = await connectSocketWithToken(socketBaseUrl, noReplyToken);
+
+    await expectSocketEventError(
+      socket,
+      'send_message',
+      {
+        chatId: chat.id,
+        content: 'Websocket reply attempt without chat.reply',
+      },
+      {
+        requiredPermissions: ['chat.reply'],
+        missingPermissions: ['chat.reply'],
+      },
+    );
+
+    socket.disconnect();
+  });
 });
 
 async function login(
@@ -163,6 +203,75 @@ async function createChatAsCustomer(
     .expect(201);
 
   return response.body?.data as { id: string };
+}
+
+async function connectSocketWithToken(baseUrl: string, token: string): Promise<Socket> {
+  return new Promise<Socket>((resolve, reject) => {
+    const socket: Socket = io(`${baseUrl}/chat`, {
+      transports: ['websocket'],
+      reconnection: false,
+      timeout: 1500,
+      auth: { token },
+      forceNew: true,
+    });
+
+    const timeout = setTimeout(() => {
+      socket.disconnect();
+      reject(new Error('Timed out waiting for authenticated websocket connection'));
+    }, 3000);
+
+    socket.on('connect', () => {
+      clearTimeout(timeout);
+      resolve(socket);
+    });
+
+    socket.on('connect_error', (error: Error) => {
+      clearTimeout(timeout);
+      socket.disconnect();
+      reject(error);
+    });
+  });
+}
+
+async function expectSocketEventError(
+  socket: Socket,
+  eventName: 'join_chat' | 'send_message',
+  payload: Record<string, unknown>,
+  expectedDetails: {
+    requiredPermissions: string[];
+    missingPermissions: string[];
+  },
+): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      socket.off('error', onError);
+      reject(new Error(`Timed out waiting for websocket error on event: ${eventName}`));
+    }, 3000);
+
+    const onError = (eventPayload: {
+      message?: string;
+      details?: {
+        requiredPermissions?: string[];
+        missingPermissions?: string[];
+      };
+    }) => {
+      clearTimeout(timeout);
+      socket.off('error', onError);
+
+      expect(eventPayload.message || '').toMatch(/missing required permissions/i);
+      expect(eventPayload.details).toEqual(
+        expect.objectContaining({
+          requiredPermissions: expectedDetails.requiredPermissions,
+          missingPermissions: expectedDetails.missingPermissions,
+        }),
+      );
+
+      resolve();
+    };
+
+    socket.on('error', onError);
+    socket.emit(eventName, payload);
+  });
 }
 
 async function expectWebsocketAuthRejection(
