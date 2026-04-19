@@ -167,7 +167,7 @@ export class PackagesController {
   })
   @ApiNotFoundResponse({ description: 'Package not found' })
   async findOne(@Param('id') id: string) {
-    const package_ = await this.packagesService.findOne(id);
+    const package_ = await this.packagesService.findOneActiveForPublic(id);
     return ResponseBuilder.success(package_, 'Package retrieved successfully');
   }
 

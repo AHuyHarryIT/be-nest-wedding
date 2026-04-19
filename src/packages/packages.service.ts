@@ -255,6 +255,32 @@ export class PackagesService {
     return packageItem;
   }
 
+  async findOneActiveForPublic(id: string) {
+    const packageItem = await this.databaseService.package.findFirst({
+      where: {
+        id,
+        isActive: true,
+        deletedAt: null,
+      },
+      include: {
+        services: {
+          include: {
+            service: true,
+          },
+        },
+        images: {
+          orderBy: { sortOrder: 'asc' },
+        },
+      },
+    });
+
+    if (!packageItem) {
+      throw new NotFoundException(`Package with ID ${id} not found`);
+    }
+
+    return packageItem;
+  }
+
   async update(id: string, updatePackageDto: UpdatePackageDto) {
     return this.updateWithImages(id, updatePackageDto);
   }
