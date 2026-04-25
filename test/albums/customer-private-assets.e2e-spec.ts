@@ -111,10 +111,9 @@ describe('Customer private album assets (e2e)', () => {
       ]),
     );
 
-    expect(albumsServiceMock.findCustomerPrivateAlbumAssets).toHaveBeenCalledWith(
-      'customer-owner',
-      'album-owner',
-    );
+    expect(
+      albumsServiceMock.findCustomerPrivateAlbumAssets,
+    ).toHaveBeenCalledWith('customer-owner', 'album-owner');
   });
 
   it('foreign albumId returns 403 explicit non-enumerating denial', async () => {

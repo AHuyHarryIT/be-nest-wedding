@@ -32,7 +32,10 @@ describe('Chat customer send + canonical thread contract (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
-    app.useGlobalPipes(new GlobalValidationPipe(), new ValidationPipe({ transform: true }));
+    app.useGlobalPipes(
+      new GlobalValidationPipe(),
+      new ValidationPipe({ transform: true }),
+    );
     app.useGlobalInterceptors(new ResponseInterceptor());
     app.useGlobalFilters(
       new PrismaExceptionFilter(),
@@ -75,7 +78,11 @@ describe('Chat customer send + canonical thread contract (e2e)', () => {
     const firstThread = firstCreate.body?.data;
     expect(firstThread?.id).toBeDefined();
 
-    const secondaryStaff = await createStaffFixture(databaseService, now, 'SECONDARY');
+    const secondaryStaff = await createStaffFixture(
+      databaseService,
+      now,
+      'SECONDARY',
+    );
 
     await request(app.getHttpServer())
       .put(`/chats/${firstThread.id}`)
@@ -244,13 +251,17 @@ async function loginCustomer(
     (response.body?.accessToken as string | undefined);
 
   if (!accessToken) {
-    throw new Error(`Expected access token from /auth/login, got: ${JSON.stringify(response.body)}`);
+    throw new Error(
+      `Expected access token from /auth/login, got: ${JSON.stringify(response.body)}`,
+    );
   }
 
   return accessToken;
 }
 
-async function ensureStaffRole(databaseService: DatabaseService): Promise<string> {
+async function ensureStaffRole(
+  databaseService: DatabaseService,
+): Promise<string> {
   const existingRole = await databaseService.role.findUnique({
     where: { name: 'staff' },
     select: { id: true },
@@ -379,11 +390,16 @@ async function cleanupFixture(
   }
 
   const bookingIds = bookings.map((booking) => booking.id);
-  const customerIds = [...new Set(bookings.map((booking) => booking.customerId))];
+  const customerIds = [
+    ...new Set(bookings.map((booking) => booking.customerId)),
+  ];
 
   const chats = await databaseService.chat.findMany({
     where: {
-      OR: [{ bookingId: { in: bookingIds } }, { customerId: { in: customerIds } }],
+      OR: [
+        { bookingId: { in: bookingIds } },
+        { customerId: { in: customerIds } },
+      ],
     },
     select: { id: true },
   });
@@ -419,7 +435,9 @@ async function cleanupFixture(
 
   if (staffFixtures.length > 0) {
     const staffIds = staffFixtures.map((staff) => staff.id);
-    await databaseService.staffRole.deleteMany({ where: { staffId: { in: staffIds } } });
+    await databaseService.staffRole.deleteMany({
+      where: { staffId: { in: staffIds } },
+    });
     await databaseService.staff.deleteMany({ where: { id: { in: staffIds } } });
   }
 }

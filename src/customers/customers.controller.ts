@@ -115,7 +115,8 @@ export class CustomersController {
   @Get(':id/detailed')
   @RequirePermissions('customers:read')
   @ApiOperation({
-    summary: 'Get a customer full profile with bookings, payments, and order history',
+    summary:
+      'Get a customer full profile with bookings, payments, and order history',
   })
   @ApiStandardResponse(ViewCustomerDto, {
     description: 'Customer full profile retrieved successfully',
@@ -148,7 +149,8 @@ export class CustomersController {
   ) {
     // Verify customer exists
     await this.customersService.findOne(id);
-    const { bookings, total } = await this.customersService.findBookingsByCustomer(id, query);
+    const { bookings, total } =
+      await this.customersService.findBookingsByCustomer(id, query);
     return ResponseBuilder.paginated(
       bookings,
       { page: query.page || 1, limit: query.limit || 10, total },

@@ -43,10 +43,12 @@ describe('SelectionService', () => {
       };
 
       expect(modelGetter().findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: expectedWhere, take: 20, skip: 0 })
+        expect.objectContaining({ where: expectedWhere, take: 20, skip: 0 }),
       );
-      expect(modelGetter().count).toHaveBeenCalledWith({ where: expectedWhere });
-    }
+      expect(modelGetter().count).toHaveBeenCalledWith({
+        where: expectedWhere,
+      });
+    },
   );
 
   it.each([
@@ -67,10 +69,12 @@ describe('SelectionService', () => {
       };
 
       expect(modelGetter().findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: expectedWhere, take: 20, skip: 0 })
+        expect.objectContaining({ where: expectedWhere, take: 20, skip: 0 }),
       );
-      expect(modelGetter().count).toHaveBeenCalledWith({ where: expectedWhere });
-    }
+      expect(modelGetter().count).toHaveBeenCalledWith({
+        where: expectedWhere,
+      });
+    },
   );
 
   it('keeps pagination guard cap while applying includeInactive filter behavior', async () => {
@@ -86,7 +90,7 @@ describe('SelectionService', () => {
         where: { AND: [{ deletedAt: null }, {}] },
         take: 50,
         skip: 50,
-      })
+      }),
     );
   });
 });

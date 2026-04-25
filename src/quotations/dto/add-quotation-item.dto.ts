@@ -1,5 +1,14 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsArray, IsNumber, IsOptional, IsString, IsUUID, Min, ValidateIf, ValidateNested } from 'class-validator';
+import {
+  IsArray,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Min,
+  ValidateIf,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 /**
@@ -12,8 +21,15 @@ export class AddQuotationItemDtoBase {
   @Type(() => Number)
   quantity: number;
 
-  @ApiProperty({ description: 'Unit price for this item', example: 500000, minimum: 0 })
-  @IsNumber({ maxDecimalPlaces: 2 }, { message: 'Unit price must be a valid number' })
+  @ApiProperty({
+    description: 'Unit price for this item',
+    example: 500000,
+    minimum: 0,
+  })
+  @IsNumber(
+    { maxDecimalPlaces: 2 },
+    { message: 'Unit price must be a valid number' },
+  )
   @Min(0, { message: 'Unit price cannot be negative' })
   unitPrice: number;
 
@@ -23,7 +39,10 @@ export class AddQuotationItemDtoBase {
     default: 0,
   })
   @IsOptional()
-  @IsNumber({ maxDecimalPlaces: 2 }, { message: 'Discount percent must be a number' })
+  @IsNumber(
+    { maxDecimalPlaces: 2 },
+    { message: 'Discount percent must be a number' },
+  )
   @Min(0, { message: 'Discount percent cannot be negative' })
   @Type(() => Number)
   discountPercent?: number;

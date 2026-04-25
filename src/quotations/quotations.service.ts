@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PaginationHelper } from '@/common/utils/pagination.helper';
 import { DatabaseService } from '@/database/database.service';
 import {
@@ -96,8 +100,18 @@ export class QuotationsService {
         status: 'DRAFT',
       },
       include: {
-        customer: { select: { id: true, firstName: true, lastName: true, email: true, phoneNumber: true } },
-        createdBy: { select: { id: true, firstName: true, lastName: true, email: true } },
+        customer: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            phoneNumber: true,
+          },
+        },
+        createdBy: {
+          select: { id: true, firstName: true, lastName: true, email: true },
+        },
       },
     });
 
@@ -159,7 +173,15 @@ export class QuotationsService {
         where,
         include: {
           customer: query.includeCustomer
-            ? { select: { id: true, firstName: true, lastName: true, email: true, phoneNumber: true } }
+            ? {
+                select: {
+                  id: true,
+                  firstName: true,
+                  lastName: true,
+                  email: true,
+                  phoneNumber: true,
+                },
+              }
             : false,
         },
         skip,
@@ -177,16 +199,36 @@ export class QuotationsService {
     const quotation = await this.database.quotation.findUnique({
       where: { id, deletedAt: null },
       include: {
-        customer: { select: { id: true, firstName: true, lastName: true, email: true, phoneNumber: true } },
-        createdBy: { select: { id: true, firstName: true, lastName: true, email: true } },
+        customer: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            phoneNumber: true,
+          },
+        },
+        createdBy: {
+          select: { id: true, firstName: true, lastName: true, email: true },
+        },
         inventoryItems: {
           include: {
-            item: { select: { id: true, name: true, sku: true, imageUrl: true, isActive: true } },
+            item: {
+              select: {
+                id: true,
+                name: true,
+                sku: true,
+                imageUrl: true,
+                isActive: true,
+              },
+            },
           },
         },
         services: {
           include: {
-            service: { select: { id: true, name: true, imageUrl: true, isActive: true } },
+            service: {
+              select: { id: true, name: true, imageUrl: true, isActive: true },
+            },
           },
         },
       },
@@ -211,18 +253,34 @@ export class QuotationsService {
 
     if (dto.title !== undefined) updateData.title = dto.title;
     if (dto.notes !== undefined) updateData.notes = dto.notes;
-    if (dto.validUntil !== undefined) updateData.validUntil = new Date(dto.validUntil);
-    if (dto.discountPercent !== undefined) updateData.discountPercent = dto.discountPercent;
+    if (dto.validUntil !== undefined)
+      updateData.validUntil = new Date(dto.validUntil);
+    if (dto.discountPercent !== undefined)
+      updateData.discountPercent = dto.discountPercent;
     if (dto.taxPercent !== undefined) updateData.taxPercent = dto.taxPercent;
 
     const updated = await this.database.quotation.update({
       where: { id },
       data: updateData,
       include: {
-        customer: { select: { id: true, firstName: true, lastName: true, email: true, phoneNumber: true } },
-        createdBy: { select: { id: true, firstName: true, lastName: true, email: true } },
-        inventoryItems: { include: { item: { select: { id: true, name: true, sku: true } } } },
-        services: { include: { service: { select: { id: true, name: true } } } },
+        customer: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            phoneNumber: true,
+          },
+        },
+        createdBy: {
+          select: { id: true, firstName: true, lastName: true, email: true },
+        },
+        inventoryItems: {
+          include: { item: { select: { id: true, name: true, sku: true } } },
+        },
+        services: {
+          include: { service: { select: { id: true, name: true } } },
+        },
       },
     });
 
@@ -257,17 +315,24 @@ export class QuotationsService {
   //  Item Management
   // ────────────────────────────────────────────
 
-  async addInventoryItem(quotationId: string, dto: AddQuotationInventoryItemDto) {
+  async addInventoryItem(
+    quotationId: string,
+    dto: AddQuotationInventoryItemDto,
+  ) {
     const quotation = await this.database.quotation.findUnique({
       where: { id: quotationId },
     });
 
     if (!quotation) {
-      throw new NotFoundException(`Quotation with ID "${quotationId}" not found`);
+      throw new NotFoundException(
+        `Quotation with ID "${quotationId}" not found`,
+      );
     }
 
     if (quotation.status !== 'DRAFT') {
-      throw new BadRequestException('Cannot add items to a non-DRAFT quotation');
+      throw new BadRequestException(
+        'Cannot add items to a non-DRAFT quotation',
+      );
     }
 
     // Verify item exists
@@ -302,11 +367,15 @@ export class QuotationsService {
     });
 
     if (!quotation) {
-      throw new NotFoundException(`Quotation with ID "${quotationId}" not found`);
+      throw new NotFoundException(
+        `Quotation with ID "${quotationId}" not found`,
+      );
     }
 
     if (quotation.status !== 'DRAFT') {
-      throw new BadRequestException('Cannot add items to a non-DRAFT quotation');
+      throw new BadRequestException(
+        'Cannot add items to a non-DRAFT quotation',
+      );
     }
 
     // Verify service exists
@@ -318,7 +387,9 @@ export class QuotationsService {
     }
 
     return this.database.quotationService.upsert({
-      where: { quotationId_serviceId: { quotationId, serviceId: dto.serviceId } },
+      where: {
+        quotationId_serviceId: { quotationId, serviceId: dto.serviceId },
+      },
       create: {
         quotationId,
         serviceId: dto.serviceId,
@@ -334,17 +405,24 @@ export class QuotationsService {
     });
   }
 
-  async removeInventoryItem(quotationId: string, dto: RemoveQuotationInventoryItemDto) {
+  async removeInventoryItem(
+    quotationId: string,
+    dto: RemoveQuotationInventoryItemDto,
+  ) {
     const quotation = await this.database.quotation.findUnique({
       where: { id: quotationId },
     });
 
     if (!quotation) {
-      throw new NotFoundException(`Quotation with ID "${quotationId}" not found`);
+      throw new NotFoundException(
+        `Quotation with ID "${quotationId}" not found`,
+      );
     }
 
     if (quotation.status !== 'DRAFT') {
-      throw new BadRequestException('Cannot remove items from a non-DRAFT quotation');
+      throw new BadRequestException(
+        'Cannot remove items from a non-DRAFT quotation',
+      );
     }
 
     const existing = await this.database.quotationInventoryItem.findUnique({
@@ -352,7 +430,9 @@ export class QuotationsService {
     });
 
     if (!existing) {
-      throw new NotFoundException(`Inventory item "${dto.itemId}" not found in quotation`);
+      throw new NotFoundException(
+        `Inventory item "${dto.itemId}" not found in quotation`,
+      );
     }
 
     return this.database.quotationInventoryItem.delete({
@@ -360,29 +440,42 @@ export class QuotationsService {
     });
   }
 
-  async removeServiceItem(quotationId: string, dto: RemoveQuotationServiceItemDto) {
+  async removeServiceItem(
+    quotationId: string,
+    dto: RemoveQuotationServiceItemDto,
+  ) {
     const quotation = await this.database.quotation.findUnique({
       where: { id: quotationId },
     });
 
     if (!quotation) {
-      throw new NotFoundException(`Quotation with ID "${quotationId}" not found`);
+      throw new NotFoundException(
+        `Quotation with ID "${quotationId}" not found`,
+      );
     }
 
     if (quotation.status !== 'DRAFT') {
-      throw new BadRequestException('Cannot remove items from a non-DRAFT quotation');
+      throw new BadRequestException(
+        'Cannot remove items from a non-DRAFT quotation',
+      );
     }
 
     const existing = await this.database.quotationService.findUnique({
-      where: { quotationId_serviceId: { quotationId, serviceId: dto.serviceId } },
+      where: {
+        quotationId_serviceId: { quotationId, serviceId: dto.serviceId },
+      },
     });
 
     if (!existing) {
-      throw new NotFoundException(`Service "${dto.serviceId}" not found in quotation`);
+      throw new NotFoundException(
+        `Service "${dto.serviceId}" not found in quotation`,
+      );
     }
 
     return this.database.quotationService.delete({
-      where: { quotationId_serviceId: { quotationId, serviceId: dto.serviceId } },
+      where: {
+        quotationId_serviceId: { quotationId, serviceId: dto.serviceId },
+      },
     });
   }
 
@@ -395,7 +488,9 @@ export class QuotationsService {
     const quotation = await this.findOne(id);
 
     if (quotation.status !== 'DRAFT') {
-      throw new BadRequestException(`Only DRAFT quotations can be sent. Current status: ${quotation.status}`);
+      throw new BadRequestException(
+        `Only DRAFT quotations can be sent. Current status: ${quotation.status}`,
+      );
     }
 
     const updateData: any = { status: 'SENT' };
@@ -407,8 +502,18 @@ export class QuotationsService {
       where: { id },
       data: updateData,
       include: {
-        customer: { select: { id: true, firstName: true, lastName: true, email: true, phoneNumber: true } },
-        createdBy: { select: { id: true, firstName: true, lastName: true, email: true } },
+        customer: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            phoneNumber: true,
+          },
+        },
+        createdBy: {
+          select: { id: true, firstName: true, lastName: true, email: true },
+        },
       },
     });
   }
@@ -418,7 +523,9 @@ export class QuotationsService {
     const quotation = await this.findOne(id);
 
     if (quotation.status !== 'SENT') {
-      throw new BadRequestException(`Only SENT quotations can be accepted. Current status: ${quotation.status}`);
+      throw new BadRequestException(
+        `Only SENT quotations can be accepted. Current status: ${quotation.status}`,
+      );
     }
 
     // Check validUntil expiry
@@ -428,15 +535,27 @@ export class QuotationsService {
         where: { id },
         data: { status: 'EXPIRED' },
       });
-      throw new BadRequestException('Quotation has expired and cannot be accepted');
+      throw new BadRequestException(
+        'Quotation has expired and cannot be accepted',
+      );
     }
 
     return this.database.quotation.update({
       where: { id },
       data: { status: 'ACCEPTED' },
       include: {
-        customer: { select: { id: true, firstName: true, lastName: true, email: true, phoneNumber: true } },
-        createdBy: { select: { id: true, firstName: true, lastName: true, email: true } },
+        customer: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            phoneNumber: true,
+          },
+        },
+        createdBy: {
+          select: { id: true, firstName: true, lastName: true, email: true },
+        },
       },
     });
   }
@@ -446,15 +565,27 @@ export class QuotationsService {
     const quotation = await this.findOne(id);
 
     if (quotation.status !== 'SENT' && quotation.status !== 'DRAFT') {
-      throw new BadRequestException(`Only SENT or DRAFT quotations can be rejected. Current status: ${quotation.status}`);
+      throw new BadRequestException(
+        `Only SENT or DRAFT quotations can be rejected. Current status: ${quotation.status}`,
+      );
     }
 
     return this.database.quotation.update({
       where: { id },
       data: { status: 'REJECTED' },
       include: {
-        customer: { select: { id: true, firstName: true, lastName: true, email: true, phoneNumber: true } },
-        createdBy: { select: { id: true, firstName: true, lastName: true, email: true } },
+        customer: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            phoneNumber: true,
+          },
+        },
+        createdBy: {
+          select: { id: true, firstName: true, lastName: true, email: true },
+        },
       },
     });
   }
@@ -478,12 +609,16 @@ export class QuotationsService {
     }
 
     if (quotation.status !== 'ACCEPTED') {
-      throw new BadRequestException(`Only ACCEPTED quotations can be converted. Current status: ${quotation.status}`);
+      throw new BadRequestException(
+        `Only ACCEPTED quotations can be converted. Current status: ${quotation.status}`,
+      );
     }
 
     // Check validUntil expiry
     if (quotation.validUntil && quotation.validUntil < new Date()) {
-      throw new BadRequestException('Quotation has expired and cannot be converted');
+      throw new BadRequestException(
+        'Quotation has expired and cannot be converted',
+      );
     }
 
     // Determine eventDate - default to today
@@ -493,7 +628,9 @@ export class QuotationsService {
     const booking = await this.database.booking.create({
       data: {
         customerId: quotation.customerId,
-        notes: quotation.notes || `Converted from quotation ${quotation.quotationNumber}`,
+        notes:
+          quotation.notes ||
+          `Converted from quotation ${quotation.quotationNumber}`,
         status: 'PENDING',
         eventDate,
         totalPrice: quotation.totalPrice,

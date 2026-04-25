@@ -220,7 +220,9 @@ export class ServicesController {
   @Patch(':id/deactivate')
   @RequirePermissions('services:update')
   @ApiOperation({ summary: 'Deactivate a service by ID' })
-  @ApiUpdatedSuccessResponse({ description: 'Service deactivated successfully' })
+  @ApiUpdatedSuccessResponse({
+    description: 'Service deactivated successfully',
+  })
   @ApiNotFoundResponse({ description: 'Service not found' })
   @ApiUnauthorizedResponse()
   @ApiForbiddenResponse()

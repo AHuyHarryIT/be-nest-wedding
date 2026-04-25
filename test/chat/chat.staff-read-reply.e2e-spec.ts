@@ -41,7 +41,10 @@ describe('Chat staff read/reply + websocket identity contract (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
-    app.useGlobalPipes(new GlobalValidationPipe(), new ValidationPipe({ transform: true }));
+    app.useGlobalPipes(
+      new GlobalValidationPipe(),
+      new ValidationPipe({ transform: true }),
+    );
     app.useGlobalInterceptors(new ResponseInterceptor());
     app.useGlobalFilters(
       new PrismaExceptionFilter(),
@@ -77,8 +80,16 @@ describe('Chat staff read/reply + websocket identity contract (e2e)', () => {
   });
 
   it('returns forbidden with Required permission: chat.read for staff queue without permission', async () => {
-    const customerToken = await login(app, fixture.customerPhone, fixture.customerPassword);
-    const noReadToken = await login(app, fixture.noReadStaff.phone, fixture.noReadStaff.password);
+    const customerToken = await login(
+      app,
+      fixture.customerPhone,
+      fixture.customerPassword,
+    );
+    const noReadToken = await login(
+      app,
+      fixture.noReadStaff.phone,
+      fixture.noReadStaff.password,
+    );
 
     await createChatAsCustomer(app, customerToken, fixture.customerId);
 
@@ -103,10 +114,22 @@ describe('Chat staff read/reply + websocket identity contract (e2e)', () => {
   });
 
   it('returns forbidden with Required permission: chat.reply for staff reply without permission', async () => {
-    const customerToken = await login(app, fixture.customerPhone, fixture.customerPassword);
-    const noReplyToken = await login(app, fixture.noReplyStaff.phone, fixture.noReplyStaff.password);
+    const customerToken = await login(
+      app,
+      fixture.customerPhone,
+      fixture.customerPassword,
+    );
+    const noReplyToken = await login(
+      app,
+      fixture.noReplyStaff.phone,
+      fixture.noReplyStaff.password,
+    );
 
-    const chat = await createChatAsCustomer(app, customerToken, fixture.customerId);
+    const chat = await createChatAsCustomer(
+      app,
+      customerToken,
+      fixture.customerId,
+    );
 
     const response = await request(app.getHttpServer())
       .post(`/chats/${chat.id}/messages`)
@@ -130,26 +153,55 @@ describe('Chat staff read/reply + websocket identity contract (e2e)', () => {
   });
 
   it('rejects websocket join_chat with Required permission: chat.read for staff without permission', async () => {
-    const customerToken = await login(app, fixture.customerPhone, fixture.customerPassword);
-    const noReadToken = await login(app, fixture.noReadStaff.phone, fixture.noReadStaff.password);
+    const customerToken = await login(
+      app,
+      fixture.customerPhone,
+      fixture.customerPassword,
+    );
+    const noReadToken = await login(
+      app,
+      fixture.noReadStaff.phone,
+      fixture.noReadStaff.password,
+    );
 
-    const chat = await createChatAsCustomer(app, customerToken, fixture.customerId);
+    const chat = await createChatAsCustomer(
+      app,
+      customerToken,
+      fixture.customerId,
+    );
 
     const socket = await connectSocketWithToken(socketBaseUrl, noReadToken);
 
-    await expectSocketEventError(socket, 'join_chat', { chatId: chat.id }, {
-      requiredPermissions: ['chat.read'],
-      missingPermissions: ['chat.read'],
-    });
+    await expectSocketEventError(
+      socket,
+      'join_chat',
+      { chatId: chat.id },
+      {
+        requiredPermissions: ['chat.read'],
+        missingPermissions: ['chat.read'],
+      },
+    );
 
     socket.disconnect();
   });
 
   it('rejects websocket send_message with Required permission: chat.reply for staff without permission', async () => {
-    const customerToken = await login(app, fixture.customerPhone, fixture.customerPassword);
-    const noReplyToken = await login(app, fixture.noReplyStaff.phone, fixture.noReplyStaff.password);
+    const customerToken = await login(
+      app,
+      fixture.customerPhone,
+      fixture.customerPassword,
+    );
+    const noReplyToken = await login(
+      app,
+      fixture.noReplyStaff.phone,
+      fixture.noReplyStaff.password,
+    );
 
-    const chat = await createChatAsCustomer(app, customerToken, fixture.customerId);
+    const chat = await createChatAsCustomer(
+      app,
+      customerToken,
+      fixture.customerId,
+    );
 
     const socket = await connectSocketWithToken(socketBaseUrl, noReplyToken);
 
@@ -185,7 +237,9 @@ async function login(
     (response.body?.accessToken as string | undefined);
 
   if (!accessToken) {
-    throw new Error(`Expected access token from /auth/login, got: ${JSON.stringify(response.body)}`);
+    throw new Error(
+      `Expected access token from /auth/login, got: ${JSON.stringify(response.body)}`,
+    );
   }
 
   return accessToken;
@@ -205,7 +259,10 @@ async function createChatAsCustomer(
   return response.body?.data as { id: string };
 }
 
-async function connectSocketWithToken(baseUrl: string, token: string): Promise<Socket> {
+async function connectSocketWithToken(
+  baseUrl: string,
+  token: string,
+): Promise<Socket> {
   return new Promise<Socket>((resolve, reject) => {
     const socket: Socket = io(`${baseUrl}/chat`, {
       transports: ['websocket'],
@@ -217,7 +274,9 @@ async function connectSocketWithToken(baseUrl: string, token: string): Promise<S
 
     const timeout = setTimeout(() => {
       socket.disconnect();
-      reject(new Error('Timed out waiting for authenticated websocket connection'));
+      reject(
+        new Error('Timed out waiting for authenticated websocket connection'),
+      );
     }, 3000);
 
     socket.on('connect', () => {
@@ -245,7 +304,11 @@ async function expectSocketEventError(
   await new Promise<void>((resolve, reject) => {
     const timeout = setTimeout(() => {
       socket.off('error', onError);
-      reject(new Error(`Timed out waiting for websocket error on event: ${eventName}`));
+      reject(
+        new Error(
+          `Timed out waiting for websocket error on event: ${eventName}`,
+        ),
+      );
     }, 3000);
 
     const onError = (eventPayload: {
@@ -258,7 +321,9 @@ async function expectSocketEventError(
       clearTimeout(timeout);
       socket.off('error', onError);
 
-      expect(eventPayload.message || '').toMatch(/missing required permissions/i);
+      expect(eventPayload.message || '').toMatch(
+        /missing required permissions/i,
+      );
       expect(eventPayload.details).toEqual(
         expect.objectContaining({
           requiredPermissions: expectedDetails.requiredPermissions,
@@ -293,13 +358,19 @@ async function expectWebsocketAuthRejection(
 
     const timeout = setTimeout(() => {
       socket.disconnect();
-      reject(new Error('Timed out waiting for websocket authentication rejection'));
+      reject(
+        new Error('Timed out waiting for websocket authentication rejection'),
+      );
     }, 3000);
 
     socket.on('connect', () => {
       clearTimeout(timeout);
       socket.disconnect();
-      reject(new Error('Expected websocket connection to be rejected without a valid JWT'));
+      reject(
+        new Error(
+          'Expected websocket connection to be rejected without a valid JWT',
+        ),
+      );
     });
 
     socket.on('connect_error', (error: Error) => {
@@ -447,7 +518,9 @@ async function cleanupFixture(
 
     const chatIds = chats.map((chat) => chat.id);
     if (chatIds.length > 0) {
-      await databaseService.message.deleteMany({ where: { chatId: { in: chatIds } } });
+      await databaseService.message.deleteMany({
+        where: { chatId: { in: chatIds } },
+      });
       await databaseService.chat.deleteMany({ where: { id: { in: chatIds } } });
     }
 
@@ -459,7 +532,9 @@ async function cleanupFixture(
     `STF-CHAT-PERM-${suffix}-NOREPLY`,
   ];
 
-  await databaseService.staffRole.deleteMany({ where: { staffId: { in: staffIds } } });
+  await databaseService.staffRole.deleteMany({
+    where: { staffId: { in: staffIds } },
+  });
 
   const roleNames = [
     `chat-perm-role-noread-${suffix}`,

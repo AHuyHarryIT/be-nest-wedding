@@ -130,7 +130,7 @@ export class RemindersController {
 
     const count = await this.remindersService.getUnreadCount(
       user.userId,
-      user.userType as 'staff' | 'customer',
+      user.userType,
     );
     return ResponseBuilder.success(
       { count },
@@ -151,7 +151,7 @@ export class RemindersController {
 
     const result = await this.remindersService.markAllAsRead(
       user.userId,
-      user.userType as 'staff' | 'customer',
+      user.userType,
     );
     return ResponseBuilder.updated(
       { count: result.count },
@@ -175,12 +175,9 @@ export class RemindersController {
     const notification = await this.remindersService.markAsRead(
       id,
       user.userId,
-      user.userType as 'staff' | 'customer',
+      user.userType,
     );
-    return ResponseBuilder.updated(
-      notification,
-      'Notification marked as read',
-    );
+    return ResponseBuilder.updated(notification, 'Notification marked as read');
   }
 
   // ========================
@@ -189,7 +186,9 @@ export class RemindersController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get reminder detail' })
-  @ApiStandardResponse(Object, { description: 'Reminder retrieved successfully' })
+  @ApiStandardResponse(Object, {
+    description: 'Reminder retrieved successfully',
+  })
   @ApiNotFoundResponse({ description: 'Reminder not found' })
   async getReminder(@Param('id') id: string) {
     const reminder = await this.remindersService.findOne(id);

@@ -18,32 +18,36 @@ describe('Customer private album ownership denial (e2e)', () => {
   let guardSpy: jest.SpiedFunction<JwtAuthGuard['canActivate']>;
 
   const albumsServiceMock = {
-    getCustomerThumbnailStream: jest.fn(async (_customerId: string, fileId: string) => {
-      if (fileId === 'file-owner') {
-        return {
-          stream: {
-            pipe: (_: unknown) => _,
-          } as unknown as NodeJS.ReadableStream,
-          contentType: 'image/jpeg',
-        };
-      }
+    getCustomerThumbnailStream: jest.fn(
+      async (_customerId: string, fileId: string) => {
+        if (fileId === 'file-owner') {
+          return {
+            stream: {
+              pipe: (_: unknown) => _,
+            } as unknown as NodeJS.ReadableStream,
+            contentType: 'image/jpeg',
+          };
+        }
 
-      throw new ForbiddenException(DENY_MESSAGE);
-    }),
-    getCustomerFileStream: jest.fn(async (_customerId: string, fileId: string) => {
-      if (fileId === 'file-owner') {
-        return {
-          stream: {
-            pipe: (_: unknown) => _,
-          } as unknown as NodeJS.ReadableStream,
-          mimeType: 'image/jpeg',
-          byteSize: 12,
-          name: 'owner.jpg',
-        };
-      }
+        throw new ForbiddenException(DENY_MESSAGE);
+      },
+    ),
+    getCustomerFileStream: jest.fn(
+      async (_customerId: string, fileId: string) => {
+        if (fileId === 'file-owner') {
+          return {
+            stream: {
+              pipe: (_: unknown) => _,
+            } as unknown as NodeJS.ReadableStream,
+            mimeType: 'image/jpeg',
+            byteSize: 12,
+            name: 'owner.jpg',
+          };
+        }
 
-      throw new ForbiddenException(DENY_MESSAGE);
-    }),
+        throw new ForbiddenException(DENY_MESSAGE);
+      },
+    ),
   };
 
   const mockGuardCanActivate = (context: ExecutionContext): boolean => {

@@ -45,13 +45,13 @@ describe('ServicesService', () => {
     expect(databaseService.service.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: 'svc-1', deletedAt: null },
-      })
+      }),
     );
     expect(databaseService.service.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: 'svc-1' },
         data: { isActive: false },
-      })
+      }),
     );
     expect(result).toEqual(expect.objectContaining({ isActive: false }));
   });
@@ -74,7 +74,7 @@ describe('ServicesService', () => {
       expect.objectContaining({
         where: { id: 'svc-2' },
         data: { isActive: false },
-      })
+      }),
     );
   });
 });

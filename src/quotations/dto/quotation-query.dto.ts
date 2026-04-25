@@ -2,7 +2,13 @@ import { PaginationQueryDto } from '@/common';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { QuotationStatus } from 'generated/prisma';
 import { Transform, Type } from 'class-transformer';
-import { IsBoolean, IsDateString, IsEnum, IsOptional, IsUUID } from 'class-validator';
+import {
+  IsBoolean,
+  IsDateString,
+  IsEnum,
+  IsOptional,
+  IsUUID,
+} from 'class-validator';
 
 export class QueryQuotationDto extends PaginationQueryDto {
   @ApiPropertyOptional({
@@ -17,7 +23,9 @@ export class QueryQuotationDto extends PaginationQueryDto {
     description: 'Filter by quotation status',
     enum: QuotationStatus,
   })
-  @IsEnum(QuotationStatus, { message: 'Status must be a valid quotation status' })
+  @IsEnum(QuotationStatus, {
+    message: 'Status must be a valid quotation status',
+  })
   @IsOptional()
   status?: QuotationStatus;
 
@@ -26,7 +34,10 @@ export class QueryQuotationDto extends PaginationQueryDto {
     example: '2024-01-01T00:00:00Z',
   })
   @IsOptional()
-  @IsDateString({}, { message: 'Date from must be a valid ISO 8601 date string' })
+  @IsDateString(
+    {},
+    { message: 'Date from must be a valid ISO 8601 date string' },
+  )
   dateFrom?: string;
 
   @ApiPropertyOptional({

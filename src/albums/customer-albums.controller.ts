@@ -10,11 +10,7 @@ import {
 } from '@nestjs/common';
 import contentDisposition from 'content-disposition';
 import type { Response } from 'express';
-import {
-  ApiBearerAuth,
-  ApiOperation,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { GetUser, type AuthenticatedUser } from '../auth/get-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import {
@@ -84,10 +80,11 @@ export class CustomerAlbumsController {
     @Res() res: Response,
   ) {
     try {
-      const { stream, fileName } = await this.albumsService.getCustomerAlbumZipStream(
-        user.userId,
-        albumId,
-      );
+      const { stream, fileName } =
+        await this.albumsService.getCustomerAlbumZipStream(
+          user.userId,
+          albumId,
+        );
 
       res.set({
         'Content-Type': 'application/zip',
@@ -111,7 +108,9 @@ export class CustomerAlbumsController {
   @ApiOperation({
     summary: 'Get thumbnail for a customer-owned private album file',
   })
-  @ApiSuccessResponse({ description: 'Thumbnail stream retrieved successfully' })
+  @ApiSuccessResponse({
+    description: 'Thumbnail stream retrieved successfully',
+  })
   async getThumbnail(
     @GetUser() user: AuthenticatedUser,
     @Param('fileId') fileId: string,

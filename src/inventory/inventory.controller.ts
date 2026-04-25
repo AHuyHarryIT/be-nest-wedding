@@ -74,18 +74,26 @@ export class InventoryController {
   @ApiErrorResponse({ description: 'Error creating category' })
   async createCategory(@Body() createDto: CreateInventoryCategoryDto) {
     const category = await this.inventoryService.createCategory(createDto);
-    return ResponseBuilder.created(category, 'Inventory category created successfully');
+    return ResponseBuilder.created(
+      category,
+      'Inventory category created successfully',
+    );
   }
 
   @Get('categories')
   @RequirePermissions('inventory:read')
   @ApiOperation({ summary: 'List all inventory categories' })
-  @ApiStandardResponse(Object, { description: 'Categories retrieved successfully' })
+  @ApiStandardResponse(Object, {
+    description: 'Categories retrieved successfully',
+  })
   @ApiUnauthorizedResponse()
   @ApiForbiddenResponse()
   async findAllCategories() {
     const categories = await this.inventoryService.findAllCategories();
-    return ResponseBuilder.success(categories, 'Categories retrieved successfully');
+    return ResponseBuilder.success(
+      categories,
+      'Categories retrieved successfully',
+    );
   }
 
   @Patch('categories/:id')
@@ -132,7 +140,9 @@ export class InventoryController {
 
   @Get('items')
   @RequirePermissions('inventory:read')
-  @ApiOperation({ summary: 'Get all inventory items with pagination, search, and filters' })
+  @ApiOperation({
+    summary: 'Get all inventory items with pagination, search, and filters',
+  })
   @ApiPaginatedResponse(Object, { description: 'Items retrieved successfully' })
   @ApiUnauthorizedResponse()
   @ApiForbiddenResponse()
@@ -147,14 +157,19 @@ export class InventoryController {
 
   @Get('items/:id')
   @RequirePermissions('inventory:read')
-  @ApiOperation({ summary: 'Get an inventory item by ID, including logs and bookings' })
+  @ApiOperation({
+    summary: 'Get an inventory item by ID, including logs and bookings',
+  })
   @ApiStandardResponse(Object, { description: 'Item retrieved successfully' })
   @ApiNotFoundResponse({ description: 'Item not found' })
   @ApiUnauthorizedResponse()
   @ApiForbiddenResponse()
   async findOneItem(@Param('id') id: string) {
     const item = await this.inventoryService.findOneItem(id);
-    return ResponseBuilder.success(item, 'Inventory item retrieved successfully');
+    return ResponseBuilder.success(
+      item,
+      'Inventory item retrieved successfully',
+    );
   }
 
   @Patch('items/:id')
@@ -200,8 +215,15 @@ export class InventoryController {
     @Body() dto: CheckoutInventoryDto,
     @GetUser() user: AuthenticatedUser,
   ) {
-    const result = await this.inventoryService.checkoutItem(id, dto, user?.userId);
-    return ResponseBuilder.success(result, 'Inventory item checked out successfully');
+    const result = await this.inventoryService.checkoutItem(
+      id,
+      dto,
+      user?.userId,
+    );
+    return ResponseBuilder.success(
+      result,
+      'Inventory item checked out successfully',
+    );
   }
 
   @Post('items/:id/checkin')
@@ -217,8 +239,15 @@ export class InventoryController {
     @Body() dto: CheckinInventoryDto,
     @GetUser() user: AuthenticatedUser,
   ) {
-    const result = await this.inventoryService.checkinItem(id, dto, user?.userId);
-    return ResponseBuilder.success(result, 'Inventory item checked in successfully');
+    const result = await this.inventoryService.checkinItem(
+      id,
+      dto,
+      user?.userId,
+    );
+    return ResponseBuilder.success(
+      result,
+      'Inventory item checked in successfully',
+    );
   }
 
   // ================== LOGS ==================
@@ -232,7 +261,10 @@ export class InventoryController {
   @ApiForbiddenResponse()
   async getItemLogs(@Param('id') id: string) {
     const logs = await this.inventoryService.findItemLogs(id);
-    return ResponseBuilder.success(logs, 'Inventory logs retrieved successfully');
+    return ResponseBuilder.success(
+      logs,
+      'Inventory logs retrieved successfully',
+    );
   }
 
   @Get('logs')
@@ -265,7 +297,11 @@ export class InventoryController {
     @Body() dto: AdjustStockDto,
     @GetUser() user: AuthenticatedUser,
   ) {
-    const result = await this.inventoryService.adjustStock(id, dto, user?.userId);
+    const result = await this.inventoryService.adjustStock(
+      id,
+      dto,
+      user?.userId,
+    );
     return ResponseBuilder.success(result, 'Stock adjusted successfully');
   }
 }

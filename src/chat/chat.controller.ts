@@ -70,7 +70,9 @@ export class ChatController {
     if (user.userType === 'customer') {
       const requestCustomerId = user.id ?? user.userId;
       if (!requestCustomerId || requestCustomerId !== customerId) {
-        throw new ForbiddenException('Customers can only create chats for their own account');
+        throw new ForbiddenException(
+          'Customers can only create chats for their own account',
+        );
       }
     }
   }
@@ -195,12 +197,12 @@ export class ChatController {
       id: message.id,
       chatId: message.chatId,
       senderId: message.senderId,
+      senderType: message.senderType,
       content: message.content,
       isRead: message.isRead,
       createdAt: message.createdAt,
     });
 
-    // Also emit notification to the other participant
     const otherUserId =
       chatData.customerId === senderId ? chatData.staffId : chatData.customerId;
     if (otherUserId) {
@@ -210,6 +212,45 @@ export class ChatController {
           chatId: chatId,
           messageCount: 1,
         });
+    }
+
+    if (message.senderType === 'CUSTOMER') {
+      const aiMessage = await this.chatService.maybeSendAiReply(
+        chatId,
+        body.content,
+      );
+
+      if (aiMessage) {
+        void this.chatGateway.server
+          .to(`chat:${chatId}`)
+          .emit('message_received', {
+            id: aiMessage.id,
+            chatId: aiMessage.chatId,
+            senderId: aiMessage.senderId,
+            senderType: aiMessage.senderType,
+            content: aiMessage.content,
+            isRead: aiMessage.isRead,
+            createdAt: aiMessage.createdAt,
+          });
+
+        if (chatData.customerId) {
+          void this.chatGateway.server
+            .to(`user:${chatData.customerId}`)
+            .emit('new_message_notification', {
+              chatId: chatId,
+              messageCount: 1,
+            });
+        }
+
+        if (chatData.staffId) {
+          void this.chatGateway.server
+            .to(`user:${chatData.staffId}`)
+            .emit('new_message_notification', {
+              chatId: chatId,
+              messageCount: 1,
+            });
+        }
+      }
     }
 
     return message;

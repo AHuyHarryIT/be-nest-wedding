@@ -167,7 +167,9 @@ describe('Customer private album list (e2e)', () => {
     expect(response.body.success).toBe(true);
     expect(response.body.data).toEqual(customerBAlbums);
     expect(
-      response.body.data.find((album: { id: string }) => album.id === 'album-a-1'),
+      response.body.data.find(
+        (album: { id: string }) => album.id === 'album-a-1',
+      ),
     ).toBeUndefined();
 
     expect(albumsServiceMock.findCustomerPrivateAlbums).toHaveBeenCalledWith(
@@ -177,6 +179,8 @@ describe('Customer private album list (e2e)', () => {
   });
 
   it('unauthenticated request returns 401', async () => {
-    await request(app.getHttpServer()).get('/customer/albums/private').expect(401);
+    await request(app.getHttpServer())
+      .get('/customer/albums/private')
+      .expect(401);
   });
 });

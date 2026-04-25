@@ -46,7 +46,10 @@ export class UpdateQuotationDto {
     maximum: 100,
   })
   @IsOptional()
-  @IsNumber({ maxDecimalPlaces: 2 }, { message: 'Discount percent must be a number' })
+  @IsNumber(
+    { maxDecimalPlaces: 2 },
+    { message: 'Discount percent must be a number' },
+  )
   @Min(0, { message: 'Discount percent cannot be negative' })
   @Max(100, { message: 'Discount percent cannot exceed 100' })
   @Type(() => Number)
@@ -59,7 +62,10 @@ export class UpdateQuotationDto {
     maximum: 100,
   })
   @IsOptional()
-  @IsNumber({ maxDecimalPlaces: 2 }, { message: 'Tax percent must be a number' })
+  @IsNumber(
+    { maxDecimalPlaces: 2 },
+    { message: 'Tax percent must be a number' },
+  )
   @Min(0, { message: 'Tax percent cannot be negative' })
   @Max(100, { message: 'Tax percent cannot exceed 100' })
   @Type(() => Number)

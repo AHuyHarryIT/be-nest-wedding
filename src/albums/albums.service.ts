@@ -1082,7 +1082,9 @@ export class AlbumsService {
     });
 
     if (!file) {
-      throw new ForbiddenException('Album not found or you do not have access.');
+      throw new ForbiddenException(
+        'Album not found or you do not have access.',
+      );
     }
 
     const stream = await this.oneDriveService.getFileStream(storageKey);

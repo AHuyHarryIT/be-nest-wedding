@@ -27,7 +27,7 @@ export class ReminderSchedulerService {
 
   private async triggerDueReminders() {
     const now = new Date();
-    
+
     // Find pending reminders that are due
     const dueReminders = await this.db.reminder.findMany({
       where: {
@@ -48,14 +48,21 @@ export class ReminderSchedulerService {
     for (const reminder of dueReminders as any[]) {
       try {
         // Determine target recipients based on reminder type
-        const targets: Array<{ channel: NotificationChannel; staffId?: string; customerId?: string }> = [];
-        
+        const targets: Array<{
+          channel: NotificationChannel;
+          staffId?: string;
+          customerId?: string;
+        }> = [];
+
         if (reminder.bookingId) {
           // Staff should handle booking reminders
           targets.push({ channel: NotificationChannel.IN_APP });
         }
         if (reminder.customerId) {
-          targets.push({ channel: NotificationChannel.IN_APP, customerId: reminder.customerId });
+          targets.push({
+            channel: NotificationChannel.IN_APP,
+            customerId: reminder.customerId,
+          });
         }
 
         await this.reminderService.createNotification(
@@ -65,7 +72,7 @@ export class ReminderSchedulerService {
           reminder.message,
           undefined,
         );
-        
+
         // Mark as triggered
         await this.db.reminder.update({
           where: { id: reminder.id },

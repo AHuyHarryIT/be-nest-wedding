@@ -508,11 +508,21 @@ describe('BookingsService', () => {
           packageId: 'package-1',
           package: {
             id: 'package-1',
-            services: [{ serviceId: 'service-1', service: { id: 'service-1', jobId: 'job-photo' } }],
+            services: [
+              {
+                serviceId: 'service-1',
+                service: { id: 'service-1', jobId: 'job-photo' },
+              },
+            ],
           },
         },
       ],
-      services: [{ serviceId: 'service-1', service: { id: 'service-1', jobId: 'job-photo' } }],
+      services: [
+        {
+          serviceId: 'service-1',
+          service: { id: 'service-1', jobId: 'job-photo' },
+        },
+      ],
       sessions: [
         {
           id: 'session-1',

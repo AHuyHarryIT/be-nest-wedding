@@ -5,7 +5,9 @@ import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { ItemType } from 'generated/prisma';
 
 export class InventoryQueryDto extends PaginationQueryDto {
-  @ApiPropertyOptional({ description: 'Search query for item name or description' })
+  @ApiPropertyOptional({
+    description: 'Search query for item name or description',
+  })
   @IsOptional()
   @IsString()
   declare search?: string;

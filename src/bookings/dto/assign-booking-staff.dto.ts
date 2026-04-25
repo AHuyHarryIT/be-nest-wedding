@@ -110,15 +110,14 @@ export class AssignBookingStaffDto {
   allowConflictOverride?: boolean;
 
   @ApiPropertyOptional({
-    description:
-      'Mandatory reason when override is used for overlap conflicts',
+    description: 'Mandatory reason when override is used for overlap conflicts',
     example: 'Photographer handoff requires temporary overlap for coverage.',
     maxLength: 500,
   })
-  @Transform(({ value }) =>
-    typeof value === 'string' ? value.trim() : value,
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @ValidateIf(
+    (dto: AssignBookingStaffDto) => dto.allowConflictOverride === true,
   )
-  @ValidateIf((dto: AssignBookingStaffDto) => dto.allowConflictOverride === true)
   @IsString({
     message:
       'Override reason is required when allowing conflict override on assignment',

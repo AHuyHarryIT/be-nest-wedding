@@ -282,7 +282,10 @@ export class PackagesController {
   @ApiForbiddenResponse()
   async deactivate(@Param('id') id: string) {
     const package_ = await this.packagesService.deactivate(id);
-    return ResponseBuilder.updated(package_, 'Package deactivated successfully');
+    return ResponseBuilder.updated(
+      package_,
+      'Package deactivated successfully',
+    );
   }
 
   @Delete(':id')

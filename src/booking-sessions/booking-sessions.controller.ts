@@ -32,7 +32,9 @@ export class BookingSessionsController {
   @RequirePermissions('bookings:create')
   @ApiOperation({ summary: 'Create a booking session' })
   async create(@Body() createBookingSessionDto: CreateBookingSessionDto) {
-    const session = await this.bookingSessionsService.create(createBookingSessionDto);
+    const session = await this.bookingSessionsService.create(
+      createBookingSessionDto,
+    );
     return ResponseBuilder.created(
       session,
       'Booking session created successfully',
@@ -56,7 +58,10 @@ export class BookingSessionsController {
   @ApiOperation({ summary: 'Get a booking session by ID' })
   async findOne(@Param('id') id: string) {
     const session = await this.bookingSessionsService.findOne(id);
-    return ResponseBuilder.success(session, 'Booking session retrieved successfully');
+    return ResponseBuilder.success(
+      session,
+      'Booking session retrieved successfully',
+    );
   }
 
   @Patch(':id')
@@ -66,7 +71,10 @@ export class BookingSessionsController {
     @Param('id') id: string,
     @Body() updateBookingSessionDto: UpdateBookingSessionDto,
   ) {
-    const session = await this.bookingSessionsService.update(id, updateBookingSessionDto);
+    const session = await this.bookingSessionsService.update(
+      id,
+      updateBookingSessionDto,
+    );
     return ResponseBuilder.updated(
       session,
       'Booking session updated successfully',

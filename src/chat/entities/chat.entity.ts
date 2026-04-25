@@ -6,6 +6,7 @@ export class ChatEntity {
   chatType: 'DIRECT' | 'GROUP';
   lastMessageAt?: Date;
   isArchived: boolean;
+  aiEnabled: boolean;
   createdAt: Date;
   updatedAt: Date;
   customer?: {

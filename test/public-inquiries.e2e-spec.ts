@@ -20,12 +20,15 @@ describe('PublicInquiriesController (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
-    app.useGlobalPipes(new GlobalValidationPipe(), new ValidationPipe({ transform: true }));
+    app.useGlobalPipes(
+      new GlobalValidationPipe(),
+      new ValidationPipe({ transform: true }),
+    );
     app.useGlobalInterceptors(new ResponseInterceptor());
     app.useGlobalFilters(
       new PrismaExceptionFilter(),
       new PrismaClientExceptionFilter(),
-      new GlobalExceptionFilter()
+      new GlobalExceptionFilter(),
     );
 
     await app.init();
@@ -59,7 +62,7 @@ describe('PublicInquiriesController (e2e)', () => {
         message: payload.message,
         phone: payload.phone,
         packageInterest: payload.packageInterest,
-      })
+      }),
     );
     expect(response.body.data.createdAt).toEqual(expect.any(String));
     expect(response.body.data.updatedAt).toEqual(expect.any(String));
@@ -68,7 +71,7 @@ describe('PublicInquiriesController (e2e)', () => {
         timestamp: expect.any(String),
         version: expect.any(String),
         requestId: expect.stringMatching(/^req_/),
-      })
+      }),
     );
   });
 });

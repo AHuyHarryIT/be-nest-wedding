@@ -40,9 +40,7 @@ export class RemindersService {
     });
   }
 
-  async findAll(
-    params: ReminderQueryDto,
-  ) {
+  async findAll(params: ReminderQueryDto) {
     const { page, limit } = PaginationHelper.mergeWithDefaults(params);
     const { type, status, bookingId, customerId, itemId } = params;
 
@@ -200,13 +198,19 @@ export class RemindersService {
     return PaginationHelper.createPaginatedResponse(rows, page, limit, total);
   }
 
-  async markAsRead(notificationId: string, userId: string, userType: 'staff' | 'customer') {
+  async markAsRead(
+    notificationId: string,
+    userId: string,
+    userType: 'staff' | 'customer',
+  ) {
     const notification = await this.db.notification.findUnique({
       where: { id: notificationId },
     });
 
     if (!notification) {
-      throw new NotFoundException(`Notification with ID ${notificationId} not found`);
+      throw new NotFoundException(
+        `Notification with ID ${notificationId} not found`,
+      );
     }
 
     // Verify ownership

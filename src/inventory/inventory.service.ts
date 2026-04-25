@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { RentalStatus, InventoryLogType } from 'generated/prisma';
 import { PaginationHelper } from '../common/utils/pagination.helper';
 import { DatabaseService } from '../database/database.service';
@@ -204,7 +208,9 @@ export class InventoryService {
     const item = await this.findOneItem(id);
 
     if (!item.isActive) {
-      throw new BadRequestException('This inventory item is not active and cannot be checked out');
+      throw new BadRequestException(
+        'This inventory item is not active and cannot be checked out',
+      );
     }
 
     if (item.type !== 'RENTAL') {
@@ -255,7 +261,9 @@ export class InventoryService {
     }
 
     if (item.checkedOutCount <= 0) {
-      throw new BadRequestException('No items are currently checked out for this item');
+      throw new BadRequestException(
+        'No items are currently checked out for this item',
+      );
     }
 
     const quantity = dto.quantity || 1;
@@ -405,7 +413,11 @@ export class InventoryService {
     return this.databaseService.inventoryLog.create({ data: data as any });
   }
 
-  private checkLowStock(item: { stockCount: number; checkedOutCount: number; lowStockThreshold: number | null }): boolean {
+  private checkLowStock(item: {
+    stockCount: number;
+    checkedOutCount: number;
+    lowStockThreshold: number | null;
+  }): boolean {
     if (!item.lowStockThreshold) return false;
     const available = item.stockCount - item.checkedOutCount;
     return available <= item.lowStockThreshold;

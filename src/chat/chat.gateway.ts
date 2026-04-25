@@ -27,15 +27,84 @@ type SocketPrincipal = {
   userType: 'customer' | 'staff';
 };
 
+const DEFAULT_CHAT_ALLOWED_ORIGINS = [
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  'http://localhost:4200',
+  'http://127.0.0.1:4200',
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'http://localhost:5174',
+  'http://127.0.0.1:5174',
+];
+
+const isLoopbackHost = (hostname: string): boolean =>
+  hostname === 'localhost' || hostname === '127.0.0.1';
+
+const resolveAllowedOrigins = (): string[] => {
+  const configuredOrigins = process.env.ALLOWED_ORIGINS?.split(',')
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0);
+
+  if (configuredOrigins && configuredOrigins.length > 0) {
+    return configuredOrigins;
+  }
+
+  return DEFAULT_CHAT_ALLOWED_ORIGINS;
+};
+
+const chatAllowedOrigins = resolveAllowedOrigins();
+
+const chatCorsOriginValidator = (
+  origin: string | undefined,
+  callback: (error: Error | null, allow?: boolean) => void,
+): void => {
+  if (!origin) {
+    callback(null, true);
+    return;
+  }
+
+  if (chatAllowedOrigins.includes(origin)) {
+    callback(null, true);
+    return;
+  }
+
+  try {
+    const requestOriginUrl = new URL(origin);
+    if (!isLoopbackHost(requestOriginUrl.hostname)) {
+      callback(new Error(`Not allowed by CORS: ${origin}`), false);
+      return;
+    }
+
+    const hasLoopbackEquivalentOrigin = chatAllowedOrigins.some((allowedOrigin) => {
+      try {
+        const allowedOriginUrl = new URL(allowedOrigin);
+        return (
+          isLoopbackHost(allowedOriginUrl.hostname) &&
+          allowedOriginUrl.protocol === requestOriginUrl.protocol &&
+          allowedOriginUrl.port === requestOriginUrl.port
+        );
+      } catch {
+        return false;
+      }
+    });
+
+    if (hasLoopbackEquivalentOrigin) {
+      callback(null, true);
+      return;
+    }
+  } catch {
+    callback(new Error(`Not allowed by CORS: ${origin}`), false);
+    return;
+  }
+
+  callback(new Error(`Not allowed by CORS: ${origin}`), false);
+};
+
 @WebSocketGateway({
   namespace: 'chat',
   cors: {
-    origin: process.env.ALLOWED_ORIGINS?.split(',') || [
-      'http://localhost:3000',
-      'http://localhost:4200',
-      'http://localhost:5173',
-      'http://localhost:5174',
-    ],
+    origin: chatCorsOriginValidator,
     credentials: true,
     methods: ['GET', 'POST'],
   },
@@ -61,7 +130,9 @@ export class ChatGateway
         .then(() => next())
         .catch((error: unknown) => {
           const message =
-            error instanceof Error ? error.message : 'Unauthorized socket connection';
+            error instanceof Error
+              ? error.message
+              : 'Unauthorized socket connection';
           next(new Error(message));
         });
     });
@@ -126,6 +197,7 @@ export class ChatGateway
         id: message.id,
         chatId: message.chatId,
         senderId: message.senderId,
+        senderType: message.senderType,
         content: message.content,
         isRead: message.isRead,
         createdAt: message.createdAt,
@@ -138,10 +210,49 @@ export class ChatGateway
           : chatData.customerId;
 
       if (otherUserId) {
-        void this.server.to(`user:${otherUserId}`).emit('new_message_notification', {
-          chatId: data.chatId,
-          messageCount: 1,
-        });
+        void this.server
+          .to(`user:${otherUserId}`)
+          .emit('new_message_notification', {
+            chatId: data.chatId,
+            messageCount: 1,
+          });
+      }
+
+      if (message.senderType === 'CUSTOMER') {
+        const aiMessage = await this.chatService.maybeSendAiReply(
+          data.chatId,
+          data.content,
+        );
+
+        if (aiMessage) {
+          void this.server.to(`chat:${data.chatId}`).emit('message_received', {
+            id: aiMessage.id,
+            chatId: aiMessage.chatId,
+            senderId: aiMessage.senderId,
+            senderType: aiMessage.senderType,
+            content: aiMessage.content,
+            isRead: aiMessage.isRead,
+            createdAt: aiMessage.createdAt,
+          });
+
+          if (chatData.customerId) {
+            void this.server
+              .to(`user:${chatData.customerId}`)
+              .emit('new_message_notification', {
+                chatId: data.chatId,
+                messageCount: 1,
+              });
+          }
+
+          if (chatData.staffId) {
+            void this.server
+              .to(`user:${chatData.staffId}`)
+              .emit('new_message_notification', {
+                chatId: data.chatId,
+                messageCount: 1,
+              });
+          }
+        }
       }
     } catch (error) {
       this.emitSocketError(client, error);
@@ -225,13 +336,15 @@ export class ChatGateway
     }
 
     client.emit('error', {
-      message: error instanceof Error ? error.message : 'Unexpected socket error',
+      message:
+        error instanceof Error ? error.message : 'Unexpected socket error',
     });
   }
 
   private getVerifiedPrincipal(client: Socket): SocketPrincipal {
     const userId = (client.data as { userId?: string }).userId;
-    const userType = (client.data as { userType?: 'customer' | 'staff' }).userType;
+    const userType = (client.data as { userType?: 'customer' | 'staff' })
+      .userType;
 
     if (!userId || !userType) {
       throw new UnauthorizedException('User not authenticated');
@@ -240,11 +353,15 @@ export class ChatGateway
     return { userId, userType };
   }
 
-  private async attachVerifiedPrincipal(client: Socket): Promise<SocketPrincipal> {
+  private async attachVerifiedPrincipal(
+    client: Socket,
+  ): Promise<SocketPrincipal> {
     const existingUserId = (client.data as { userId?: string }).userId;
-    const existingUserType = (client.data as {
-      userType?: 'customer' | 'staff';
-    }).userType;
+    const existingUserType = (
+      client.data as {
+        userType?: 'customer' | 'staff';
+      }
+    ).userType;
 
     if (existingUserId && existingUserType) {
       return {
@@ -317,7 +434,8 @@ export class ChatGateway
       }
     }
 
-    const authToken = (client.handshake.auth as { token?: unknown } | undefined)?.token;
+    const authToken = (client.handshake.auth as { token?: unknown } | undefined)
+      ?.token;
     if (typeof authToken === 'string' && authToken.trim().length > 0) {
       return authToken.trim();
     }
@@ -337,20 +455,22 @@ export class ChatGateway
   }
 
   private parseCookieHeader(cookieHeader: string): Record<string, string> {
-    return cookieHeader.split(';').reduce<Record<string, string>>((acc, part) => {
-      const [rawKey, ...rawValueParts] = part.trim().split('=');
-      if (!rawKey || rawValueParts.length === 0) {
-        return acc;
-      }
+    return cookieHeader
+      .split(';')
+      .reduce<Record<string, string>>((acc, part) => {
+        const [rawKey, ...rawValueParts] = part.trim().split('=');
+        if (!rawKey || rawValueParts.length === 0) {
+          return acc;
+        }
 
-      const key = rawKey.trim();
-      const value = rawValueParts.join('=').trim();
-      if (!key || !value) {
-        return acc;
-      }
+        const key = rawKey.trim();
+        const value = rawValueParts.join('=').trim();
+        if (!key || !value) {
+          return acc;
+        }
 
-      acc[key] = decodeURIComponent(value);
-      return acc;
-    }, {});
+        acc[key] = decodeURIComponent(value);
+        return acc;
+      }, {});
   }
 }

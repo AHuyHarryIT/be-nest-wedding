@@ -42,7 +42,9 @@ describe('BookingSessionsController', () => {
       ],
     }).compile();
 
-    controller = module.get<BookingSessionsController>(BookingSessionsController);
+    controller = module.get<BookingSessionsController>(
+      BookingSessionsController,
+    );
   });
 
   it('applies JwtAuthGuard and PermissionsGuard on the controller', () => {
@@ -58,19 +60,34 @@ describe('BookingSessionsController', () => {
 
   it('defines explicit booking permission metadata for each CRUD route', () => {
     expect(
-      Reflect.getMetadata(PERMISSIONS_KEY, BookingSessionsController.prototype.create),
+      Reflect.getMetadata(
+        PERMISSIONS_KEY,
+        BookingSessionsController.prototype.create,
+      ),
     ).toEqual(['bookings:create']);
     expect(
-      Reflect.getMetadata(PERMISSIONS_KEY, BookingSessionsController.prototype.findAll),
+      Reflect.getMetadata(
+        PERMISSIONS_KEY,
+        BookingSessionsController.prototype.findAll,
+      ),
     ).toEqual(['bookings:read']);
     expect(
-      Reflect.getMetadata(PERMISSIONS_KEY, BookingSessionsController.prototype.findOne),
+      Reflect.getMetadata(
+        PERMISSIONS_KEY,
+        BookingSessionsController.prototype.findOne,
+      ),
     ).toEqual(['bookings:read']);
     expect(
-      Reflect.getMetadata(PERMISSIONS_KEY, BookingSessionsController.prototype.update),
+      Reflect.getMetadata(
+        PERMISSIONS_KEY,
+        BookingSessionsController.prototype.update,
+      ),
     ).toEqual(['bookings:update']);
     expect(
-      Reflect.getMetadata(PERMISSIONS_KEY, BookingSessionsController.prototype.remove),
+      Reflect.getMetadata(
+        PERMISSIONS_KEY,
+        BookingSessionsController.prototype.remove,
+      ),
     ).toEqual(['bookings:delete']);
   });
 
@@ -98,7 +115,9 @@ describe('BookingSessionsController', () => {
       expect.objectContaining({
         success: true,
         message: expect.any(String),
-        data: expect.arrayContaining([expect.objectContaining({ id: 'session-1' })]),
+        data: expect.arrayContaining([
+          expect.objectContaining({ id: 'session-1' }),
+        ]),
         pagination: expect.objectContaining({ page: 1, limit: 10, total: 1 }),
       }),
     );

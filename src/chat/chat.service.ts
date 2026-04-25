@@ -5,6 +5,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
+import { AiService } from '../ai/ai.service';
 import { CreateChatDto, SendMessageDto, UpdateChatDto } from './dto';
 import { ChatEntity, MessageEntity } from './entities';
 import { Prisma } from 'generated/prisma';
@@ -28,9 +29,15 @@ type ActiveParticipant =
 
 @Injectable()
 export class ChatService {
-  constructor(private prisma: DatabaseService) {}
+  constructor(
+    private prisma: DatabaseService,
+    private aiService: AiService,
+  ) {}
 
-  private canonicalThreadKey(customerId: string, bookingId?: string | null): string {
+  private canonicalThreadKey(
+    customerId: string,
+    bookingId?: string | null,
+  ): string {
     if (bookingId) {
       return `booking:${customerId}:${bookingId}`;
     }
@@ -38,8 +45,12 @@ export class ChatService {
     return `general:${customerId}`;
   }
 
-  private async resolveActiveParticipant(userId: string): Promise<ActiveParticipant> {
-    const customer = await this.prisma.customer.findUnique({ where: { id: userId } });
+  private async resolveActiveParticipant(
+    userId: string,
+  ): Promise<ActiveParticipant> {
+    const customer = await this.prisma.customer.findUnique({
+      where: { id: userId },
+    });
 
     if (customer?.isActive) {
       return { userType: 'customer', customerId: userId };
@@ -85,7 +96,10 @@ export class ChatService {
     return staff?.id ?? null;
   }
 
-  private async assertChatAccess(chatId: string, userId: string): Promise<ChatEntity> {
+  private async assertChatAccess(
+    chatId: string,
+    userId: string,
+  ): Promise<ChatEntity> {
     const chat = await this.getChat(chatId);
 
     if (chat.customerId === userId) {
@@ -146,9 +160,10 @@ export class ChatService {
         messages: Array<{ id: string }>;
       };
 
-      const { messages, ...chatWithoutMessages } = typed as ChatWithUnreadCount & {
-        messages: Array<{ id: string }>;
-      };
+      const { messages, ...chatWithoutMessages } =
+        typed as ChatWithUnreadCount & {
+          messages: Array<{ id: string }>;
+        };
 
       return {
         ...chatWithoutMessages,
@@ -274,7 +289,9 @@ export class ChatService {
         throw new NotFoundException('Booking not found');
       }
       if (booking.customerId !== customerId) {
-        throw new BadRequestException('Booking does not belong to the customer');
+        throw new BadRequestException(
+          'Booking does not belong to the customer',
+        );
       }
     }
 
@@ -434,10 +451,7 @@ export class ChatService {
     senderId: string,
   ): Promise<MessageEntity> {
     const { chatId, content } = sendMessageDto;
-
-    // Verify chat exists and sender access
     const chatData = await this.assertChatAccess(chatId, senderId);
-
     const participant = await this.resolveActiveParticipant(senderId);
 
     if (participant.userType === 'staff') {
@@ -447,14 +461,15 @@ export class ChatService {
     const message = await this.prisma.message.create({
       data: {
         chatId,
+        senderType: participant.userType === 'customer' ? 'CUSTOMER' : 'STAFF',
         senderCustomerId:
           participant.userType === 'customer' ? participant.customerId : null,
-        senderStaffId: participant.userType === 'staff' ? participant.staffId : null,
+        senderStaffId:
+          participant.userType === 'staff' ? participant.staffId : null,
         content,
       },
     });
 
-    // Update chat's lastMessageAt
     await this.prisma.chat.update({
       where: { id: chatData.id },
       data: { lastMessageAt: new Date() },
@@ -462,8 +477,66 @@ export class ChatService {
 
     return {
       ...(message as any),
-      senderId: message.senderCustomerId ?? message.senderStaffId,
+      senderId: message.senderCustomerId ?? message.senderStaffId ?? undefined,
+      senderType: message.senderType,
     } as MessageEntity;
+  }
+
+  async maybeSendAiReply(
+    chatId: string,
+    latestCustomerMessage: string,
+  ): Promise<MessageEntity | null> {
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return null;
+    }
+
+    const chat = await this.getChat(chatId);
+    if (!chat.aiEnabled) {
+      return null;
+    }
+
+    try {
+      const recentMessages = await this.prisma.message.findMany({
+        where: { chatId },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      });
+
+      const customerName = [chat.customer?.firstName, chat.customer?.lastName]
+        .filter((part) => Boolean(part && part.trim()))
+        .join(' ')
+        .trim();
+
+      const aiReply = await this.aiService.generateChatReply({
+        customerName: customerName || undefined,
+        latestMessage: latestCustomerMessage,
+        recentMessages: recentMessages.reverse().map((entry) => ({
+          senderType: entry.senderType,
+          content: entry.content,
+        })),
+      });
+
+      const aiMessage = await this.prisma.message.create({
+        data: {
+          chatId,
+          senderType: 'AI',
+          content: aiReply,
+        },
+      });
+
+      await this.prisma.chat.update({
+        where: { id: chatId },
+        data: { lastMessageAt: new Date() },
+      });
+
+      return {
+        ...(aiMessage as any),
+        senderId: undefined,
+        senderType: aiMessage.senderType,
+      } as MessageEntity;
+    } catch {
+      return null;
+    }
   }
 
   async getMessages(
@@ -482,7 +555,8 @@ export class ChatService {
 
     return messages.map((message) => ({
       ...(message as any),
-      senderId: message.senderCustomerId ?? message.senderStaffId,
+      senderId: message.senderCustomerId ?? message.senderStaffId ?? undefined,
+      senderType: message.senderType,
     })) as MessageEntity[];
   }
 
@@ -517,7 +591,8 @@ export class ChatService {
 
     return messages.map((message) => ({
       ...(message as any),
-      senderId: message.senderCustomerId ?? message.senderStaffId,
+      senderId: message.senderCustomerId ?? message.senderStaffId ?? undefined,
+      senderType: message.senderType,
     })) as MessageEntity[];
   }
 

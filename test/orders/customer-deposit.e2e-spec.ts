@@ -52,24 +52,26 @@ describe('Customer Orders deposit checkout (e2e)', () => {
   const now = Date.now();
 
   beforeAll(async () => {
-    momoCreatePaymentMock = jest.fn(async ({ bookingId, amount, orderInfo }) => ({
-      partnerCode: 'MOMO',
-      bookingId,
-      requestId: `req_${bookingId}`,
-      amount,
-      orderInfo,
-      orderType: 'wedding-booking',
-      transId: 0,
-      resultCode: 0,
-      message: 'Mocked payment created',
-      payUrl: `https://momo.test/pay/${bookingId}`,
-      qrCodeUrl: null,
-      qrCode: null,
-      deeplink: null,
-      signature: 'mock-signature',
-      responseTime: Date.now(),
-      orderId: `${bookingId}_mocked_order`,
-    }));
+    momoCreatePaymentMock = jest.fn(
+      async ({ bookingId, amount, orderInfo }) => ({
+        partnerCode: 'MOMO',
+        bookingId,
+        requestId: `req_${bookingId}`,
+        amount,
+        orderInfo,
+        orderType: 'wedding-booking',
+        transId: 0,
+        resultCode: 0,
+        message: 'Mocked payment created',
+        payUrl: `https://momo.test/pay/${bookingId}`,
+        qrCodeUrl: null,
+        qrCode: null,
+        deeplink: null,
+        signature: 'mock-signature',
+        responseTime: Date.now(),
+        orderId: `${bookingId}_mocked_order`,
+      }),
+    );
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [
@@ -96,7 +98,10 @@ describe('Customer Orders deposit checkout (e2e)', () => {
       .compile();
 
     app = moduleFixture.createNestApplication();
-    app.useGlobalPipes(new GlobalValidationPipe(), new ValidationPipe({ transform: true }));
+    app.useGlobalPipes(
+      new GlobalValidationPipe(),
+      new ValidationPipe({ transform: true }),
+    );
     app.useGlobalInterceptors(new ResponseInterceptor());
     app.useGlobalFilters(
       new PrismaExceptionFilter(),
@@ -138,7 +143,9 @@ describe('Customer Orders deposit checkout (e2e)', () => {
       .expect(201);
 
     expect(response.body.success).toBe(true);
-    expect(response.body.message).toBe('Deposit payment initiated successfully');
+    expect(response.body.message).toBe(
+      'Deposit payment initiated successfully',
+    );
     expect(response.body.data).toEqual(
       expect.objectContaining({
         paymentId: expect.any(String),

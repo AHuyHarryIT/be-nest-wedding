@@ -477,7 +477,9 @@ export class BookingsService {
     const overlapStart = new Date(
       Math.max(startA.getTime(), startB.getTime()),
     ).toISOString();
-    const overlapEnd = new Date(Math.min(endA.getTime(), endB.getTime())).toISOString();
+    const overlapEnd = new Date(
+      Math.min(endA.getTime(), endB.getTime()),
+    ).toISOString();
 
     return {
       overlapStart,
@@ -601,8 +603,12 @@ export class BookingsService {
             return;
           }
 
-          const existingStart = this.parseAssignmentDate(existingAssignment.startTime);
-          const existingEnd = this.parseAssignmentDate(existingAssignment.endTime);
+          const existingStart = this.parseAssignmentDate(
+            existingAssignment.startTime,
+          );
+          const existingEnd = this.parseAssignmentDate(
+            existingAssignment.endTime,
+          );
           if (!existingStart || !existingEnd || existingStart >= existingEnd) {
             return;
           }
@@ -629,7 +635,8 @@ export class BookingsService {
             staffId: assignment.staffId,
             source: 'booking',
             sourceId: existingBooking.id,
-            sourceTitle: existingAssignment.serviceLabel || existingAssignment.sourceKey,
+            sourceTitle:
+              existingAssignment.serviceLabel || existingAssignment.sourceKey,
             overlapStart: overlapWindow.overlapStart,
             overlapEnd: overlapWindow.overlapEnd,
             assignmentStart: assignment.startAt.toISOString(),
@@ -1553,7 +1560,8 @@ export class BookingsService {
     );
 
     if (conflicts.length > 0) {
-      const allowConflictOverride = conflictOptions.allowConflictOverride === true;
+      const allowConflictOverride =
+        conflictOptions.allowConflictOverride === true;
       const overrideReason =
         typeof conflictOptions.overrideReason === 'string'
           ? conflictOptions.overrideReason.trim()
@@ -1730,7 +1738,7 @@ export class BookingsService {
       BookingStatus.DEPOSIT_PAID,
     ]);
 
-    if (!confirmableStatuses.has(booking.status as BookingStatus)) {
+    if (!confirmableStatuses.has(booking.status)) {
       throw new BadRequestException(
         `Only PENDING or DEPOSIT_PAID bookings can be confirmed. Current status: ${booking.status}`,
       );

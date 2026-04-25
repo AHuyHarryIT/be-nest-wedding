@@ -4,7 +4,8 @@ import { IsInt, IsString } from 'class-validator';
 
 export class AdjustStockDto {
   @ApiProperty({
-    description: 'Number of items to add (positive) or remove (negative) from stock',
+    description:
+      'Number of items to add (positive) or remove (negative) from stock',
     example: 5,
   })
   @Type(() => Number)

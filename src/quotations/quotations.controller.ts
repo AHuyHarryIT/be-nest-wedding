@@ -39,11 +39,7 @@ import {
 import { QuotationsService } from './quotations.service';
 
 @ApiTags('Quotations')
-@ApiExtraModels(
-  CreateQuotationDto,
-  UpdateQuotationDto,
-  QueryQuotationDto,
-)
+@ApiExtraModels(CreateQuotationDto, UpdateQuotationDto, QueryQuotationDto)
 @Controller('quotations')
 export class QuotationsController {
   constructor(private readonly quotationsService: QuotationsService) {}
@@ -89,7 +85,10 @@ export class QuotationsController {
   @ApiUnauthorizedResponse()
   async findOne(@Param('id') id: string) {
     const quotation = await this.quotationsService.findOne(id);
-    return ResponseBuilder.success(quotation, 'Quotation retrieved successfully');
+    return ResponseBuilder.success(
+      quotation,
+      'Quotation retrieved successfully',
+    );
   }
 
   // ── Update ──
@@ -154,7 +153,10 @@ export class QuotationsController {
     @Body() dto: RemoveQuotationInventoryItemDto,
   ) {
     await this.quotationsService.removeInventoryItem(id, dto);
-    return ResponseBuilder.success(null, 'Inventory item removed from quotation');
+    return ResponseBuilder.success(
+      null,
+      'Inventory item removed from quotation',
+    );
   }
 
   // ── Remove Service Item ──
@@ -175,12 +177,12 @@ export class QuotationsController {
   @Post(':id/send')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT-auth')
-  async send(
-    @Param('id') id: string,
-    @Body() dto: QuotationStatusNoteDto,
-  ) {
+  async send(@Param('id') id: string, @Body() dto: QuotationStatusNoteDto) {
     // Extract validUntil from notes if provided, or default to 30 days
-    const quotation = await this.quotationsService.send(id, dto.note || undefined);
+    const quotation = await this.quotationsService.send(
+      id,
+      dto.note || undefined,
+    );
     return ResponseBuilder.updated(quotation, 'Quotation sent successfully');
   }
 
@@ -191,7 +193,10 @@ export class QuotationsController {
   @ApiBearerAuth('JWT-auth')
   async accept(@Param('id') id: string) {
     const quotation = await this.quotationsService.accept(id);
-    return ResponseBuilder.updated(quotation, 'Quotation accepted successfully');
+    return ResponseBuilder.updated(
+      quotation,
+      'Quotation accepted successfully',
+    );
   }
 
   // ── Reject ──
@@ -201,7 +206,10 @@ export class QuotationsController {
   @ApiBearerAuth('JWT-auth')
   async reject(@Param('id') id: string) {
     const quotation = await this.quotationsService.reject(id);
-    return ResponseBuilder.updated(quotation, 'Quotation rejected successfully');
+    return ResponseBuilder.updated(
+      quotation,
+      'Quotation rejected successfully',
+    );
   }
 
   // ── Convert to Booking ──

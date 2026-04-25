@@ -13,7 +13,10 @@ import {
 } from 'class-validator';
 import { QuotationStatus } from 'generated/prisma';
 import { Type } from 'class-transformer';
-import { AddQuotationInventoryItemDto, AddQuotationServiceItemDto } from './add-quotation-item.dto';
+import {
+  AddQuotationInventoryItemDto,
+  AddQuotationServiceItemDto,
+} from './add-quotation-item.dto';
 
 export class CreateQuotationDto {
   @ApiProperty({
@@ -67,7 +70,10 @@ export class CreateQuotationDto {
     maximum: 100,
   })
   @IsOptional()
-  @IsNumber({ maxDecimalPlaces: 2 }, { message: 'Discount percent must be a number' })
+  @IsNumber(
+    { maxDecimalPlaces: 2 },
+    { message: 'Discount percent must be a number' },
+  )
   @Min(0, { message: 'Discount percent cannot be negative' })
   @Max(100, { message: 'Discount percent cannot exceed 100' })
   @Type(() => Number)
@@ -81,7 +87,10 @@ export class CreateQuotationDto {
     maximum: 100,
   })
   @IsOptional()
-  @IsNumber({ maxDecimalPlaces: 2 }, { message: 'Tax percent must be a number' })
+  @IsNumber(
+    { maxDecimalPlaces: 2 },
+    { message: 'Tax percent must be a number' },
+  )
   @Min(0, { message: 'Tax percent cannot be negative' })
   @Max(100, { message: 'Tax percent cannot exceed 100' })
   @Type(() => Number)

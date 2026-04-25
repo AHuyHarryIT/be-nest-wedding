@@ -231,14 +231,18 @@ export class CustomersService {
           return {
             ...order,
             totalPaid: orderPaid,
-            balanceRemaining: order.balanceRemaining ?? (order.totalPrice - orderPaid),
+            balanceRemaining:
+              order.balanceRemaining ?? order.totalPrice - orderPaid,
             payments: orderPayments,
           };
         }),
       };
     });
 
-    const totalSpent = bookings.reduce((sum: number, b: any) => sum + b.totalPaid, 0);
+    const totalSpent = bookings.reduce(
+      (sum: number, b: any) => sum + b.totalPaid,
+      0,
+    );
     const visitCount = bookings.filter((b: any) =>
       ['COMPLETED', 'CONFIRMED'].includes(b.status),
     ).length;

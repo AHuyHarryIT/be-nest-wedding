@@ -34,7 +34,10 @@ describe('Chat unread + latest ordering synchronization contract (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
-    app.useGlobalPipes(new GlobalValidationPipe(), new ValidationPipe({ transform: true }));
+    app.useGlobalPipes(
+      new GlobalValidationPipe(),
+      new ValidationPipe({ transform: true }),
+    );
     app.useGlobalInterceptors(new ResponseInterceptor());
     app.useGlobalFilters(
       new PrismaExceptionFilter(),
@@ -64,9 +67,17 @@ describe('Chat unread + latest ordering synchronization contract (e2e)', () => {
       fixture.customerPhone,
       fixture.customerPassword,
     );
-    const staffToken = await loginStaff(app, fixture.staffPhone, fixture.staffPassword);
+    const staffToken = await loginStaff(
+      app,
+      fixture.staffPhone,
+      fixture.staffPassword,
+    );
 
-    const generalChat = await createChatAsCustomer(app, customerToken, fixture.customerId);
+    const generalChat = await createChatAsCustomer(
+      app,
+      customerToken,
+      fixture.customerId,
+    );
 
     await sendMessageAsStaff(
       app,
@@ -80,8 +91,9 @@ describe('Chat unread + latest ordering synchronization contract (e2e)', () => {
       .set('Authorization', `Bearer ${customerToken}`)
       .expect(200);
 
-    const threadBeforeRead = (chatsBeforeRead.body?.data as Array<{ id: string; unreadCount?: number }>)
-      .find((chat) => chat.id === generalChat.id);
+    const threadBeforeRead = (
+      chatsBeforeRead.body?.data as Array<{ id: string; unreadCount?: number }>
+    ).find((chat) => chat.id === generalChat.id);
 
     expect(threadBeforeRead).toBeDefined();
     expect(threadBeforeRead?.unreadCount).toBeGreaterThan(0);
@@ -96,8 +108,9 @@ describe('Chat unread + latest ordering synchronization contract (e2e)', () => {
       .set('Authorization', `Bearer ${customerToken}`)
       .expect(200);
 
-    const threadAfterRead = (chatsAfterRead.body?.data as Array<{ id: string; unreadCount?: number }>)
-      .find((chat) => chat.id === generalChat.id);
+    const threadAfterRead = (
+      chatsAfterRead.body?.data as Array<{ id: string; unreadCount?: number }>
+    ).find((chat) => chat.id === generalChat.id);
 
     expect(threadAfterRead).toBeDefined();
     expect(threadAfterRead?.unreadCount).toBe(0);
@@ -119,19 +132,39 @@ describe('Chat unread + latest ordering synchronization contract (e2e)', () => {
       fixture.customerPhone,
       fixture.customerPassword,
     );
-    const staffToken = await loginStaff(app, fixture.staffPhone, fixture.staffPassword);
+    const staffToken = await loginStaff(
+      app,
+      fixture.staffPhone,
+      fixture.staffPassword,
+    );
 
-    const generalChat = await createChatAsCustomer(app, customerToken, fixture.customerId);
+    const generalChat = await createChatAsCustomer(
+      app,
+      customerToken,
+      fixture.customerId,
+    );
 
-    await sendMessageAsStaff(app, staffToken, generalChat.id, 'Message 1 for unread reconcile');
-    await sendMessageAsStaff(app, staffToken, generalChat.id, 'Message 2 for unread reconcile');
+    await sendMessageAsStaff(
+      app,
+      staffToken,
+      generalChat.id,
+      'Message 1 for unread reconcile',
+    );
+    await sendMessageAsStaff(
+      app,
+      staffToken,
+      generalChat.id,
+      'Message 2 for unread reconcile',
+    );
 
     const unreadBefore = await request(app.getHttpServer())
       .get('/chats/unread-count')
       .set('Authorization', `Bearer ${customerToken}`)
       .expect(200);
 
-    expect(unreadBefore.body?.data?.count ?? unreadBefore.body?.count).toBeGreaterThanOrEqual(2);
+    expect(
+      unreadBefore.body?.data?.count ?? unreadBefore.body?.count,
+    ).toBeGreaterThanOrEqual(2);
 
     await request(app.getHttpServer())
       .put(`/chats/${generalChat.id}/messages/read`)
@@ -150,8 +183,9 @@ describe('Chat unread + latest ordering synchronization contract (e2e)', () => {
       .set('Authorization', `Bearer ${customerToken}`)
       .expect(200);
 
-    const refreshedThread = (refreshedList.body?.data as Array<{ id: string; unreadCount?: number }>)
-      .find((chat) => chat.id === generalChat.id);
+    const refreshedThread = (
+      refreshedList.body?.data as Array<{ id: string; unreadCount?: number }>
+    ).find((chat) => chat.id === generalChat.id);
 
     expect(refreshedThread).toBeDefined();
     expect(refreshedThread?.unreadCount).toBe(0);
@@ -163,11 +197,24 @@ describe('Chat unread + latest ordering synchronization contract (e2e)', () => {
       fixture.customerPhone,
       fixture.customerPassword,
     );
-    const staffToken = await loginStaff(app, fixture.staffPhone, fixture.staffPassword);
+    const staffToken = await loginStaff(
+      app,
+      fixture.staffPhone,
+      fixture.staffPassword,
+    );
 
-    const olderThread = await createChatAsCustomer(app, customerToken, fixture.customerId);
+    const olderThread = await createChatAsCustomer(
+      app,
+      customerToken,
+      fixture.customerId,
+    );
 
-    await sendMessageAsStaff(app, staffToken, olderThread.id, 'Older thread baseline');
+    await sendMessageAsStaff(
+      app,
+      staffToken,
+      olderThread.id,
+      'Older thread baseline',
+    );
 
     await new Promise((resolve) => setTimeout(resolve, 20));
 
@@ -176,7 +223,11 @@ describe('Chat unread + latest ordering synchronization contract (e2e)', () => {
       .slice(-12)
       .padStart(12, '0')}`;
 
-    await ensureBookingExists(databaseService, fixture.customerId, newerBookingId);
+    await ensureBookingExists(
+      databaseService,
+      fixture.customerId,
+      newerBookingId,
+    );
 
     const newerThread = await createChatAsCustomer(
       app,
@@ -185,7 +236,12 @@ describe('Chat unread + latest ordering synchronization contract (e2e)', () => {
       newerBookingId,
     );
 
-    await sendMessageAsStaff(app, staffToken, newerThread.id, 'Newer thread latest activity');
+    await sendMessageAsStaff(
+      app,
+      staffToken,
+      newerThread.id,
+      'Newer thread latest activity',
+    );
 
     const chatsResponse = await request(app.getHttpServer())
       .get('/chats')
@@ -218,7 +274,9 @@ async function loginCustomer(
     (response.body?.accessToken as string | undefined);
 
   if (!accessToken) {
-    throw new Error(`Expected customer access token from /auth/login, got: ${JSON.stringify(response.body)}`);
+    throw new Error(
+      `Expected customer access token from /auth/login, got: ${JSON.stringify(response.body)}`,
+    );
   }
 
   return accessToken;
@@ -239,7 +297,9 @@ async function loginStaff(
     (response.body?.accessToken as string | undefined);
 
   if (!accessToken) {
-    throw new Error(`Expected staff access token from /auth/login, got: ${JSON.stringify(response.body)}`);
+    throw new Error(
+      `Expected staff access token from /auth/login, got: ${JSON.stringify(response.body)}`,
+    );
   }
 
   return accessToken;
@@ -280,7 +340,9 @@ async function ensureBookingExists(
   customerId: string,
   bookingId: string,
 ): Promise<void> {
-  const existing = await databaseService.booking.findUnique({ where: { id: bookingId } });
+  const existing = await databaseService.booking.findUnique({
+    where: { id: bookingId },
+  });
   if (existing) {
     return;
   }
@@ -399,7 +461,9 @@ async function cleanupFixture(
 
     const chatIds = customerChats.map((chat) => chat.id);
     if (chatIds.length > 0) {
-      await databaseService.message.deleteMany({ where: { chatId: { in: chatIds } } });
+      await databaseService.message.deleteMany({
+        where: { chatId: { in: chatIds } },
+      });
       await databaseService.chat.deleteMany({ where: { id: { in: chatIds } } });
     }
 
@@ -408,7 +472,9 @@ async function cleanupFixture(
       .filter((bookingId): bookingId is string => Boolean(bookingId));
 
     if (bookingIds.length > 0) {
-      await databaseService.booking.deleteMany({ where: { id: { in: bookingIds } } });
+      await databaseService.booking.deleteMany({
+        where: { id: { in: bookingIds } },
+      });
     }
 
     await databaseService.customer.delete({ where: { id: customer.id } });
@@ -422,7 +488,9 @@ async function cleanupFixture(
   });
 
   if (role) {
-    await databaseService.rolePermission.deleteMany({ where: { roleId: role.id } });
+    await databaseService.rolePermission.deleteMany({
+      where: { roleId: role.id },
+    });
     await databaseService.role.delete({ where: { id: role.id } });
   }
 

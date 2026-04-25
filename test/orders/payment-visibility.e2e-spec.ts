@@ -78,7 +78,10 @@ describe('Orders payment visibility summary contract (e2e)', () => {
       .compile();
 
     app = moduleFixture.createNestApplication();
-    app.useGlobalPipes(new GlobalValidationPipe(), new ValidationPipe({ transform: true }));
+    app.useGlobalPipes(
+      new GlobalValidationPipe(),
+      new ValidationPipe({ transform: true }),
+    );
     app.useGlobalInterceptors(new ResponseInterceptor());
     app.useGlobalFilters(
       new PrismaExceptionFilter(),
@@ -102,7 +105,11 @@ describe('Orders payment visibility summary contract (e2e)', () => {
   });
 
   it('exposes baseline unpaid summary via existing GET /orders and GET /orders/:bookingId', async () => {
-    const staffToken = await loginStaff(app, fixture.staffPhoneNumber, '123456');
+    const staffToken = await loginStaff(
+      app,
+      fixture.staffPhoneNumber,
+      '123456',
+    );
 
     const listResponse = await request(app.getHttpServer())
       .get('/orders')
@@ -110,7 +117,9 @@ describe('Orders payment visibility summary contract (e2e)', () => {
       .expect(200);
 
     const orders = extractOrders(listResponse.body);
-    const listRecord = orders.find((order) => order.bookingId === fixture.bookingId);
+    const listRecord = orders.find(
+      (order) => order.bookingId === fixture.bookingId,
+    );
     expect(listRecord).toBeDefined();
     expect(listRecord?.status).toBe('UNPAID');
 
@@ -142,7 +151,11 @@ describe('Orders payment visibility summary contract (e2e)', () => {
   });
 
   it('reflects reconciled payment totals/status through the same summary contract for list and detail', async () => {
-    const staffToken = await loginStaff(app, fixture.staffPhoneNumber, '123456');
+    const staffToken = await loginStaff(
+      app,
+      fixture.staffPhoneNumber,
+      '123456',
+    );
 
     const callbackResponse = await request(app.getHttpServer())
       .post('/orders/momo/callback')
@@ -166,7 +179,9 @@ describe('Orders payment visibility summary contract (e2e)', () => {
       })
       .expect(200);
 
-    const callbackData = extractData<{ resultCode: number }>(callbackResponse.body);
+    const callbackData = extractData<{ resultCode: number }>(
+      callbackResponse.body,
+    );
     expect(callbackData.resultCode).toBe(0);
 
     const repeatedCallbackResponse = await request(app.getHttpServer())
@@ -202,7 +217,9 @@ describe('Orders payment visibility summary contract (e2e)', () => {
       .expect(200);
 
     const orders = extractOrders(listResponse.body);
-    const listRecord = orders.find((order) => order.bookingId === fixture.bookingId);
+    const listRecord = orders.find(
+      (order) => order.bookingId === fixture.bookingId,
+    );
     expect(listRecord).toBeDefined();
     expect(listRecord?.status).toBe('PARTIAL');
 
