@@ -826,6 +826,12 @@ enum ChatType {
   GROUP
 }
 
+enum MessageSenderType {
+  CUSTOMER
+  STAFF
+  AI
+}
+
 model Chat {
   id                 String    @id @default(uuid())
   customerId         String    @map("customer_id")
@@ -835,6 +841,7 @@ model Chat {
   chatType           ChatType  @default(DIRECT)
   lastMessageAt      DateTime? @map("last_message_at")
   isArchived         Boolean   @default(false) @map("is_archived")
+  aiEnabled          Boolean   @default(true) @map("ai_enabled")
 
   // relation
   customer Customer  @relation("chat_customer", fields: [customerId], references: [id], onDelete: Cascade)
@@ -855,10 +862,11 @@ model Chat {
 }
 
 model Message {
-  id               String    @id @default(uuid())
-  chatId           String    @map("chat_id")
-  senderCustomerId String?   @map("sender_customer_id")
-  senderStaffId    String?   @map("sender_staff_id")
+  id               String            @id @default(uuid())
+  chatId           String            @map("chat_id")
+  senderType       MessageSenderType @default(CUSTOMER) @map("sender_type")
+  senderCustomerId String?           @map("sender_customer_id")
+  senderStaffId    String?           @map("sender_staff_id")
   content          String
   isRead           Boolean   @default(false) @map("is_read")
   readAt           DateTime? @map("read_at")

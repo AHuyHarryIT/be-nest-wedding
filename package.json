@@ -35,6 +35,7 @@
     "commitlint": "commitlint --edit"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.90.0",
     "@azure/msal-node": "^3.8.4",
     "@microsoft/microsoft-graph-client": "^3.0.7",
     "@nestjs/common": "^11.0.1",
@@ -75,6 +76,7 @@
     "@nestjs/schematics": "^11.0.0",
     "@nestjs/swagger": "^11.2.0",
     "@nestjs/testing": "^11.0.1",
+    "@playwright/test": "^1.59.1",
     "@types/archiver": "^7.0.0",
     "@types/bcryptjs": "^2.4.6",
     "@types/cookie-parser": "^1.4.9",

@@ -932,10 +932,10 @@ describe('BookingsService', () => {
     expect(result.status).toBe(BookingStatus.CONFIRMED);
   });
 
-  it('rejects status-only completion updates from RESCHEDULED status', async () => {
+  it('rejects status-only completion updates from DEPOSIT_PAID status', async () => {
     databaseServiceMock.booking.findFirst.mockResolvedValue({
       ...baseBooking,
-      status: BookingStatus.RESCHEDULED,
+      status: BookingStatus.DEPOSIT_PAID,
       assignedStaffs: [],
     });
 
@@ -948,10 +948,10 @@ describe('BookingsService', () => {
     expect(databaseServiceMock.booking.update).not.toHaveBeenCalled();
   });
 
-  it('allows status-only confirm updates from RESCHEDULED status', async () => {
+  it('allows status-only confirm updates from DEPOSIT_PAID status', async () => {
     databaseServiceMock.booking.findFirst.mockResolvedValue({
       ...baseBooking,
-      status: BookingStatus.RESCHEDULED,
+      status: BookingStatus.DEPOSIT_PAID,
       assignedStaffs: [],
     });
     databaseServiceMock.booking.update.mockResolvedValue({

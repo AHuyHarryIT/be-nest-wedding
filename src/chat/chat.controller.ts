@@ -11,6 +11,7 @@ import {
   Query,
   ForbiddenException,
   UnauthorizedException,
+  BadRequestException,
 } from '@nestjs/common';
 import { ChatService } from './chat.service';
 import { ChatGateway } from './chat.gateway';
@@ -174,6 +175,10 @@ export class ChatController {
     @Body() body: { content: string },
     @Request() req: any,
   ): Promise<MessageEntity> {
+    if (typeof body?.content !== 'string' || !body.content.trim()) {
+      throw new BadRequestException('Content is required');
+    }
+
     const senderId = this.getUserId(req);
     const sendMessageDto: SendMessageDto = {
       chatId,
@@ -213,9 +218,9 @@ export class ChatController {
   @Get(':chatId/messages')
   async getMessages(
     @Param('chatId') chatId: string,
+    @Request() req: unknown,
     @Query('skip') skip?: string,
     @Query('take') take?: string,
-    @Request() req: unknown,
   ): Promise<MessageEntity[]> {
     const userId = this.getUserId(req);
     const skipNum = skip ? parseInt(skip, 10) : 0;

@@ -1276,12 +1276,11 @@ export class BookingsService {
         const confirmableStatuses = new Set<BookingStatus>([
           BookingStatus.PENDING,
           BookingStatus.DEPOSIT_PAID,
-          BookingStatus.RESCHEDULED,
         ]);
 
         if (!confirmableStatuses.has(booking.status as BookingStatus)) {
           throw new BadRequestException(
-            `Only PENDING, DEPOSIT_PAID, or RESCHEDULED bookings can be confirmed. Current status: ${booking.status}`,
+            `Only PENDING or DEPOSIT_PAID bookings can be confirmed. Current status: ${booking.status}`,
           );
         }
       }
@@ -1729,12 +1728,11 @@ export class BookingsService {
     const confirmableStatuses = new Set<BookingStatus>([
       BookingStatus.PENDING,
       BookingStatus.DEPOSIT_PAID,
-      BookingStatus.RESCHEDULED,
     ]);
 
     if (!confirmableStatuses.has(booking.status as BookingStatus)) {
       throw new BadRequestException(
-        `Only PENDING, DEPOSIT_PAID, or RESCHEDULED bookings can be confirmed. Current status: ${booking.status}`,
+        `Only PENDING or DEPOSIT_PAID bookings can be confirmed. Current status: ${booking.status}`,
       );
     }
 
