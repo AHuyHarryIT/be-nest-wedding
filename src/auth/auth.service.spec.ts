@@ -184,6 +184,89 @@ describe('AuthService', () => {
     expect(authIdentityServiceMock.findByRefreshToken).not.toHaveBeenCalled();
   });
 
+  it('changes password for staff user when current password is correct', async () => {
+    authIdentityServiceMock.findById.mockResolvedValue({
+      id: 'staff-1',
+      userType: 'staff',
+      phoneNumber: '0987654321',
+      passwordHash: 'old-password-hash',
+      isActive: true,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    });
+
+    (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+    (bcrypt.hash as jest.Mock).mockResolvedValue('new-password-hash');
+    databaseServiceMock.staff.update.mockResolvedValue({ id: 'staff-1' });
+
+    const result = await service.changePassword(
+      'staff-1',
+      {
+        currentPassword: 'old-password',
+        newPassword: 'new-password',
+      },
+      'staff',
+    );
+
+    expect(authIdentityServiceMock.findById).toHaveBeenCalledWith(
+      'staff',
+      'staff-1',
+    );
+    expect(bcrypt.compare).toHaveBeenCalledWith(
+      'old-password',
+      'old-password-hash',
+    );
+    expect(bcrypt.hash).toHaveBeenCalledWith('new-password', 10);
+    expect(databaseServiceMock.staff.update).toHaveBeenCalledWith({
+      where: { id: 'staff-1' },
+      data: { passwordHash: 'new-password-hash' },
+    });
+    expect(result).toEqual({ message: 'Password changed successfully' });
+  });
+
+  it('throws UnauthorizedException when current password is incorrect', async () => {
+    authIdentityServiceMock.findById.mockResolvedValue({
+      id: 'staff-1',
+      userType: 'staff',
+      phoneNumber: '0987654321',
+      passwordHash: 'old-password-hash',
+      isActive: true,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    });
+
+    (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+
+    await expect(
+      service.changePassword(
+        'staff-1',
+        {
+          currentPassword: 'wrong-password',
+          newPassword: 'new-password',
+        },
+        'staff',
+      ),
+    ).rejects.toThrow(UnauthorizedException);
+
+    expect(databaseServiceMock.staff.update).not.toHaveBeenCalled();
+  });
+
+  it('throws UnauthorizedException when user is not found for changePassword', async () => {
+    authIdentityServiceMock.findById.mockResolvedValue(null);
+
+    await expect(
+      service.changePassword(
+        'staff-404',
+        {
+          currentPassword: 'old-password',
+          newPassword: 'new-password',
+        },
+        'staff',
+      ),
+    ).rejects.toThrow(UnauthorizedException);
+
+    expect(bcrypt.compare).not.toHaveBeenCalled();
+    expect(databaseServiceMock.staff.update).not.toHaveBeenCalled();
+  });
+
   it('updateProfile normalizes phone and persists normalized value for customer updates', async () => {
     authIdentityServiceMock.findById.mockResolvedValue({
       id: 'customer-1',

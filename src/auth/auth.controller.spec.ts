@@ -9,6 +9,7 @@ describe('AuthController', () => {
   const authServiceMock = {
     refreshTokens: jest.fn(),
     logout: jest.fn(),
+    changePassword: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -62,6 +63,31 @@ describe('AuthController', () => {
     await expect(controller.refresh(request, response)).rejects.toThrow(
       UnauthorizedException,
     );
+  });
+
+  it('passes through changePassword request to auth service', async () => {
+    authServiceMock.changePassword.mockResolvedValue({
+      message: 'Password changed successfully',
+    });
+
+    const user = {
+      userId: 'staff-1',
+      userType: 'staff',
+    } as any;
+
+    const dto = {
+      currentPassword: 'old-password',
+      newPassword: 'new-password',
+    };
+
+    const result = await controller.changePassword(user, dto as any);
+
+    expect(authServiceMock.changePassword).toHaveBeenCalledWith(
+      'staff-1',
+      dto,
+      'staff',
+    );
+    expect(result).toEqual({ message: 'Password changed successfully' });
   });
 
   it('passes cookie-identified session token to logout service (D-04)', async () => {
