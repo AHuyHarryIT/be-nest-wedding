@@ -10,6 +10,7 @@ import {
   PaymentMethod,
   PaymentStatus,
   PaymentType,
+  RefundReason,
 } from 'generated/prisma';
 import { DatabaseService } from '../database/database.service';
 import { PaymentEventsService } from '../payments/events/payment-events.service';
@@ -21,12 +22,14 @@ import {
 import { PaymentAttemptService } from '../payments/payment-attempt.service';
 import { PaymentCoreService as PaymentService } from '../payments/payment-core.service';
 import { PaymentGatewayTransactionService } from '../payments/payment-gateway-transaction.service';
+import { RefundService } from '../payments/refund.service';
 import { MomoTransactionQueryResponse } from '../payments/momo.service';
 import { CheckoutDto } from './dto';
 
 @Injectable()
 export class OrdersService {
   private readonly MIN_DEPOSIT_PERCENTAGE = 30;
+  private readonly STALE_PENDING_DEPOSIT_MS = 30 * 60 * 1000;
   private readonly logger = new Logger('OrdersService');
 
   constructor(
@@ -36,6 +39,7 @@ export class OrdersService {
     private readonly paymentAttemptService: PaymentAttemptService,
     private readonly gatewayTransactionService: PaymentGatewayTransactionService,
     private readonly paymentEventsService: PaymentEventsService,
+    private readonly refundService: RefundService,
   ) {}
 
   /**
@@ -62,7 +66,7 @@ export class OrdersService {
     if (!existingOrder) {
       return this.createNewOrder(booking, checkoutDto);
     } else {
-      return this.payRemaining(existingOrder.id, checkoutDto);
+      return this.payRemaining(checkoutDto.bookingId, checkoutDto);
     }
   }
 
@@ -126,11 +130,10 @@ export class OrdersService {
       };
     }
 
-    const hasSuccessfulPayment = existingOrder.payments.some(
-      (payment) => payment.status === PaymentStatus.SUCCESSFUL,
-    );
+    const { outstandingDepositAmount, isDepositComplete } =
+      this.calculateDepositProgress(existingOrder);
 
-    if (hasSuccessfulPayment) {
+    if (isDepositComplete) {
       throw new BadRequestException(
         'Deposit has already been recorded for this booking',
       );
@@ -154,13 +157,26 @@ export class OrdersService {
         payment.status === PaymentStatus.PENDING,
     );
 
-    if (!depositPayment) {
-      const depositAmount =
-        (existingOrder.totalPrice * this.MIN_DEPOSIT_PERCENTAGE) / 100;
+    if (depositPayment) {
+      const isPendingPaymentFresh =
+        Date.now() - depositPayment.updatedAt.getTime() <=
+        this.STALE_PENDING_DEPOSIT_MS;
 
+      if (!isPendingPaymentFresh) {
+        this.logger.warn(
+          `Pending deposit payment ${depositPayment.id} is stale for booking ${bookingId}; rotating to new payment`,
+        );
+        await this.paymentService.updatePayment(depositPayment.id, {
+          status: PaymentStatus.ABANDONED,
+        });
+        depositPayment = undefined;
+      }
+    }
+
+    if (!depositPayment) {
       depositPayment = await this.paymentService.createPayment({
         orderId: existingOrder.id,
-        amount: depositAmount,
+        amount: outstandingDepositAmount,
         method: PaymentMethod.E_WALLET,
         paymentType: PaymentType.DEPOSIT,
         description: `Customer deposit (${this.MIN_DEPOSIT_PERCENTAGE}%)`,
@@ -182,6 +198,38 @@ export class OrdersService {
       order,
       paymentId: depositPayment.id,
       momo,
+    };
+  }
+
+  private calculateDepositProgress(order: {
+    totalPrice: number;
+    payments: Array<{
+      amount: number;
+      status: PaymentStatus;
+      paymentType: PaymentType;
+    }>;
+  }) {
+    const requiredDepositAmount =
+      (order.totalPrice * this.MIN_DEPOSIT_PERCENTAGE) / 100;
+
+    const successfulDepositAmount = order.payments
+      .filter(
+        (payment) =>
+          payment.paymentType === PaymentType.DEPOSIT &&
+          payment.status === PaymentStatus.SUCCESSFUL,
+      )
+      .reduce((sum, payment) => sum + payment.amount, 0);
+
+    const outstandingDepositAmount = Math.max(
+      0,
+      requiredDepositAmount - successfulDepositAmount,
+    );
+
+    return {
+      requiredDepositAmount,
+      successfulDepositAmount,
+      outstandingDepositAmount,
+      isDepositComplete: outstandingDepositAmount <= 0,
     };
   }
 
@@ -546,7 +594,44 @@ export class OrdersService {
       return;
     }
 
+    const existingGatewayTransaction =
+      await this.databaseService.paymentGatewayTransaction.findFirst({
+        where: {
+          paymentId: payment.id,
+          gatewayProvider: 'momo',
+          OR: [
+            { gatewayOrderId },
+            ...(status.transId
+              ? [{ gatewayTransactionId: status.transId.toString() }]
+              : []),
+          ],
+        },
+      });
+
     if (payment.status === PaymentStatus.SUCCESSFUL) {
+      if (!existingGatewayTransaction) {
+        const successfulAttempt = payment.attempts.find(
+          (attempt) => attempt.status === 'SUCCESS',
+        );
+
+        await this.gatewayTransactionService.recordTransaction({
+          paymentId: payment.id,
+          paymentAttemptId: successfulAttempt?.id,
+          gatewayProvider: 'momo',
+          gatewayTransactionId: status.transId?.toString(),
+          gatewayOrderId,
+          amount: payment.amount,
+          gatewayStatus: status.resultCode?.toString(),
+          gatewayResponse: status,
+        });
+
+        await this.createDuplicateDepositRefundIfNeeded(
+          payment,
+          gatewayOrderId,
+          status,
+        );
+      }
+
       await this.paymentService.updateOrderStatus(payment.orderId);
       return;
     }
@@ -563,20 +648,6 @@ export class OrdersService {
         status: 'SUCCESS',
         attemptedAmount: payment.amount,
       }));
-
-    const existingGatewayTransaction =
-      await this.databaseService.paymentGatewayTransaction.findFirst({
-        where: {
-          paymentId: payment.id,
-          gatewayProvider: 'momo',
-          OR: [
-            { gatewayOrderId },
-            ...(status.transId
-              ? [{ gatewayTransactionId: status.transId.toString() }]
-              : []),
-          ],
-        },
-      });
 
     if (!existingGatewayTransaction) {
       await this.gatewayTransactionService.recordTransaction({
@@ -596,6 +667,57 @@ export class OrdersService {
       'SUCCESS',
       status.resultCode?.toString(),
       status.message,
+    );
+  }
+
+  private async createDuplicateDepositRefundIfNeeded(
+    payment: {
+      id: string;
+      orderId: string;
+      paymentType: PaymentType;
+      method: PaymentMethod;
+      amount: number;
+    },
+    gatewayOrderId: string,
+    status: MomoTransactionQueryResponse | Partial<MomoIPNCallback>,
+  ): Promise<void> {
+    if (
+      payment.paymentType !== PaymentType.DEPOSIT ||
+      payment.method !== PaymentMethod.E_WALLET
+    ) {
+      return;
+    }
+
+    const duplicateCaptureKey = status.transId
+      ? `momo-duplicate-trans-${status.transId}`
+      : `momo-duplicate-order-${gatewayOrderId}`;
+
+    const existingDuplicateRefund = await this.databaseService.refund.findFirst(
+      {
+        where: {
+          orderId: payment.orderId,
+          originalPaymentId: payment.id,
+          reason: RefundReason.DUPLICATE,
+          notes: { contains: duplicateCaptureKey },
+        },
+      },
+    );
+
+    if (existingDuplicateRefund) {
+      return;
+    }
+
+    await this.refundService.createRefund({
+      orderId: payment.orderId,
+      originalPaymentId: payment.id,
+      amount: payment.amount,
+      reason: RefundReason.DUPLICATE,
+      description: 'Automatic refund for duplicate MOMO deposit capture',
+      notes: duplicateCaptureKey,
+    });
+
+    this.logger.warn(
+      `Created duplicate deposit refund for payment ${payment.id} (capture key: ${duplicateCaptureKey})`,
     );
   }
 
