@@ -14,6 +14,7 @@ import {
   AssignRolesToUserDto,
   CreateUserDto,
   QueryUserDto,
+  ResetUserPasswordDto,
   UpdateUserDto,
 } from './dto';
 
@@ -615,5 +616,47 @@ export class UsersService {
     });
 
     return await this.findOne(userId);
+  }
+
+  async resetPassword(id: string, resetUserPasswordDto: ResetUserPasswordDto) {
+    const user = await this.databaseService.staff.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`User with ID "${id}" not found`);
+    }
+
+    const saltRounds = Number(this.configService.get('HASH_SALT', 10)) || 10;
+    const passwordHash = await bcrypt.hash(
+      resetUserPasswordDto.newPassword,
+      saltRounds,
+    );
+
+    await this.databaseService.$transaction(async (tx) => {
+      await tx.staff.update({
+        where: { id },
+        data: {
+          passwordHash,
+          refreshToken: null,
+          refreshTokenExpiry: null,
+        },
+      });
+
+      await tx.authSession.updateMany({
+        where: {
+          staffId: id,
+          revokedAt: null,
+        },
+        data: {
+          revokedAt: new Date(),
+        },
+      });
+    });
+
+    return {
+      message: 'Staff password reset successfully',
+    };
   }
 }

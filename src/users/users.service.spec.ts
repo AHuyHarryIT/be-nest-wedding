@@ -13,6 +13,15 @@ describe('UsersService', () => {
     assertStaffIdAvailable: jest.fn(),
   };
 
+  const transactionMock = {
+    staff: {
+      update: jest.fn(),
+    },
+    authSession: {
+      updateMany: jest.fn(),
+    },
+  };
+
   const databaseServiceMock = {
     job: {
       findFirst: jest.fn(),
@@ -33,6 +42,7 @@ describe('UsersService', () => {
       createMany: jest.fn(),
       deleteMany: jest.fn(),
     },
+    $transaction: jest.fn(async (callback: any) => callback(transactionMock)),
   } as any;
 
   const configServiceMock = {
@@ -54,6 +64,9 @@ describe('UsersService', () => {
     databaseServiceMock.staff.delete.mockReset();
     databaseServiceMock.staffRole.createMany.mockReset();
     databaseServiceMock.staffRole.deleteMany.mockReset();
+    databaseServiceMock.$transaction.mockClear();
+    transactionMock.staff.update.mockReset();
+    transactionMock.authSession.updateMany.mockReset();
     service = new UsersService(
       databaseServiceMock,
       configServiceMock,
@@ -579,5 +592,52 @@ describe('UsersService', () => {
     expect(byId?.email).toBe('staff@example.com');
     expect(byPhone?.jobIds).toEqual(['job-1', 'job-2']);
     expect(byId?.jobs?.[0]?.name).toBe('Lead Photographer');
+  });
+
+  it('resets staff password and revokes active sessions', async () => {
+    (bcrypt.hash as jest.Mock).mockResolvedValue('hashed-new-password');
+    databaseServiceMock.staff.findUnique.mockResolvedValueOnce({ id: 'STF-001' });
+    transactionMock.staff.update.mockResolvedValue({ id: 'STF-001' });
+    transactionMock.authSession.updateMany.mockResolvedValue({ count: 2 });
+
+    const result = await service.resetPassword('STF-001', {
+      newPassword: 'NewPassword123',
+      confirmPassword: 'NewPassword123',
+    });
+
+    expect(databaseServiceMock.$transaction).toHaveBeenCalledTimes(1);
+    expect(transactionMock.staff.update).toHaveBeenCalledWith({
+      where: { id: 'STF-001' },
+      data: {
+        passwordHash: 'hashed-new-password',
+        refreshToken: null,
+        refreshTokenExpiry: null,
+      },
+    });
+    expect(transactionMock.authSession.updateMany).toHaveBeenCalledWith({
+      where: {
+        staffId: 'STF-001',
+        revokedAt: null,
+      },
+      data: {
+        revokedAt: expect.any(Date),
+      },
+    });
+    expect(result).toEqual({
+      message: 'Staff password reset successfully',
+    });
+  });
+
+  it('throws when resetting password for missing staff', async () => {
+    databaseServiceMock.staff.findUnique.mockResolvedValueOnce(null);
+
+    await expect(
+      service.resetPassword('STF-404', {
+        newPassword: 'NewPassword123',
+        confirmPassword: 'NewPassword123',
+      }),
+    ).rejects.toThrow('User with ID "STF-404" not found');
+
+    expect(databaseServiceMock.$transaction).not.toHaveBeenCalled();
   });
 });

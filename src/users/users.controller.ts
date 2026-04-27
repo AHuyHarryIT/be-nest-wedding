@@ -39,6 +39,7 @@ import {
   AssignRolesToUserDto,
   CreateUserDto,
   QueryUserDto,
+  ResetUserPasswordDto,
   UpdateUserDto,
 } from './dto';
 import { UsersService } from './users.service';
@@ -180,5 +181,32 @@ export class UsersController {
       user,
       'Roles removed from user successfully',
     );
+  }
+
+  @Post(':id/reset-password')
+  @RequirePermissions('users:update')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Reset a staff account password by ID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Staff password reset successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean', example: true },
+        message: { type: 'string', example: 'Staff password reset successfully' },
+      },
+    },
+  })
+  @ApiNotFoundResponse({ description: 'User not found' })
+  @ApiBadRequestResponse({ description: 'Invalid password payload' })
+  @ApiUnauthorizedResponse()
+  @ApiForbiddenResponse()
+  async resetPassword(
+    @Param('id') id: string,
+    @Body() resetUserPasswordDto: ResetUserPasswordDto,
+  ) {
+    const result = await this.usersService.resetPassword(id, resetUserPasswordDto);
+    return ResponseBuilder.success(result, result.message);
   }
 }
