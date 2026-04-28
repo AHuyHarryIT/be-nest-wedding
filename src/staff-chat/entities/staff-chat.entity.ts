@@ -7,4 +7,10 @@ export class StaffChatEntity {
   isArchived: boolean;
   createdAt: Date;
   updatedAt: Date;
+  customer?: {
+    id: string;
+    firstName?: string | null;
+    lastName?: string | null;
+    email?: string | null;
+  };
 }

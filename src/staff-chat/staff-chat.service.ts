@@ -150,6 +150,12 @@ export class StaffChatService {
     isArchived: boolean;
     createdAt: Date;
     updatedAt: Date;
+    customer?: {
+      id: string;
+      firstName: string | null;
+      lastName: string | null;
+      email: string | null;
+    };
   }): StaffChatEntity {
     return {
       id: chat.id,
@@ -160,6 +166,14 @@ export class StaffChatService {
       isArchived: chat.isArchived,
       createdAt: chat.createdAt,
       updatedAt: chat.updatedAt,
+      customer: chat.customer
+        ? {
+            id: chat.customer.id,
+            firstName: chat.customer.firstName,
+            lastName: chat.customer.lastName,
+            email: chat.customer.email,
+          }
+        : undefined,
     };
   }
 
@@ -192,6 +206,16 @@ export class StaffChatService {
   async getChat(chatId: string): Promise<StaffChatEntity> {
     const chat = await this.prisma.staffChat.findUnique({
       where: { id: chatId },
+      include: {
+        customer: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
+      },
     });
 
     if (!chat || chat.deletedAt) {
@@ -249,6 +273,16 @@ export class StaffChatService {
 
     const existing = await this.prisma.staffChat.findUnique({
       where: { canonicalThreadKey: canonicalKey },
+      include: {
+        customer: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
+      },
     });
     if (existing && !existing.deletedAt) {
       return this.mapChat(existing);
@@ -262,6 +296,16 @@ export class StaffChatService {
         staffId: defaultStaffId,
         bookingId: payload.bookingId ?? null,
         canonicalThreadKey: canonicalKey,
+      },
+      include: {
+        customer: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
       },
     });
 
@@ -277,6 +321,16 @@ export class StaffChatService {
       where: {
         customerId,
         deletedAt: null,
+      },
+      include: {
+        customer: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
       },
       orderBy: [{ lastMessageAt: 'desc' }, { createdAt: 'desc' }],
       skip,
@@ -296,6 +350,16 @@ export class StaffChatService {
     const chats = await this.prisma.staffChat.findMany({
       where: {
         deletedAt: null,
+      },
+      include: {
+        customer: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
       },
       orderBy: [{ lastMessageAt: 'desc' }, { createdAt: 'desc' }],
       skip,
