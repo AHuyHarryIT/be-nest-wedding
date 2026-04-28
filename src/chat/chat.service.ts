@@ -3,14 +3,60 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { AiService } from '../ai/ai.service';
-import { CreateChatDto, SendMessageDto, UpdateChatDto } from './dto';
+import {
+  ApiChatDto,
+  CreateChatDto,
+  SendMessageDto,
+  UpdateChatDto,
+} from './dto';
 import { ChatEntity, MessageEntity } from './entities';
 import { Prisma } from 'generated/prisma';
 
 const STAFF_ROLE_NAMES = ['super-admin', 'admin', 'manager', 'staff'];
+
+const parsePositiveInt = (
+  value: string | undefined,
+  fallback: number,
+): number => {
+  const parsed = Number.parseInt(value || '', 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+
+  return parsed;
+};
+
+const parseBoolean = (
+  value: string | undefined,
+  fallback: boolean,
+): boolean => {
+  if (typeof value !== 'string') {
+    return fallback;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'true') {
+    return true;
+  }
+
+  if (normalized === 'false') {
+    return false;
+  }
+
+  return fallback;
+};
+
+const getErrorType = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.name;
+  }
+
+  return typeof error;
+};
 
 type ChatWithUnreadCount = ChatEntity & {
   unreadCount: number;
@@ -27,8 +73,32 @@ type ActiveParticipant =
   | { userType: 'customer'; customerId: string }
   | { userType: 'staff'; staffId: string };
 
+export type ApiChatReplyResult = {
+  chat: ChatEntity;
+  customerMessage: MessageEntity;
+  aiMessage: MessageEntity | null;
+};
+
 @Injectable()
 export class ChatService {
+  private readonly logger = new Logger(ChatService.name);
+  private readonly maxContextMessages = parsePositiveInt(
+    process.env.CHAT_AI_MAX_CONTEXT_MESSAGES,
+    10,
+  );
+  private readonly maxInputChars = parsePositiveInt(
+    process.env.CHAT_AI_MAX_INPUT_CHARS,
+    6000,
+  );
+
+  private isChatAiEnabled(): boolean {
+    return parseBoolean(process.env.CHAT_AI_ENABLED, true);
+  }
+
+  private trimText(content: string, maxChars: number): string {
+    return content.trim().slice(0, maxChars);
+  }
+
   constructor(
     private prisma: DatabaseService,
     private aiService: AiService,
@@ -482,24 +552,107 @@ export class ChatService {
     } as MessageEntity;
   }
 
+  async sendApiChatReplyForCustomer(
+    customerId: string,
+    payload: ApiChatDto,
+  ): Promise<ApiChatReplyResult> {
+    const content = payload.content?.trim();
+    if (!content) {
+      throw new BadRequestException('Content is required');
+    }
+
+    let chat: ChatEntity;
+    if (payload.chatId) {
+      chat = await this.getChatForUser(payload.chatId, customerId);
+      if (chat.customerId !== customerId) {
+        throw new ForbiddenException(
+          'Customers can only message their own chats',
+        );
+      }
+    } else {
+      chat = await this.createChat({
+        customerId,
+        bookingId: payload.bookingId,
+      });
+    }
+
+    const customerMessage = await this.sendMessage(
+      {
+        chatId: chat.id,
+        content,
+      },
+      customerId,
+    );
+
+    this.maybeSendAiReply(chat.id, content, customerMessage.senderType).catch(
+      () => null,
+    );
+
+    const refreshedChat = await this.getChat(chat.id);
+
+    return {
+      chat: refreshedChat,
+      customerMessage,
+      aiMessage: null,
+    };
+  }
+
   async maybeSendAiReply(
     chatId: string,
     latestCustomerMessage: string,
+    senderType?: MessageEntity['senderType'],
   ): Promise<MessageEntity | null> {
-    if (!process.env.ANTHROPIC_API_KEY) {
+    if (senderType && senderType !== 'CUSTOMER') {
+      this.logger.log(
+        JSON.stringify({
+          event: 'chat_ai_reply_skipped',
+          chatId,
+          reason: 'sender_not_customer',
+          senderType,
+        }),
+      );
       return null;
     }
 
-    const chat = await this.getChat(chatId);
-    if (!chat.aiEnabled) {
+    if (!this.isChatAiEnabled()) {
+      this.logger.log(
+        JSON.stringify({
+          event: 'chat_ai_reply_skipped',
+          chatId,
+          reason: 'global_ai_disabled',
+        }),
+      );
+      return null;
+    }
+
+    if (!this.aiService.isConfigured()) {
+      this.logger.warn(
+        JSON.stringify({
+          event: 'chat_ai_reply_skipped',
+          chatId,
+          reason: 'missing_ai_provider_credentials',
+        }),
+      );
       return null;
     }
 
     try {
+      const chat = await this.getChat(chatId);
+      if (!chat.aiEnabled) {
+        this.logger.log(
+          JSON.stringify({
+            event: 'chat_ai_reply_skipped',
+            chatId,
+            reason: 'chat_ai_disabled',
+          }),
+        );
+        return null;
+      }
+
       const recentMessages = await this.prisma.message.findMany({
         where: { chatId },
         orderBy: { createdAt: 'desc' },
-        take: 10,
+        take: this.maxContextMessages,
       });
 
       const customerName = [chat.customer?.firstName, chat.customer?.lastName]
@@ -508,11 +661,12 @@ export class ChatService {
         .trim();
 
       const aiReply = await this.aiService.generateChatReply({
+        chatId,
         customerName: customerName || undefined,
-        latestMessage: latestCustomerMessage,
+        latestMessage: this.trimText(latestCustomerMessage, this.maxInputChars),
         recentMessages: recentMessages.reverse().map((entry) => ({
           senderType: entry.senderType,
-          content: entry.content,
+          content: this.trimText(entry.content, this.maxInputChars),
         })),
       });
 
@@ -529,12 +683,27 @@ export class ChatService {
         data: { lastMessageAt: new Date() },
       });
 
+      this.logger.log(
+        JSON.stringify({
+          event: 'chat_ai_reply_created',
+          chatId,
+          contextMessagesUsed: recentMessages.length,
+        }),
+      );
+
       return {
         ...(aiMessage as any),
         senderId: undefined,
         senderType: aiMessage.senderType,
       } as MessageEntity;
-    } catch {
+    } catch (error) {
+      this.logger.warn(
+        JSON.stringify({
+          event: 'chat_ai_reply_failed',
+          chatId,
+          errorType: getErrorType(error),
+        }),
+      );
       return null;
     }
   }
@@ -546,12 +715,14 @@ export class ChatService {
   ): Promise<MessageEntity[]> {
     await this.getChat(chatId);
 
-    const messages = await this.prisma.message.findMany({
+    const newestMessages = await this.prisma.message.findMany({
       where: { chatId },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { createdAt: 'desc' },
       skip,
       take,
     });
+
+    const messages = newestMessages.reverse();
 
     return messages.map((message) => ({
       ...(message as any),

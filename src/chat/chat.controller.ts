@@ -15,7 +15,12 @@ import {
 } from '@nestjs/common';
 import { ChatService } from './chat.service';
 import { ChatGateway } from './chat.gateway';
-import { CreateChatDto, SendMessageDto, UpdateChatDto } from './dto';
+import {
+  ApiChatDto,
+  CreateChatDto,
+  SendMessageDto,
+  UpdateChatDto,
+} from './dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RequirePermissions } from '../common/decorators/permissions.decorator';
 import { PermissionsGuard } from '../common/guards/permissions.guard';
@@ -35,7 +40,7 @@ interface RequestUser {
   userType?: 'customer' | 'staff';
 }
 
-@Controller('chats')
+@Controller()
 @UseGuards(JwtAuthGuard)
 export class ChatController {
   constructor(
@@ -90,8 +95,27 @@ export class ChatController {
     }
   }
 
+  @Post('api/chat')
+  async postApiChat(
+    @Body() apiChatDto: ApiChatDto,
+    @Request() req: unknown,
+  ): Promise<{
+    chat: ChatEntity;
+    customerMessage: MessageEntity;
+    aiMessage: MessageEntity | null;
+  }> {
+    const user = this.getUser(req);
+    const customerId = this.getUserId(req);
+
+    if (user.userType !== 'customer') {
+      throw new ForbiddenException('Only customers can use /api/chat');
+    }
+
+    return this.chatService.sendApiChatReplyForCustomer(customerId, apiChatDto);
+  }
+
   // Chat endpoints
-  @Post()
+  @Post('chats')
   async createChat(
     @Body() createChatDto: CreateChatDto,
     @Request() req: unknown,
@@ -100,7 +124,7 @@ export class ChatController {
     return this.chatService.createChat(createChatDto);
   }
 
-  @Get()
+  @Get('chats')
   async getChats(
     @Request() req: unknown,
     @Query('skip') skip?: string,
@@ -119,7 +143,7 @@ export class ChatController {
     return this.chatService.getChatsByCustomer(userId, skipNum, takeNum);
   }
 
-  @Get('staff')
+  @Get('chats/staff')
   @UseGuards(PermissionsGuard)
   @RequirePermissions('chat.read')
   async getChatsByStaff(
@@ -136,14 +160,14 @@ export class ChatController {
     return this.chatService.getChatsByStaff(staffId, skipNum, takeNum);
   }
 
-  @Get('unread-count')
+  @Get('chats/unread-count')
   async getUnreadCount(@Request() req: any): Promise<{ count: number }> {
     const userId = this.getUserId(req);
     const count = await this.chatService.getUnreadMessageCount(userId);
     return { count };
   }
 
-  @Get(':chatId')
+  @Get('chats/:chatId')
   async getChat(
     @Param('chatId') chatId: string,
     @Request() req: unknown,
@@ -152,26 +176,50 @@ export class ChatController {
     return this.chatService.getChatForUser(chatId, userId);
   }
 
-  @Put(':chatId')
+  @Put('chats/:chatId')
   async updateChat(
     @Param('chatId') chatId: string,
     @Body() updateChatDto: UpdateChatDto,
+    @Request() req: unknown,
   ): Promise<ChatEntity> {
+    const user = this.getUser(req);
+    const userId = this.getUserId(req);
+
+    await this.chatService.getChatForUser(chatId, userId);
+
+    if (user.userType !== 'staff') {
+      if (
+        typeof updateChatDto.aiEnabled === 'boolean' ||
+        typeof updateChatDto.staffId === 'string' ||
+        typeof updateChatDto.isArchived === 'boolean'
+      ) {
+        throw new ForbiddenException('Customers cannot change chat settings');
+      }
+    }
+
+    if (typeof updateChatDto.aiEnabled === 'boolean') {
+      if (user.userType !== 'staff') {
+        throw new ForbiddenException('Only staff can change AI settings');
+      }
+
+      await this.chatService.ensureStaffReplyPermission(userId);
+    }
+
     return this.chatService.updateChat(chatId, updateChatDto);
   }
 
-  @Put(':chatId/archive')
+  @Put('chats/:chatId/archive')
   async archiveChat(@Param('chatId') chatId: string): Promise<ChatEntity> {
     return this.chatService.archiveChat(chatId);
   }
 
-  @Delete(':chatId')
+  @Delete('chats/:chatId')
   async deleteChat(@Param('chatId') chatId: string): Promise<void> {
     return this.chatService.deleteChat(chatId);
   }
 
   // Message endpoints
-  @Post(':chatId/messages')
+  @Post('chats/:chatId/messages')
   async sendMessage(
     @Param('chatId') chatId: string,
     @Body() body: { content: string },
@@ -193,7 +241,7 @@ export class ChatController {
 
     // Emit real-time message event via Socket.IO
     const chatData = await this.chatService.getChat(chatId);
-    void this.chatGateway.server.to(`chat:${chatId}`).emit('message_received', {
+    this.chatGateway.server.to(`chat:${chatId}`).emit('message_received', {
       id: message.id,
       chatId: message.chatId,
       senderId: message.senderId,
@@ -206,7 +254,7 @@ export class ChatController {
     const otherUserId =
       chatData.customerId === senderId ? chatData.staffId : chatData.customerId;
     if (otherUserId) {
-      void this.chatGateway.server
+      this.chatGateway.server
         .to(`user:${otherUserId}`)
         .emit('new_message_notification', {
           chatId: chatId,
@@ -215,48 +263,50 @@ export class ChatController {
     }
 
     if (message.senderType === 'CUSTOMER') {
-      const aiMessage = await this.chatService.maybeSendAiReply(
-        chatId,
-        body.content,
-      );
+      this.chatService
+        .maybeSendAiReply(chatId, body.content, message.senderType)
+        .then((aiMessage) => {
+          if (!aiMessage) {
+            return;
+          }
 
-      if (aiMessage) {
-        void this.chatGateway.server
-          .to(`chat:${chatId}`)
-          .emit('message_received', {
-            id: aiMessage.id,
-            chatId: aiMessage.chatId,
-            senderId: aiMessage.senderId,
-            senderType: aiMessage.senderType,
-            content: aiMessage.content,
-            isRead: aiMessage.isRead,
-            createdAt: aiMessage.createdAt,
-          });
-
-        if (chatData.customerId) {
-          void this.chatGateway.server
-            .to(`user:${chatData.customerId}`)
-            .emit('new_message_notification', {
-              chatId: chatId,
-              messageCount: 1,
+          this.chatGateway.server
+            .to(`chat:${chatId}`)
+            .emit('message_received', {
+              id: aiMessage.id,
+              chatId: aiMessage.chatId,
+              senderId: aiMessage.senderId,
+              senderType: aiMessage.senderType,
+              content: aiMessage.content,
+              isRead: aiMessage.isRead,
+              createdAt: aiMessage.createdAt,
             });
-        }
 
-        if (chatData.staffId) {
-          void this.chatGateway.server
-            .to(`user:${chatData.staffId}`)
-            .emit('new_message_notification', {
-              chatId: chatId,
-              messageCount: 1,
-            });
-        }
-      }
+          if (chatData.customerId) {
+            this.chatGateway.server
+              .to(`user:${chatData.customerId}`)
+              .emit('new_message_notification', {
+                chatId: chatId,
+                messageCount: 1,
+              });
+          }
+
+          if (chatData.staffId) {
+            this.chatGateway.server
+              .to(`user:${chatData.staffId}`)
+              .emit('new_message_notification', {
+                chatId: chatId,
+                messageCount: 1,
+              });
+          }
+        })
+        .catch(() => null);
     }
 
     return message;
   }
 
-  @Get(':chatId/messages')
+  @Get('chats/:chatId/messages')
   async getMessages(
     @Param('chatId') chatId: string,
     @Request() req: unknown,
@@ -272,7 +322,7 @@ export class ChatController {
     return this.chatService.getMessages(chatId, skipNum, takeNum);
   }
 
-  @Get(':chatId/messages/unread')
+  @Get('chats/:chatId/messages/unread')
   async getUnreadMessages(
     @Param('chatId') chatId: string,
     @Request() req: any,
@@ -281,7 +331,7 @@ export class ChatController {
     return this.chatService.getUnreadMessages(chatId, userId);
   }
 
-  @Put(':chatId/messages/read')
+  @Put('chats/:chatId/messages/read')
   async markMessagesAsRead(
     @Param('chatId') chatId: string,
     @Request() req: any,
@@ -291,7 +341,7 @@ export class ChatController {
     return { success: true };
   }
 
-  @Delete('messages/:messageId')
+  @Delete('chats/messages/:messageId')
   async deleteMessage(
     @Param('messageId') messageId: string,
     @Request() req: any,
