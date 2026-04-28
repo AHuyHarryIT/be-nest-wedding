@@ -78,17 +78,11 @@ describe('Chat customer send + canonical thread contract (e2e)', () => {
     const firstThread = firstCreate.body?.data;
     expect(firstThread?.id).toBeDefined();
 
-    const secondaryStaff = await createStaffFixture(
-      databaseService,
-      now,
-      'SECONDARY',
-    );
-
     await request(app.getHttpServer())
       .put(`/chats/${firstThread.id}`)
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({ staffId: secondaryStaff.staffId })
-      .expect(200);
+      .send({ staffId: `STF-CHAT-CS-${now}-SECONDARY` })
+      .expect(403);
 
     const secondCreate = await request(app.getHttpServer())
       .post('/chats')

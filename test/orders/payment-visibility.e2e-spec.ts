@@ -24,6 +24,7 @@ import { UsersModule } from '../../src/users/users.module';
 
 type SeededFixture = {
   bookingId: string;
+  orderId: string;
   paymentId: string;
   staffPhoneNumber: string;
   totalPrice: number;
@@ -50,9 +51,21 @@ describe('Orders payment visibility summary contract (e2e)', () => {
   let app: INestApplication<App>;
   let databaseService: DatabaseService;
   let fixture: SeededFixture;
+  let momoQueryTransactionStatusMock: jest.Mock;
   const now = Date.now();
 
   beforeAll(async () => {
+    momoQueryTransactionStatusMock = jest.fn(({ orderId }) => ({
+      partnerCode: 'MOMO',
+      requestId: `query_${orderId}`,
+      orderId,
+      transId: `${now + 1000}`,
+      resultCode: 0,
+      message: 'Success',
+      payType: 'qr',
+      responseTime: Date.now(),
+    }));
+
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [
         ConfigModule.forRoot({
@@ -72,7 +85,7 @@ describe('Orders payment visibility summary contract (e2e)', () => {
       .overrideProvider(MomoPaymentService)
       .useValue({
         createPayment: jest.fn(),
-        queryTransactionStatus: jest.fn(),
+        queryTransactionStatus: momoQueryTransactionStatusMock,
         verifyIPNSignature: jest.fn().mockReturnValue(true),
       })
       .compile();
@@ -351,19 +364,26 @@ async function seedFixture(
     },
   });
 
-  const orderReadPermission = await databaseService.permission.findUnique({
-    where: { key: 'orders:read' },
+  const orderPermissions = await databaseService.permission.findMany({
+    where: {
+      key: {
+        in: ['orders:read', 'orders:create', 'orders:update'],
+      },
+    },
   });
 
   const staffRole = await databaseService.role.create({
     data: {
       name: `visibility-role-${suffix}`,
       description: 'Role for payment visibility e2e test staff user',
-      permissions: orderReadPermission
-        ? {
-            create: [{ permissionId: orderReadPermission.id }],
-          }
-        : undefined,
+      permissions:
+        orderPermissions.length > 0
+          ? {
+              create: orderPermissions.map((permission) => ({
+                permissionId: permission.id,
+              })),
+            }
+          : undefined,
     },
   });
 
@@ -422,6 +442,7 @@ async function seedFixture(
 
   return {
     bookingId,
+    orderId: order.id,
     paymentId: order.payments[0].id,
     staffPhoneNumber: staff.phoneNumber,
     totalPrice,

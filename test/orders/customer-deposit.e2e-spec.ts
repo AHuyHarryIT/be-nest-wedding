@@ -41,6 +41,9 @@ type SeededFixture = {
   cancelledBookingId: string;
   completedBookingId: string;
   duplicatePaidBookingId: string;
+  incompletePaidBookingId: string;
+  stalePendingBookingId: string;
+  stalePendingPaymentId: string;
   staffManagedBookingId: string;
 };
 
@@ -52,26 +55,24 @@ describe('Customer Orders deposit checkout (e2e)', () => {
   const now = Date.now();
 
   beforeAll(async () => {
-    momoCreatePaymentMock = jest.fn(
-      async ({ bookingId, amount, orderInfo }) => ({
-        partnerCode: 'MOMO',
-        bookingId,
-        requestId: `req_${bookingId}`,
-        amount,
-        orderInfo,
-        orderType: 'wedding-booking',
-        transId: 0,
-        resultCode: 0,
-        message: 'Mocked payment created',
-        payUrl: `https://momo.test/pay/${bookingId}`,
-        qrCodeUrl: null,
-        qrCode: null,
-        deeplink: null,
-        signature: 'mock-signature',
-        responseTime: Date.now(),
-        orderId: `${bookingId}_mocked_order`,
-      }),
-    );
+    momoCreatePaymentMock = jest.fn(({ bookingId, amount, orderInfo }) => ({
+      partnerCode: 'MOMO',
+      bookingId,
+      requestId: `req_${bookingId}`,
+      amount,
+      orderInfo,
+      orderType: 'wedding-booking',
+      transId: 0,
+      resultCode: 0,
+      message: 'Mocked payment created',
+      payUrl: `https://momo.test/pay/${bookingId}`,
+      qrCodeUrl: null,
+      qrCode: null,
+      deeplink: null,
+      signature: 'mock-signature',
+      responseTime: Date.now(),
+      orderId: `${bookingId}_mocked_order`,
+    }));
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [
@@ -258,6 +259,135 @@ describe('Customer Orders deposit checkout (e2e)', () => {
     );
   });
 
+  it('allows re-paying deposit while threshold is not complete', async () => {
+    const ownerToken = await loginCustomer(
+      app,
+      fixture.ownerCustomer.phoneNumber,
+      '123456',
+    );
+
+    const response = await request(app.getHttpServer())
+      .post(`/customer/orders/${fixture.incompletePaidBookingId}/deposit`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        redirectUrl:
+          'http://localhost:5174/bookings/payment-result?bookingId=incomplete-threshold',
+      })
+      .expect(201);
+
+    expect(response.body.success).toBe(true);
+    expect(response.body.data).toEqual(
+      expect.objectContaining({
+        paymentId: expect.any(String),
+      }),
+    );
+
+    expect(momoCreatePaymentMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        bookingId: fixture.incompletePaidBookingId,
+        amount: 100_000,
+      }),
+    );
+
+    const createdPayment = await databaseService.payment.findUnique({
+      where: {
+        id: response.body.data.paymentId as string,
+      },
+      select: {
+        id: true,
+        amount: true,
+        paymentType: true,
+        status: true,
+        order: {
+          select: {
+            bookingId: true,
+          },
+        },
+      },
+    });
+
+    expect(createdPayment).toEqual(
+      expect.objectContaining({
+        amount: 100_000,
+        paymentType: 'DEPOSIT',
+        status: 'PENDING',
+        order: expect.objectContaining({
+          bookingId: fixture.incompletePaidBookingId,
+        }),
+      }),
+    );
+  });
+
+  it('rotates stale pending deposit to ABANDONED and creates a new pending payment', async () => {
+    const ownerToken = await loginCustomer(
+      app,
+      fixture.ownerCustomer.phoneNumber,
+      '123456',
+    );
+
+    const staleBefore = await databaseService.payment.findUnique({
+      where: { id: fixture.stalePendingPaymentId },
+      select: {
+        id: true,
+        status: true,
+        updatedAt: true,
+      },
+    });
+
+    expect(staleBefore?.status).toBe('PENDING');
+
+    const response = await request(app.getHttpServer())
+      .post(`/customer/orders/${fixture.stalePendingBookingId}/deposit`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        redirectUrl:
+          'http://localhost:5174/bookings/payment-result?bookingId=stale-rotation',
+      })
+      .expect(201);
+
+    expect(response.body.success).toBe(true);
+
+    const staleAfter = await databaseService.payment.findUnique({
+      where: { id: fixture.stalePendingPaymentId },
+      select: {
+        status: true,
+      },
+    });
+
+    expect(staleAfter?.status).toBe('ABANDONED');
+
+    const refreshedPayment = await databaseService.payment.findUnique({
+      where: {
+        id: response.body.data.paymentId as string,
+      },
+      select: {
+        id: true,
+        amount: true,
+        paymentType: true,
+        status: true,
+        order: {
+          select: {
+            bookingId: true,
+          },
+        },
+      },
+    });
+
+    expect(refreshedPayment).toEqual(
+      expect.objectContaining({
+        id: response.body.data.paymentId,
+        amount: 300_000,
+        paymentType: 'DEPOSIT',
+        status: 'PENDING',
+        order: expect.objectContaining({
+          bookingId: fixture.stalePendingBookingId,
+        }),
+      }),
+    );
+
+    expect(refreshedPayment?.id).not.toBe(fixture.stalePendingPaymentId);
+  });
+
   it('denies staff-managed non-deposit path with exact messages fallback copy', async () => {
     const ownerToken = await loginCustomer(
       app,
@@ -387,7 +517,15 @@ async function seedFixture(
     .toString()
     .slice(-12)
     .padStart(12, '0')}`;
-  const staffManagedBookingId = `66666666-6666-4666-8666-${suffix
+  const incompletePaidBookingId = `66666666-6666-4666-8666-${suffix
+    .toString()
+    .slice(-12)
+    .padStart(12, '0')}`;
+  const stalePendingBookingId = `77777777-7777-4777-8777-${suffix
+    .toString()
+    .slice(-12)
+    .padStart(12, '0')}`;
+  const staffManagedBookingId = `88888888-8888-4888-8888-${suffix
     .toString()
     .slice(-12)
     .padStart(12, '0')}`;
@@ -435,6 +573,22 @@ async function seedFixture(
         notes: `fixture-${suffix}-duplicate-paid`,
       },
       {
+        id: incompletePaidBookingId,
+        customerId: ownerCustomer.id,
+        status: 'PENDING',
+        eventDate: new Date('2027-01-19T08:00:00.000Z'),
+        totalPrice: 1_000_000,
+        notes: `fixture-${suffix}-incomplete-paid`,
+      },
+      {
+        id: stalePendingBookingId,
+        customerId: ownerCustomer.id,
+        status: 'PENDING',
+        eventDate: new Date('2027-01-19T09:00:00.000Z'),
+        totalPrice: 1_000_000,
+        notes: `fixture-${suffix}-stale-pending`,
+      },
+      {
         id: staffManagedBookingId,
         customerId: ownerCustomer.id,
         status: 'PENDING',
@@ -471,6 +625,68 @@ async function seedFixture(
 
   await databaseService.order.create({
     data: {
+      bookingId: incompletePaidBookingId,
+      referenceNumber: `ORD-INCOMPLETE-${suffix}`,
+      totalPrice: 1_000_000,
+      totalPaid: 200_000,
+      balanceRemaining: 800_000,
+      status: 'PARTIAL',
+      payments: {
+        create: [
+          {
+            paymentSequence: 1,
+            paymentType: 'DEPOSIT',
+            amount: 200_000,
+            method: 'E_WALLET',
+            status: 'SUCCESSFUL',
+            description: 'Partially paid customer deposit',
+            attemptCount: 1,
+          },
+        ],
+      },
+    },
+  });
+
+  const staleOrder = await databaseService.order.create({
+    data: {
+      bookingId: stalePendingBookingId,
+      referenceNumber: `ORD-STALE-${suffix}`,
+      totalPrice: 1_000_000,
+      totalPaid: 0,
+      balanceRemaining: 1_000_000,
+      status: 'UNPAID',
+      payments: {
+        create: [
+          {
+            paymentSequence: 1,
+            paymentType: 'DEPOSIT',
+            amount: 300_000,
+            method: 'E_WALLET',
+            status: 'PENDING',
+            description: 'Stale pending customer deposit',
+            attemptCount: 0,
+          },
+        ],
+      },
+    },
+    include: {
+      payments: true,
+    },
+  });
+
+  const stalePendingPaymentId = staleOrder.payments[0]?.id;
+  if (!stalePendingPaymentId) {
+    throw new Error('Expected stale pending payment to be created');
+  }
+
+  await databaseService.$executeRaw`
+    UPDATE "payments"
+    SET "updated_at" = ${new Date(suffix - 31 * 60 * 1000)}
+    WHERE "id" = ${stalePendingPaymentId}
+  `;
+
+  await databaseService.order.create({
+    data: {
       bookingId: staffManagedBookingId,
       referenceNumber: `ORD-STAFF-${suffix}`,
       totalPrice: 1_500_000,
@@ -502,6 +718,9 @@ async function seedFixture(
     cancelledBookingId,
     completedBookingId,
     duplicatePaidBookingId,
+    incompletePaidBookingId,
+    stalePendingBookingId,
+    stalePendingPaymentId,
     staffManagedBookingId,
   };
 }

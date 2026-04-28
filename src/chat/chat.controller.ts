@@ -111,7 +111,35 @@ export class ChatController {
       throw new ForbiddenException('Only customers can use /api/chat');
     }
 
-    return this.chatService.sendApiChatReplyForCustomer(customerId, apiChatDto);
+    const result = await this.chatService.sendApiChatReplyForCustomer(
+      customerId,
+      apiChatDto,
+    );
+
+    if (!result.chat.aiEnabled) {
+      this.chatGateway.server
+        .to(`chat:${result.chat.id}`)
+        .emit('message_received', {
+          id: result.customerMessage.id,
+          chatId: result.customerMessage.chatId,
+          senderId: result.customerMessage.senderId,
+          senderType: result.customerMessage.senderType,
+          content: result.customerMessage.content,
+          isRead: result.customerMessage.isRead,
+          createdAt: result.customerMessage.createdAt,
+        });
+
+      if (result.chat.staffId) {
+        this.chatGateway.server
+          .to(`user:${result.chat.staffId}`)
+          .emit('new_message_notification', {
+            chatId: result.chat.id,
+            messageCount: 1,
+          });
+      }
+    }
+
+    return result;
   }
 
   // Chat endpoints
@@ -241,37 +269,58 @@ export class ChatController {
 
     // Emit real-time message event via Socket.IO
     const chatData = await this.chatService.getChat(chatId);
-    this.chatGateway.server.to(`chat:${chatId}`).emit('message_received', {
-      id: message.id,
-      chatId: message.chatId,
-      senderId: message.senderId,
-      senderType: message.senderType,
-      content: message.content,
-      isRead: message.isRead,
-      createdAt: message.createdAt,
-    });
+    const isCustomerAiMode =
+      message.senderType === 'CUSTOMER' && Boolean(chatData.aiEnabled);
 
-    const otherUserId =
-      chatData.customerId === senderId ? chatData.staffId : chatData.customerId;
-    if (otherUserId) {
-      this.chatGateway.server
-        .to(`user:${otherUserId}`)
-        .emit('new_message_notification', {
-          chatId: chatId,
-          messageCount: 1,
-        });
+    if (isCustomerAiMode) {
+      if (chatData.customerId) {
+        this.chatGateway.server
+          .to(`user:${chatData.customerId}`)
+          .emit('message_received', {
+            id: message.id,
+            chatId: message.chatId,
+            senderId: message.senderId,
+            senderType: message.senderType,
+            content: message.content,
+            isRead: message.isRead,
+            createdAt: message.createdAt,
+          });
+      }
+    } else {
+      this.chatGateway.server.to(`chat:${chatId}`).emit('message_received', {
+        id: message.id,
+        chatId: message.chatId,
+        senderId: message.senderId,
+        senderType: message.senderType,
+        content: message.content,
+        isRead: message.isRead,
+        createdAt: message.createdAt,
+      });
+
+      const otherUserId =
+        chatData.customerId === senderId
+          ? chatData.staffId
+          : chatData.customerId;
+      if (otherUserId) {
+        this.chatGateway.server
+          .to(`user:${otherUserId}`)
+          .emit('new_message_notification', {
+            chatId: chatId,
+            messageCount: 1,
+          });
+      }
     }
 
-    if (message.senderType === 'CUSTOMER') {
+    if (message.senderType === 'CUSTOMER' && chatData.aiEnabled) {
       this.chatService
         .maybeSendAiReply(chatId, body.content, message.senderType)
         .then((aiMessage) => {
-          if (!aiMessage) {
+          if (!aiMessage || !chatData.customerId) {
             return;
           }
 
           this.chatGateway.server
-            .to(`chat:${chatId}`)
+            .to(`user:${chatData.customerId}`)
             .emit('message_received', {
               id: aiMessage.id,
               chatId: aiMessage.chatId,
@@ -281,24 +330,6 @@ export class ChatController {
               isRead: aiMessage.isRead,
               createdAt: aiMessage.createdAt,
             });
-
-          if (chatData.customerId) {
-            this.chatGateway.server
-              .to(`user:${chatData.customerId}`)
-              .emit('new_message_notification', {
-                chatId: chatId,
-                messageCount: 1,
-              });
-          }
-
-          if (chatData.staffId) {
-            this.chatGateway.server
-              .to(`user:${chatData.staffId}`)
-              .emit('new_message_notification', {
-                chatId: chatId,
-                messageCount: 1,
-              });
-          }
         })
         .catch(() => null);
     }

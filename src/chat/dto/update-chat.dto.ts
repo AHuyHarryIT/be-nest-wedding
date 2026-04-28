@@ -8,4 +8,8 @@ export class UpdateChatDto {
   @IsOptional()
   @IsBoolean()
   isArchived?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  aiEnabled?: boolean;
 }

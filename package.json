@@ -29,7 +29,7 @@
     "prisma:db:push": "prisma db push",
     "prisma:db:pull": "prisma db pull",
     "prisma:reset": "prisma migrate reset",
-    "prisma:db:seed": "prisma db seed",
+    "prisma:db:seed": "sh -c 'DB_IP=$(docker inspect -f \"{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}\" studio-hamy-db 2>/dev/null || true); if [ -n \"$DB_IP\" ]; then DATABASE_URL=\"postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@$DB_IP:5432/${POSTGRES_DB_DOCKER:-appdb}\" prisma db seed; else prisma db seed; fi'",
     "prisma:format": "prisma format",
     "prepare": "husky",
     "commitlint": "commitlint --edit"
@@ -49,6 +49,7 @@
     "@nestjs/schedule": "^6.1.1",
     "@nestjs/websockets": "^11.1.16",
     "@prisma/client": "^6.17.0",
+    "openai": "^4.104.0",
     "archiver": "^7.0.1",
     "axios": "^1.13.6",
     "bcryptjs": "^3.0.3",

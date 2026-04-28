@@ -1,12 +1,12 @@
 import {
-  WebSocketGateway,
-  SubscribeMessage,
+  ConnectedSocket,
+  MessageBody,
   OnGatewayConnection,
   OnGatewayDisconnect,
   OnGatewayInit,
+  SubscribeMessage,
+  WebSocketGateway,
   WebSocketServer,
-  ConnectedSocket,
-  MessageBody,
 } from '@nestjs/websockets';
 import {
   BadRequestException,
@@ -15,17 +15,12 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
-import { ChatService } from './chat.service';
-import { DatabaseService } from '../database/database.service';
-import { JWT_ACCESS_CONFIG } from '../auth/config/jwt.config';
-import type { JwtPayload } from '../auth/types/jwt';
-
-type SocketPrincipal = {
-  userId: string;
-  userType: 'customer' | 'staff';
-};
+import { Server, Socket } from 'socket.io';
+import { DatabaseService } from '@/database/database.service';
+import { JWT_ACCESS_CONFIG } from '@/auth/config/jwt.config';
+import type { JwtPayload } from '@/auth/types/jwt';
+import { AiChatService } from './ai-chat.service';
 
 const LOCAL_DEFAULT_CHAT_ALLOWED_ORIGINS = [
   'http://localhost:3000',
@@ -56,6 +51,11 @@ const DEFAULT_CHAT_ALLOWED_ORIGINS = (() => {
   return LOCAL_DEFAULT_CHAT_ALLOWED_ORIGINS;
 })();
 
+type SocketPrincipal = {
+  userId: string;
+  userType: 'customer' | 'staff';
+};
+
 const isLoopbackHost = (hostname: string): boolean =>
   hostname === 'localhost' || hostname === '127.0.0.1';
 
@@ -69,9 +69,9 @@ const resolveAllowedOrigins = (): string[] => {
   return DEFAULT_CHAT_ALLOWED_ORIGINS;
 };
 
-const chatAllowedOrigins = resolveAllowedOrigins();
+const allowedOrigins = resolveAllowedOrigins();
 
-const chatCorsOriginValidator = (
+const corsOriginValidator = (
   origin: string | undefined,
   callback: (error: Error | null, allow?: boolean) => void,
 ): void => {
@@ -80,7 +80,7 @@ const chatCorsOriginValidator = (
     return;
   }
 
-  if (chatAllowedOrigins.includes(origin)) {
+  if (allowedOrigins.includes(origin)) {
     callback(null, true);
     return;
   }
@@ -92,20 +92,18 @@ const chatCorsOriginValidator = (
       return;
     }
 
-    const hasLoopbackEquivalentOrigin = chatAllowedOrigins.some(
-      (allowedOrigin) => {
-        try {
-          const allowedOriginUrl = new URL(allowedOrigin);
-          return (
-            isLoopbackHost(allowedOriginUrl.hostname) &&
-            allowedOriginUrl.protocol === requestOriginUrl.protocol &&
-            allowedOriginUrl.port === requestOriginUrl.port
-          );
-        } catch {
-          return false;
-        }
-      },
-    );
+    const hasLoopbackEquivalentOrigin = allowedOrigins.some((allowedOrigin) => {
+      try {
+        const allowedOriginUrl = new URL(allowedOrigin);
+        return (
+          isLoopbackHost(allowedOriginUrl.hostname) &&
+          allowedOriginUrl.protocol === requestOriginUrl.protocol &&
+          allowedOriginUrl.port === requestOriginUrl.port
+        );
+      } catch {
+        return false;
+      }
+    });
 
     if (hasLoopbackEquivalentOrigin) {
       callback(null, true);
@@ -120,24 +118,24 @@ const chatCorsOriginValidator = (
 };
 
 @WebSocketGateway({
-  namespace: 'chat',
+  namespace: 'ai-chat',
   cors: {
-    origin: chatCorsOriginValidator,
+    origin: corsOriginValidator,
     credentials: true,
     methods: ['GET', 'POST'],
   },
 })
 @Injectable()
-export class ChatGateway
+export class AiChatGateway
   implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
 {
   @WebSocketServer()
   server: Server;
 
-  private userSockets: Map<string, string> = new Map();
+  private readonly userSockets: Map<string, string> = new Map();
 
   constructor(
-    private readonly chatService: ChatService,
+    private readonly aiChatService: AiChatService,
     private readonly jwtService: JwtService,
     private readonly databaseService: DatabaseService,
   ) {}
@@ -173,37 +171,44 @@ export class ChatGateway
     }
   }
 
-  @SubscribeMessage('join_chat')
-  async handleJoinChat(
+  @SubscribeMessage('join_ai_thread')
+  async handleJoinThread(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { chatId: string },
+    @MessageBody() data: { threadId: string },
   ): Promise<void> {
     try {
       const principal = this.getVerifiedPrincipal(client);
-      await this.chatService.getChatForUser(data.chatId, principal.userId);
-      await client.join(`chat:${data.chatId}`);
+      if (principal.userType !== 'customer') {
+        throw new ForbiddenException('Only customers can join AI threads');
+      }
+
+      await this.aiChatService.getThreadForCustomer(
+        data.threadId,
+        principal.userId,
+      );
+      await client.join(`ai-thread:${data.threadId}`);
     } catch (error) {
       this.emitSocketError(client, error);
     }
   }
 
-  @SubscribeMessage('leave_chat')
-  async handleLeaveChat(
+  @SubscribeMessage('leave_ai_thread')
+  async handleLeaveThread(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { chatId: string },
+    @MessageBody() data: { threadId: string },
   ): Promise<void> {
-    await client.leave(`chat:${data.chatId}`);
+    await client.leave(`ai-thread:${data.threadId}`);
   }
 
-  @SubscribeMessage('send_message')
+  @SubscribeMessage('send_ai_message')
   async handleSendMessage(
     @ConnectedSocket() client: Socket,
     @MessageBody()
-    data: { chatId: string; content: string; clientMessageId?: string },
+    data: { threadId: string; content: string; clientMessageId?: string },
   ): Promise<void> {
     try {
-      if (!data?.chatId || typeof data.chatId !== 'string') {
-        throw new BadRequestException('Chat ID is required');
+      if (!data?.threadId || typeof data.threadId !== 'string') {
+        throw new BadRequestException('Thread ID is required');
       }
 
       const content =
@@ -213,134 +218,67 @@ export class ChatGateway
       }
 
       const principal = this.getVerifiedPrincipal(client);
+      if (principal.userType !== 'customer') {
+        throw new ForbiddenException('Only customers can send AI messages');
+      }
 
-      const message = await this.chatService.sendMessage(
+      const customerMessage = await this.aiChatService.sendMessage(
         {
-          chatId: data.chatId,
+          threadId: data.threadId,
           content,
         },
         principal.userId,
       );
 
-      const chatData = await this.chatService.getChat(data.chatId);
-      const isCustomerAiMode =
-        message.senderType === 'CUSTOMER' && Boolean(chatData.aiEnabled);
+      const customerMessagePayload = data.clientMessageId
+        ? { ...customerMessage, clientMessageId: data.clientMessageId }
+        : customerMessage;
 
-      if (isCustomerAiMode) {
-        if (chatData.customerId) {
-          this.server
-            .to(`user:${chatData.customerId}`)
-            .emit('message_received', {
-              id: message.id,
-              chatId: message.chatId,
-              senderId: message.senderId,
-              senderType: message.senderType,
-              content: message.content,
-              isRead: message.isRead,
-              createdAt: message.createdAt,
-              clientMessageId: data.clientMessageId,
-            });
-        }
-      } else {
-        this.server.to(`chat:${data.chatId}`).emit('message_received', {
-          id: message.id,
-          chatId: message.chatId,
-          senderId: message.senderId,
-          senderType: message.senderType,
-          content: message.content,
-          isRead: message.isRead,
-          createdAt: message.createdAt,
-          clientMessageId: data.clientMessageId,
-        });
+      this.server
+        .to(`ai-thread:${data.threadId}`)
+        .emit('ai_message_received', customerMessagePayload);
 
-        const otherUserId =
-          chatData.customerId === principal.userId
-            ? chatData.staffId
-            : chatData.customerId;
+      const aiMessage = await this.aiChatService.maybeSendAiReply(
+        data.threadId,
+        content,
+        customerMessage.senderType,
+      );
 
-        if (otherUserId) {
-          this.server
-            .to(`user:${otherUserId}`)
-            .emit('new_message_notification', {
-              chatId: data.chatId,
-              messageCount: 1,
-            });
-        }
-      }
-
-      if (message.senderType === 'CUSTOMER' && chatData.aiEnabled) {
-        const aiMessage = await this.chatService.maybeSendAiReply(
-          data.chatId,
-          data.content,
-          message.senderType,
-        );
-
-        if (aiMessage && chatData.customerId) {
-          this.server
-            .to(`user:${chatData.customerId}`)
-            .emit('message_received', {
-              id: aiMessage.id,
-              chatId: aiMessage.chatId,
-              senderId: aiMessage.senderId,
-              senderType: aiMessage.senderType,
-              content: aiMessage.content,
-              isRead: aiMessage.isRead,
-              createdAt: aiMessage.createdAt,
-            });
-        }
+      if (aiMessage) {
+        this.server
+          .to(`ai-thread:${data.threadId}`)
+          .emit('ai_message_received', aiMessage);
       }
     } catch (error) {
       this.emitSocketError(client, error);
     }
   }
 
-  @SubscribeMessage('mark_as_read')
+  @SubscribeMessage('ai_mark_as_read')
   async handleMarkAsRead(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { chatId: string },
+    @MessageBody() data: { threadId: string },
   ): Promise<void> {
     try {
       const principal = this.getVerifiedPrincipal(client);
+      if (principal.userType !== 'customer') {
+        throw new ForbiddenException('Only customers can read AI messages');
+      }
 
-      await this.chatService.markMessagesAsRead(data.chatId, principal.userId);
+      await this.aiChatService.markMessagesAsRead(
+        data.threadId,
+        principal.userId,
+      );
 
-      void this.server.to(`chat:${data.chatId}`).emit('messages_marked_read', {
-        chatId: data.chatId,
-        userId: principal.userId,
-      });
+      this.server
+        .to(`ai-thread:${data.threadId}`)
+        .emit('ai_messages_marked_read', {
+          threadId: data.threadId,
+          userId: principal.userId,
+        });
     } catch (error) {
       this.emitSocketError(client, error);
     }
-  }
-
-  @SubscribeMessage('typing')
-  async handleTyping(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() data: { chatId: string; isTyping: boolean },
-  ): Promise<void> {
-    try {
-      const principal = this.getVerifiedPrincipal(client);
-      await this.chatService.getChatForUser(data.chatId, principal.userId);
-
-      this.server.to(`chat:${data.chatId}`).emit('user_typing', {
-        chatId: data.chatId,
-        userId: principal.userId,
-        isTyping: data.isTyping,
-      });
-    } catch (error) {
-      this.emitSocketError(client, error);
-    }
-  }
-
-  notifyUser(userId: string, event: string, data: unknown): void {
-    const socketId = this.userSockets.get(userId);
-    if (socketId) {
-      this.server.to(`user:${userId}`).emit(event, data);
-    }
-  }
-
-  notifyChat(chatId: string, event: string, data: unknown): void {
-    this.server.to(`chat:${chatId}`).emit(event, data);
   }
 
   private emitSocketError(client: Socket, error: unknown): void {
@@ -352,7 +290,7 @@ export class ChatGateway
     ) {
       const response = error.getResponse();
       if (typeof response === 'string') {
-        client.emit('error', { message: response });
+        client.emit('ai_error', { message: response });
         return;
       }
 
@@ -361,7 +299,7 @@ export class ChatGateway
         details?: Record<string, unknown>;
       };
 
-      client.emit('error', {
+      client.emit('ai_error', {
         message: Array.isArray(typedResponse.message)
           ? typedResponse.message.join(', ')
           : typedResponse.message || error.message,
@@ -370,7 +308,7 @@ export class ChatGateway
       return;
     }
 
-    client.emit('error', {
+    client.emit('ai_error', {
       message:
         error instanceof Error ? error.message : 'Unexpected socket error',
     });
@@ -393,9 +331,7 @@ export class ChatGateway
   ): Promise<SocketPrincipal> {
     const existingUserId = (client.data as { userId?: string }).userId;
     const existingUserType = (
-      client.data as {
-        userType?: 'customer' | 'staff';
-      }
+      client.data as { userType?: 'customer' | 'staff' }
     ).userType;
 
     if (existingUserId && existingUserType) {

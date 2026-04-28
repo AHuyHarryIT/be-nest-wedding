@@ -525,6 +525,12 @@ export class ChatService {
     const participant = await this.resolveActiveParticipant(senderId);
 
     if (participant.userType === 'staff') {
+      if (chatData.aiEnabled) {
+        throw new ForbiddenException(
+          'Staff replies are disabled while AI assistant is enabled',
+        );
+      }
+
       await this.assertStaffCanReply(senderId);
     }
 

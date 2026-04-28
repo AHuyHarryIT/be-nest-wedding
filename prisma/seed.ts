@@ -1275,7 +1275,7 @@ async function seedInventory() {
 /**
  * Seed chat threads with sample messages
  */
-async function seedChatThreads(customers) {
+async function seedChatThreads(customers: Array<{ id: string }>) {
   console.log('💬 Seeding chat threads...');
 
   const adminStaffId = 'STF-ADMIN';
@@ -1295,18 +1295,22 @@ async function seedChatThreads(customers) {
       messages: {
         create: [
           {
+            senderType: 'CUSTOMER',
             senderCustomerId: seededCustomer.id,
             content: 'Hi, I would like to inquire about your wedding photography packages.',
           },
           {
+            senderType: 'STAFF',
             senderStaffId: adminStaffId,
             content: 'Hello! Thank you for reaching out. We have several packages available. What kind of photography style are you interested in?',
           },
           {
+            senderType: 'CUSTOMER',
             senderCustomerId: seededCustomer.id,
             content: 'We are looking for both photo and video coverage for our wedding in December. Could you share your pricing?',
           },
           {
+            senderType: 'STAFF',
             senderStaffId: adminStaffId,
             content: 'Absolutely! Please check our Packages page for full details. Our Ultimate Package includes both photo and video with a full day of coverage. I would also be happy to schedule a consultation call if you prefer.',
           },
@@ -1321,18 +1325,22 @@ async function seedChatThreads(customers) {
       messages: {
         create: [
           {
+            senderType: 'CUSTOMER',
             senderCustomerId: seededCustomer.id,
             content: 'Hi, I would like to inquire about your wedding photography packages.',
           },
           {
+            senderType: 'STAFF',
             senderStaffId: adminStaffId,
             content: 'Hello! Thank you for reaching out. We have several packages available. What kind of photography style are you interested in?',
           },
           {
+            senderType: 'CUSTOMER',
             senderCustomerId: seededCustomer.id,
             content: 'We are looking for both photo and video coverage for our wedding in December. Could you share your pricing?',
           },
           {
+            senderType: 'STAFF',
             senderStaffId: adminStaffId,
             content: 'Absolutely! Please check our Packages page for full details. Our Ultimate Package includes both photo and video with a full day of coverage. I would also be happy to schedule a consultation call if you prefer.',
           },
@@ -1348,7 +1356,7 @@ async function seedChatThreads(customers) {
 /**
  * Seed reminder records
  */
-async function seedReminders(customers, bookingId) {
+async function seedReminders(customers: Array<{ id: string }>, bookingId: string) {
   console.log('⏰ Seeding reminders...');
 
   const seededCustomer = customers?.[0];
