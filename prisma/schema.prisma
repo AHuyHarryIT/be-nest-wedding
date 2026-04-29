@@ -148,7 +148,6 @@ model Customer {
   staffMessages      StaffMessage[] @relation("staff_message_customer_sender")
   aiThreads          AiThread[]     @relation("ai_thread_customer")
   aiMessages         AiMessage[]    @relation("ai_message_customer_sender")
-  quotations         Quotation[]
   reminders          Reminder[]     @relation("reminder_customer")
   authSessions       AuthSession[]
   // timestamps
@@ -217,7 +216,6 @@ model Staff {
   staffChats         StaffChat[]    @relation("staff_chat_staff")
   staffMessages      StaffMessage[] @relation("staff_message_staff_sender")
   inventoryLogs      InventoryLog[] @relation("inventory_log_actor")
-  quotations         Quotation[]    @relation("quotation_creator")
   authSessions       AuthSession[]
   // timestamps
   createdAt          DateTime       @default(now()) @map("created_at")
@@ -293,11 +291,10 @@ model Service {
   cloudinaryPublicId String? @map("cloudinary_public_id")
 
   // relation
-  job               Job?               @relation(fields: [jobId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  packages          PackageService[]
-  sessions          SessionService[]
-  bookings          BookingService[]
-  quotationServices QuotationService[]
+  job      Job?             @relation(fields: [jobId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  packages PackageService[]
+  sessions SessionService[]
+  bookings BookingService[]
 
   // timestamps
   createdAt DateTime  @default(now()) @map("created_at")
@@ -1077,10 +1074,9 @@ model InventoryItem {
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
 
-  logs       InventoryLog[]
-  bookings   BookingInventoryItem[]
-  quotations QuotationInventoryItem[]
-  reminders  Reminder[]
+  logs      InventoryLog[]
+  bookings  BookingInventoryItem[]
+  reminders Reminder[]
 
   @@index([categoryId])
   @@index([type])
@@ -1137,89 +1133,6 @@ model BookingInventoryItem {
   @@index([bookingId])
   @@index([itemId])
   @@map("booking_inventory_items")
-}
-
-// ╔══════════════════════════════════════════════════════════╗
-// ║          QUOTATIONS MODULE                               ║
-// ╚══════════════════════════════════════════════════════════╝
-
-enum QuotationStatus {
-  DRAFT
-  SENT
-  ACCEPTED
-  REJECTED
-  EXPIRED
-  CONVERTED
-}
-
-model Quotation {
-  id              String   @id @default(uuid()) @map("id")
-  quotationNumber String   @unique @map("quotation_number")
-  customerId      String   @map("customer_id")
-  customer        Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
-
-  title  String          @map("title")
-  notes  String?         @map("notes")
-  status QuotationStatus @default(DRAFT) @map("status")
-
-  validUntil DateTime? @map("valid_until")
-
-  subtotal        Float @default(0) @map("subtotal")
-  discountPercent Float @default(0) @map("discount_percent")
-  taxPercent      Float @default(0) @map("tax_percent")
-  totalPrice      Float @default(0) @map("total_price")
-
-  createdById String? @map("created_by_id")
-  createdBy   Staff?  @relation("quotation_creator", fields: [createdById], references: [id], onDelete: SetNull)
-
-  convertedBookingId String?   @unique @map("converted_booking_id")
-  convertedAt        DateTime? @map("converted_at")
-
-  deletedAt DateTime? @map("deleted_at")
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-
-  inventoryItems QuotationInventoryItem[]
-  services       QuotationService[]
-
-  @@index([customerId])
-  @@index([status])
-  @@index([createdById])
-  @@map("quotations")
-}
-
-model QuotationInventoryItem {
-  id          String        @id @default(uuid()) @map("id")
-  quotationId String        @map("quotation_id")
-  quotation   Quotation     @relation(fields: [quotationId], references: [id], onDelete: Cascade)
-  itemId      String        @map("item_id")
-  item        InventoryItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
-
-  quantity        Int   @default(1) @map("quantity")
-  unitPrice       Float @map("unit_price")
-  discountPercent Float @default(0) @map("discount_percent")
-
-  createdAt DateTime @default(now()) @map("created_at")
-
-  @@unique([quotationId, itemId])
-  @@map("quotation_inventory_items")
-}
-
-model QuotationService {
-  id          String    @id @default(uuid()) @map("id")
-  quotationId String    @map("quotation_id")
-  quotation   Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
-  serviceId   String    @map("service_id")
-  service     Service   @relation(fields: [serviceId], references: [id], onDelete: Restrict)
-
-  quantity        Int   @default(1) @map("quantity")
-  unitPrice       Float @map("unit_price")
-  discountPercent Float @default(0) @map("discount_percent")
-
-  createdAt DateTime @default(now()) @map("created_at")
-
-  @@unique([quotationId, serviceId])
-  @@map("quotation_services")
 }
 
 // ╔══════════════════════════════════════════════════════════╗
@@ -1302,7 +1215,5 @@ model Notification {
 }
 
 // Add reverse relations to existing models
-// Staff needs: inventoryLogs, quotations
 // Booking needs: reminders (via reminder_booking)
 // Customer needs: reminders (via reminder_customer)
-// Service needs: quotationServices

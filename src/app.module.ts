@@ -25,7 +25,6 @@ import { ChatModule } from './chat/chat.module';
 import { StaffChatModule } from './staff-chat/staff-chat.module';
 import { AiChatModule } from './ai-chat/ai-chat.module';
 import { InventoryModule } from './inventory/inventory.module';
-import { QuotationsModule } from './quotations/quotations.module';
 import { AutoRefreshMiddleware } from './auth/auto-refresh.middleware';
 import { RemindersModule } from './reminders/reminders.module';
 import { PublicInquiriesModule } from './public-inquiries/public-inquiries.module';
@@ -61,7 +60,6 @@ import { PublicInquiriesModule } from './public-inquiries/public-inquiries.modul
     StaffChatModule,
     AiChatModule,
     InventoryModule,
-    QuotationsModule,
     RemindersModule,
     PublicInquiriesModule,
   ],
