@@ -483,6 +483,7 @@ export class AuthService {
           }
         : null,
       isActive: user.isActive,
+      roles: user.roles ?? [],
       createdAt: user.createdAt,
     };
   }

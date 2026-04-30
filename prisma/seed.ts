@@ -199,6 +199,9 @@ async function seedRBAC() {
     { key: 'bookings:update', description: 'Update bookings' },
     { key: 'bookings:delete', description: 'Delete bookings' },
 
+    // Report permissions
+    { key: 'reports:read', description: 'View reports' },
+
     // Order permissions
     { key: 'orders:create', description: 'Create new orders' },
     { key: 'orders:read', description: 'View orders' },
@@ -330,6 +333,7 @@ async function seedRBAC() {
     'bookings:create',
     'bookings:read',
     'bookings:update',
+    'reports:read',
     'orders:create',
     'orders:read',
     'orders:update',

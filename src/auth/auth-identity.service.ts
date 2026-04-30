@@ -20,6 +20,29 @@ export interface AuthJobRecord {
   isActive: boolean;
 }
 
+export interface AuthPermissionRecord {
+  id: string;
+  key: string;
+  description?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface AuthRolePermissionRecord {
+  roleId: string;
+  permissionId: string;
+  permission: AuthPermissionRecord;
+}
+
+export interface AuthRoleRecord {
+  id: string;
+  name: string;
+  description?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  permissions?: AuthRolePermissionRecord[];
+}
+
 export interface AuthIdentityRecord {
   id: string;
   userType: AuthUserType;
@@ -36,6 +59,7 @@ export interface AuthIdentityRecord {
   jobs?: AuthJobRecord[];
   jobId?: string | null;
   job?: AuthJobRecord | null;
+  roles?: AuthRoleRecord[];
 }
 
 type AuthSessionLookup = {
@@ -90,7 +114,7 @@ const AUTH_SESSION_OWNER_SELECT = {
   revokedAt: true,
 } as const;
 
-const STAFF_WITH_JOBS_INCLUDE = {
+const STAFF_WITH_JOBS_AND_ROLES_INCLUDE = {
   staffJobs: {
     include: {
       job: {
@@ -99,6 +123,19 @@ const STAFF_WITH_JOBS_INCLUDE = {
           name: true,
           description: true,
           isActive: true,
+        },
+      },
+    },
+  },
+  roles: {
+    include: {
+      role: {
+        include: {
+          permissions: {
+            include: {
+              permission: true,
+            },
+          },
         },
       },
     },
@@ -290,12 +327,16 @@ export class AuthIdentityService {
     staffJobs?: Array<{
       job: AuthJobRecord;
     }>;
+    roles?: Array<{
+      role: AuthRoleRecord;
+    }>;
   }): AuthIdentityRecord {
     const managedJobs = this.mapJobsFromStaffRelations(staff.staffJobs);
 
     return {
       ...staff,
       ...managedJobs,
+      roles: staff.roles?.map((staffRole) => staffRole.role) ?? [],
       userType: 'staff',
     };
   }
@@ -468,7 +509,7 @@ export class AuthIdentityService {
       }),
       this.databaseService.staff.findUnique({
         where: { phoneNumber: normalizedPhoneNumber },
-        include: STAFF_WITH_JOBS_INCLUDE,
+        include: STAFF_WITH_JOBS_AND_ROLES_INCLUDE,
       }),
     ]);
 
@@ -502,7 +543,7 @@ export class AuthIdentityService {
 
     const staff = await this.databaseService.staff.findUnique({
       where: { id },
-      include: STAFF_WITH_JOBS_INCLUDE,
+      include: STAFF_WITH_JOBS_AND_ROLES_INCLUDE,
     });
 
     return staff ? this.normalizeStaffIdentity(staff) : null;
@@ -542,7 +583,7 @@ export class AuthIdentityService {
       }),
       this.databaseService.staff.findFirst({
         where: { refreshToken: trimmedToken },
-        include: STAFF_WITH_JOBS_INCLUDE,
+        include: STAFF_WITH_JOBS_AND_ROLES_INCLUDE,
       }),
     ]);
 
