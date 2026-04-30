@@ -24,7 +24,7 @@ import { PaymentCoreService as PaymentService } from '../payments/payment-core.s
 import { PaymentGatewayTransactionService } from '../payments/payment-gateway-transaction.service';
 import { RefundService } from '../payments/refund.service';
 import { MomoTransactionQueryResponse } from '../payments/momo.service';
-import { CheckoutDto } from './dto';
+import { CheckoutDto, PayRemainingDto } from './dto';
 
 @Injectable()
 export class OrdersService {
@@ -65,9 +65,93 @@ export class OrdersService {
 
     if (!existingOrder) {
       return this.createNewOrder(booking, checkoutDto);
-    } else {
-      return this.payRemaining(checkoutDto.bookingId, checkoutDto);
     }
+
+    if (existingOrder.status === 'UNPAID') {
+      return this.collectForUnpaidExistingOrder(
+        existingOrder.id,
+        booking,
+        checkoutDto,
+      );
+    }
+
+    return this.payRemaining(checkoutDto.bookingId, {
+      paymentAmount: 0,
+      paymentMethod: checkoutDto.paymentMethod,
+      note: checkoutDto.note,
+      txnId: checkoutDto.txnId,
+    });
+  }
+
+  private async collectForUnpaidExistingOrder(
+    orderId: string,
+    booking: Booking,
+    checkoutDto: CheckoutDto,
+  ) {
+    const totalPrice = booking.totalPrice;
+
+    let depositAmount = 0;
+    let paymentAmount = 0;
+    let paymentType = 'REMAINING';
+
+    if (
+      checkoutDto.makeDeposit ||
+      (checkoutDto.depositValue && checkoutDto.depositValue >= totalPrice)
+    ) {
+      const depositValue =
+        checkoutDto.depositValue || this.MIN_DEPOSIT_PERCENTAGE;
+      const isPercentage = checkoutDto.isDepositPercentage !== false;
+
+      let amountToPay = 0;
+
+      if (isPercentage) {
+        if (depositValue < this.MIN_DEPOSIT_PERCENTAGE || depositValue > 100) {
+          throw new BadRequestException(
+            `Deposit percentage must be between ${this.MIN_DEPOSIT_PERCENTAGE} and 100`,
+          );
+        }
+        amountToPay = (totalPrice * depositValue) / 100;
+      } else {
+        const minDepositAmount =
+          (totalPrice * this.MIN_DEPOSIT_PERCENTAGE) / 100;
+        if (depositValue < minDepositAmount && depositValue < totalPrice) {
+          throw new BadRequestException(
+            `Deposit amount must be at least ${minDepositAmount}`,
+          );
+        }
+        amountToPay = Math.min(depositValue, totalPrice);
+      }
+
+      if (amountToPay >= totalPrice) {
+        paymentAmount = totalPrice;
+        paymentType = 'FULL';
+      } else {
+        depositAmount = amountToPay;
+        paymentAmount = amountToPay;
+        paymentType = 'DEPOSIT';
+      }
+    }
+
+    if (paymentAmount > 0) {
+      const payment = await this.paymentService.createPayment({
+        orderId,
+        amount: paymentAmount,
+        method: checkoutDto.paymentMethod || 'CASH',
+        paymentType: paymentType as 'DEPOSIT' | 'FULL' | 'REMAINING',
+        description:
+          paymentType === 'DEPOSIT'
+            ? `Deposit (${Math.round((depositAmount / totalPrice) * 100)}%)`
+            : paymentType === 'FULL'
+              ? 'Full payment'
+              : 'Remaining balance',
+      });
+
+      if ((checkoutDto.paymentMethod || 'CASH') !== 'E_WALLET') {
+        await this.completeNonEWalletPayment(payment.id, checkoutDto.txnId);
+      }
+    }
+
+    return this.getOrderDetails(orderId);
   }
 
   async customerCheckoutDeposit(
@@ -323,7 +407,7 @@ export class OrdersService {
   /**
    * Pay remaining balance for existing order
    */
-  async payRemaining(bookingId: string, payRemainingDto: CheckoutDto) {
+  async payRemaining(bookingId: string, payRemainingDto: PayRemainingDto) {
     const order = await this.databaseService.order.findUnique({
       where: { bookingId },
       include: { payments: true },

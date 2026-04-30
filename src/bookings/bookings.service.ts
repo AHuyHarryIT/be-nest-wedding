@@ -1155,6 +1155,7 @@ export class BookingsService {
       includePackages,
       includeServices,
       includeStaffs,
+      includeOrders,
     } = params || {};
 
     const where: Prisma.BookingWhereInput = { deletedAt: null };
@@ -1203,6 +1204,17 @@ export class BookingsService {
       };
     if (includeStaffs) {
       include.assignedStaffs = this.assignedStaffInclude;
+    }
+    if (includeOrders) {
+      include.orders = {
+        include: {
+          payments: true,
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+        take: 1,
+      };
     }
 
     const orderBy: Prisma.BookingOrderByWithRelationInput = {

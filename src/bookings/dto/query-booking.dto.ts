@@ -67,4 +67,13 @@ export class QueryBookingDto extends PaginationQueryDto {
   @IsOptional()
   @Type(() => Boolean)
   includeStaffs?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Include order details in response',
+    default: false,
+  })
+  @IsBoolean({ message: 'includeOrders must be a boolean value' })
+  @IsOptional()
+  @Type(() => Boolean)
+  includeOrders?: boolean;
 }

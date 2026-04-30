@@ -14,10 +14,23 @@ export class GlobalValidationPipe implements PipeTransform {
     value: unknown,
     metadata: ArgumentMetadata,
   ): Promise<unknown> {
-    const { metatype } = metadata;
+    const { metatype, type } = metadata;
 
     if (!metatype || !this.toValidate(metatype)) {
       return value;
+    }
+
+    if (type === 'body' && (value === undefined || value === null)) {
+      throw new ValidationException('Validation failed', {
+        fields: [
+          {
+            field: 'body',
+            code: 'isNotEmpty',
+            message: 'Request body is required',
+            value,
+          },
+        ],
+      });
     }
 
     const object = plainToInstance(

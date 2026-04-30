@@ -6,19 +6,10 @@ import {
   IsNumber,
   IsOptional,
   IsString,
-  IsUUID,
   Min,
 } from 'class-validator';
 
 export class PayRemainingDto {
-  @ApiProperty({
-    description: 'Booking ID',
-    example: 'uuid-1234',
-  })
-  @IsUUID('4')
-  @IsNotEmpty()
-  bookingId: string;
-
   @ApiProperty({
     description:
       'Amount to pay for remaining (must cover full remaining amount)',
