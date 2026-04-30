@@ -29,9 +29,6 @@ export const UserSelection: SelectionRegistry = {
       roles: {
         some: {},
       },
-      staffJobs: {
-        some: {},
-      },
     },
   },
   customers: {

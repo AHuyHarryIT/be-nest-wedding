@@ -14,7 +14,7 @@ import {
 } from '@nestjs/common';
 import { JwtAuthGuard } from '@/auth/guards/jwt-auth.guard';
 import { StaffChatService } from './staff-chat.service';
-import type { CreateStaffChatDto } from './dto/create-staff-chat.dto';
+import { AssignStaffChatDto, CreateStaffChatDto } from './dto';
 import type { SendStaffMessageDto } from './dto/send-staff-message.dto';
 import type { StaffChatEntity, StaffMessageEntity } from './entities';
 
@@ -97,6 +97,29 @@ export class StaffChatController {
   ): Promise<StaffChatEntity> {
     const userId = this.getUserId(req);
     return this.staffChatService.getChatForUser(chatId, userId);
+  }
+
+  @Put(':chatId/assign')
+  async assignChat(
+    @Param('chatId') chatId: string,
+    @Body() payload: AssignStaffChatDto,
+    @Request() req: unknown,
+  ): Promise<StaffChatEntity> {
+    const user = this.getUser(req);
+    if (user.userType !== 'staff') {
+      throw new ForbiddenException('Only staff can assign conversations');
+    }
+
+    if (!payload.staffId?.trim()) {
+      throw new BadRequestException('staffId is required');
+    }
+
+    const actorStaffId = this.getUserId(req);
+    return this.staffChatService.assignChatToStaff(
+      chatId,
+      actorStaffId,
+      payload.staffId.trim(),
+    );
   }
 
   @Post(':chatId/messages')

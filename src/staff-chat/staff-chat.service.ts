@@ -369,6 +369,67 @@ export class StaffChatService {
     return chats.map((chat) => this.mapChat(chat));
   }
 
+  private async assertStaffCanAssign(staffId: string): Promise<void> {
+    const staff = await this.prisma.staff.findUnique({
+      where: { id: staffId },
+      include: {
+        roles: {
+          include: {
+            role: true,
+          },
+        },
+      },
+    });
+
+    if (!staff?.isActive) {
+      throw new ForbiddenException(
+        'Only active staff can assign conversations',
+      );
+    }
+
+    const canAssign = staff.roles.some((staffRole) =>
+      ['super-admin', 'admin', 'manager'].includes(staffRole.role.name),
+    );
+
+    if (!canAssign) {
+      throw new ForbiddenException(
+        'Only manager roles can assign conversations',
+      );
+    }
+  }
+
+  async assignChatToStaff(
+    chatId: string,
+    actorStaffId: string,
+    assigneeStaffId: string,
+  ): Promise<StaffChatEntity> {
+    await this.assertStaffCanAssign(actorStaffId);
+    await this.assertStaffCanReply(assigneeStaffId);
+
+    const chat = await this.getChat(chatId);
+
+    if (chat.staffId === assigneeStaffId) {
+      return chat;
+    }
+
+    const updated = await this.prisma.staffChat.update({
+      where: { id: chatId },
+      data: { staffId: assigneeStaffId },
+      include: {
+        customer: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    return this.mapChat(updated);
+  }
+
   async sendMessage(
     payload: SendStaffMessageDto,
     senderId: string,
@@ -376,8 +437,19 @@ export class StaffChatService {
     const chat = await this.getChatForUser(payload.chatId, senderId);
     const participant = await this.resolveActiveParticipant(senderId);
 
+    if (!chat.staffId) {
+      throw new ForbiddenException(
+        'This chat has not been assigned to any staff yet',
+      );
+    }
+
     if (participant.userType === 'staff') {
       await this.assertStaffCanReply(senderId);
+      if (chat.staffId !== senderId) {
+        throw new ForbiddenException(
+          'Only the assigned staff can reply in this chat',
+        );
+      }
     }
 
     const message = await this.prisma.staffMessage.create({

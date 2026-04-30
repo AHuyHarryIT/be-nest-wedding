@@ -11,6 +11,21 @@ import { AiService } from '@/ai/ai.service';
 import type { CreateAiThreadDto, SendAiMessageDto } from './dto';
 import type { AiMessageEntity, AiThreadEntity } from './entities';
 
+type AiBusinessContext = {
+  services: Array<{
+    name: string;
+    description?: string;
+    price?: number;
+  }>;
+  packages: Array<{
+    name: string;
+    description?: string;
+    price?: number;
+    serviceNames: string[];
+  }>;
+  policySnippets: string[];
+};
+
 type AiThreadMessageSender = 'CUSTOMER' | 'AI';
 
 const parsePositiveInt = (
@@ -63,6 +78,10 @@ export class AiChatService {
   private readonly maxInputChars = parsePositiveInt(
     process.env.CHAT_AI_MAX_INPUT_CHARS,
     6000,
+  );
+  private readonly maxCatalogItems = parsePositiveInt(
+    process.env.CHAT_AI_MAX_CATALOG_ITEMS,
+    20,
   );
 
   constructor(
@@ -128,6 +147,79 @@ export class AiChatService {
       readAt: entry.readAt,
       createdAt: entry.createdAt,
       updatedAt: entry.updatedAt,
+    };
+  }
+
+  private normalizePrice(value: unknown): number | undefined {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) {
+      return undefined;
+    }
+
+    return parsed;
+  }
+
+  private async buildBusinessContext(): Promise<AiBusinessContext> {
+    const [services, packages] = await Promise.all([
+      this.prisma.service.findMany({
+        where: {
+          deletedAt: null,
+          isActive: true,
+        },
+        orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
+        take: this.maxCatalogItems,
+        select: {
+          name: true,
+          description: true,
+          price: true,
+        },
+      }),
+      this.prisma.package.findMany({
+        where: {
+          deletedAt: null,
+          isActive: true,
+        },
+        orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
+        take: this.maxCatalogItems,
+        select: {
+          name: true,
+          description: true,
+          price: true,
+          services: {
+            select: {
+              service: {
+                select: {
+                  name: true,
+                },
+              },
+            },
+          },
+        },
+      }),
+    ]);
+
+    return {
+      services: services.map((service) => ({
+        name: this.trimText(service.name, 80),
+        description: service.description
+          ? this.trimText(service.description, 180)
+          : undefined,
+        price: this.normalizePrice(service.price),
+      })),
+      packages: packages.map((pkg) => ({
+        name: this.trimText(pkg.name, 80),
+        description: pkg.description
+          ? this.trimText(pkg.description, 180)
+          : undefined,
+        price: this.normalizePrice(pkg.price),
+        serviceNames: pkg.services
+          .map((entry) => entry.service?.name || '')
+          .filter((name) => Boolean(name))
+          .map((name) => this.trimText(name, 80)),
+      })),
+      policySnippets: [
+        'Only active, published services and packages are included in this context.',
+      ],
     };
   }
 
@@ -347,6 +439,8 @@ export class AiChatService {
         .join(' ')
         .trim();
 
+      const businessContext = await this.buildBusinessContext();
+
       const aiReply = await this.aiService.generateChatReply({
         chatId: threadId,
         customerName: customerName || undefined,
@@ -355,6 +449,7 @@ export class AiChatService {
           senderType: entry.senderType,
           content: this.trimText(entry.content, this.maxInputChars),
         })),
+        businessContext,
       });
 
       const aiMessage = await this.prisma.aiMessage.create({

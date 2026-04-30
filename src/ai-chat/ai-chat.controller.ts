@@ -15,7 +15,7 @@ import {
 import { JwtAuthGuard } from '@/auth/guards/jwt-auth.guard';
 import { AiChatService } from './ai-chat.service';
 import type { AiMessageEntity, AiThreadEntity } from './entities';
-import type { CreateAiThreadDto } from './dto/create-ai-thread.dto';
+import { CreateAiThreadDto } from './dto/create-ai-thread.dto';
 import type { SendAiMessageDto } from './dto/send-ai-message.dto';
 
 interface AuthenticatedRequest {
