@@ -194,7 +194,10 @@ export class UsersController {
       type: 'object',
       properties: {
         success: { type: 'boolean', example: true },
-        message: { type: 'string', example: 'Staff password reset successfully' },
+        message: {
+          type: 'string',
+          example: 'Staff password reset successfully',
+        },
       },
     },
   })
@@ -206,7 +209,10 @@ export class UsersController {
     @Param('id') id: string,
     @Body() resetUserPasswordDto: ResetUserPasswordDto,
   ) {
-    const result = await this.usersService.resetPassword(id, resetUserPasswordDto);
+    const result = await this.usersService.resetPassword(
+      id,
+      resetUserPasswordDto,
+    );
     return ResponseBuilder.success(result, result.message);
   }
 }

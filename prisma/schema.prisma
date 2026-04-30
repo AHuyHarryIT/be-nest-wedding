@@ -142,13 +142,13 @@ model Customer {
   marketingEmails    Boolean        @default(false) @map("marketing_emails")
   // relation
   bookings           Booking[]
+  albums             Album[]
   chats              Chat[]         @relation("chat_customer")
   messages           Message[]      @relation("message_customer_sender")
   staffChats         StaffChat[]    @relation("staff_chat_customer")
   staffMessages      StaffMessage[] @relation("staff_message_customer_sender")
   aiThreads          AiThread[]     @relation("ai_thread_customer")
   aiMessages         AiMessage[]    @relation("ai_message_customer_sender")
-  reminders          Reminder[]     @relation("reminder_customer")
   authSessions       AuthSession[]
   // timestamps
   createdAt          DateTime       @default(now()) @map("created_at")
@@ -215,7 +215,6 @@ model Staff {
   messages           Message[]      @relation("message_staff_sender")
   staffChats         StaffChat[]    @relation("staff_chat_staff")
   staffMessages      StaffMessage[] @relation("staff_message_staff_sender")
-  inventoryLogs      InventoryLog[] @relation("inventory_log_actor")
   authSessions       AuthSession[]
   // timestamps
   createdAt          DateTime       @default(now()) @map("created_at")
@@ -400,9 +399,6 @@ model Booking {
   staffChats     StaffChat[]      @relation("staff_chat_booking")
   aiThreads      AiThread[]       @relation("ai_thread_booking")
 
-  // inventory and reminder relations
-  inventoryItems BookingInventoryItem[]
-  reminders      Reminder[]             @relation("reminder_booking")
   // timestamps
   createdAt      DateTime               @default(now()) @map("created_at")
   updatedAt      DateTime               @default(now()) @map("updated_at")
@@ -785,6 +781,7 @@ model Album {
   id               String    @id @default(uuid())
   ownerStaffId     String?   @map("owner_staff_id")
   bookingId        String?   @map("booking_id")
+  customerId       String?   @map("customer_id")
   title            String
   description      String?
   isPublic         Boolean   @default(false) @map("is_public")
@@ -796,6 +793,7 @@ model Album {
   // relation
   owner     Staff?      @relation(fields: [ownerStaffId], references: [id], onDelete: Cascade)
   booking   Booking?    @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  customer  Customer?   @relation(fields: [customerId], references: [id], onDelete: SetNull)
   coverFile File?       @relation(fields: [coverFileId], references: [id], onDelete: Cascade)
   files     AlbumFile[]
 
@@ -1009,211 +1007,3 @@ model Message {
 //   actor User? @relation(fields: [actorId], references: [id], onDelete: Cascade)
 // }
 
-// ╔══════════════════════════════════════════════════════════╗
-// ║          INVENTORY MODULE (Sell & Rentals)              ║
-// ╚══════════════════════════════════════════════════════════╝
-
-enum ItemType {
-  SOLD
-  RENTAL
-  SERVICE_ADDON
-}
-
-enum RentalStatus {
-  AVAILABLE
-  CHECKED_OUT
-  MAINTENANCE
-  DAMAGED
-}
-
-enum InventoryLogType {
-  STOCK_IN
-  STOCK_OUT
-  CHECKOUT
-  CHECKIN
-  DAMAGE_REPORT
-  MAINTENANCE_START
-  MAINTENANCE_END
-  ADJUSTMENT
-}
-
-model InventoryCategory {
-  id        String   @id @default(uuid()) @map("id")
-  name      String   @map("name")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  items InventoryItem[]
-
-  @@map("inventory_categories")
-}
-
-model InventoryItem {
-  id                String   @id @default(uuid()) @map("id")
-  name              String   @map("name")
-  description       String?  @map("description")
-  type              ItemType @map("type")
-  sku               String?  @unique @map("sku")
-  costPrice         Float    @default(0) @map("cost_price")
-  sellPrice         Float    @default(0) @map("sell_price")
-  rentalDeposit     Float?   @map("rental_deposit")
-  rentalPricePerDay Float?   @map("rental_price_per_day")
-
-  stockCount        Int  @default(0) @map("stock_count")
-  checkedOutCount   Int  @default(0) @map("checked_out_count")
-  lowStockThreshold Int? @map("low_stock_threshold")
-
-  rentalStatus RentalStatus? @map("rental_status")
-
-  categoryId String?            @map("category_id")
-  category   InventoryCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-
-  imageUrl  String?   @map("image_url")
-  isActive  Boolean   @default(true) @map("is_active")
-  deletedAt DateTime? @map("deleted_at")
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-
-  logs      InventoryLog[]
-  bookings  BookingInventoryItem[]
-  reminders Reminder[]
-
-  @@index([categoryId])
-  @@index([type])
-  @@index([sku])
-  @@index([isActive])
-  @@map("inventory_items")
-}
-
-model InventoryLog {
-  id       String           @id @default(uuid()) @map("id")
-  itemId   String           @map("item_id")
-  item     InventoryItem    @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  type     InventoryLogType @map("type")
-  quantity Int              @default(1) @map("quantity")
-  note     String?          @map("note")
-
-  checkoutDate       DateTime? @map("checkout_date")
-  expectedReturnDate DateTime? @map("expected_return_date")
-  actualReturnDate   DateTime? @map("actual_return_date")
-  damageNote         String?   @map("damage_note")
-  damageCost         Float?    @map("damage_cost")
-
-  actorId String? @map("actor_id")
-  actor   Staff?  @relation("inventory_log_actor", fields: [actorId], references: [id], onDelete: SetNull)
-
-  createdAt DateTime @default(now()) @map("created_at")
-
-  @@index([itemId])
-  @@index([type])
-  @@index([actorId])
-  @@map("inventory_logs")
-}
-
-model BookingInventoryItem {
-  id        String        @id @default(uuid()) @map("id")
-  bookingId String        @map("booking_id")
-  booking   Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  itemId    String        @map("item_id")
-  item      InventoryItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
-
-  quantity        Int   @default(1) @map("quantity")
-  unitPrice       Float @map("unit_price")
-  discountPercent Float @default(0) @map("discount_percent")
-
-  checkoutDate       DateTime? @map("checkout_date")
-  expectedReturnDate DateTime? @map("expected_return_date")
-  returnedAt         DateTime? @map("returned_at")
-  damageCost         Float     @default(0) @map("damage_cost")
-
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  @@unique([bookingId, itemId])
-  @@index([bookingId])
-  @@index([itemId])
-  @@map("booking_inventory_items")
-}
-
-// ╔══════════════════════════════════════════════════════════╗
-// ║          REMINDERS & NOTIFICATIONS MODULE                ║
-// ╚══════════════════════════════════════════════════════════╝
-
-enum ReminderType {
-  BOOKING_REMINDER
-  PAYMENT_REMINDER
-  RENTAL_RETURN
-  LOW_STOCK
-  CUSTOM
-}
-
-enum ReminderStatus {
-  PENDING
-  TRIGGERED
-  COMPLETED
-  CANCELLED
-}
-
-enum NotificationChannel {
-  IN_APP
-  EMAIL
-  SMS
-}
-
-model Reminder {
-  id      String         @id @default(uuid()) @map("id")
-  type    ReminderType   @map("type")
-  title   String         @map("title")
-  message String         @map("message")
-  status  ReminderStatus @default(PENDING) @map("status")
-
-  scheduledAt DateTime  @map("scheduled_at")
-  triggeredAt DateTime? @map("triggered_at")
-
-  bookingId  String? @map("booking_id")
-  customerId String? @map("customer_id")
-  itemId     String? @map("item_id")
-
-  booking       Booking?       @relation("reminder_booking", fields: [bookingId], references: [id], onDelete: Cascade)
-  customer      Customer?      @relation("reminder_customer", fields: [customerId], references: [id], onDelete: Cascade)
-  inventoryItem InventoryItem? @relation(fields: [itemId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  notifications Notification[]
-
-  @@index([status])
-  @@index([scheduledAt])
-  @@index([bookingId])
-  @@index([customerId])
-  @@index([type])
-  @@map("reminders")
-}
-
-model Notification {
-  id         String   @id @default(uuid()) @map("id")
-  reminderId String   @map("reminder_id")
-  reminder   Reminder @relation(fields: [reminderId], references: [id], onDelete: Cascade)
-
-  channel NotificationChannel @map("channel")
-  title   String              @map("title")
-  message String              @map("message")
-  isRead  Boolean             @default(false) @map("is_read")
-  readAt  DateTime?           @map("read_at")
-
-  recipientStaffId    String? @map("recipient_staff_id")
-  recipientCustomerId String? @map("recipient_customer_id")
-
-  createdAt DateTime @default(now()) @map("created_at")
-
-  @@index([reminderId])
-  @@index([isRead])
-  @@index([recipientStaffId])
-  @@index([createdAt])
-  @@map("notifications")
-}
-
-// Add reverse relations to existing models
-// Booking needs: reminders (via reminder_booking)
-// Customer needs: reminders (via reminder_customer)

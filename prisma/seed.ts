@@ -1171,105 +1171,7 @@ async function seedBookingFixtures(
  * Seed inventory categories and sample items
  */
 async function seedInventory() {
-  console.log('📦 Seeding inventory...');
-
-  // Create categories
-  const [decoCategory, equipCategory, attireCategory] = await Promise.all(
-    ['Decoration', 'Equipment', 'Attire & Accessories'].map(async (name) => {
-      const existing = await prisma.inventoryCategory.findFirst({ where: { name } });
-      if (existing) return existing;
-      return prisma.inventoryCategory.create({ data: { name } });
-    }),
-  );
-
-  console.log(`  ✓ Created ${3} inventory categories`);
-
-  // Create inventory items
-  const items = await Promise.all([
-    prisma.inventoryItem.upsert({
-      where: { sku: 'DEC-FLOWER-001' },
-      update: {},
-      create: {
-        name: 'Premium Silk Flower Arrangement',
-        description: 'Large silk flower centerpieces for wedding tables',
-        type: 'RENTAL',
-        sku: 'DEC-FLOWER-001',
-        costPrice: 500000,
-        sellPrice: 0,
-        rentalPricePerDay: 150000,
-        rentalDeposit: 300000,
-        stockCount: 20,
-        checkedOutCount: 0,
-        rentalStatus: 'AVAILABLE',
-        lowStockThreshold: 5,
-        categoryId: decoCategory.id,
-        isActive: true,
-      },
-    }),
-    prisma.inventoryItem.upsert({
-      where: { sku: 'DEC-LIGHT-001' },
-      update: {},
-      create: {
-        name: 'LED String Lights (10m)',
-        description: 'Warm white LED fairy lights for venue decoration',
-        type: 'RENTAL',
-        sku: 'DEC-LIGHT-001',
-        costPrice: 200000,
-        sellPrice: 0,
-        rentalPricePerDay: 80000,
-        rentalDeposit: 150000,
-        stockCount: 50,
-        checkedOutCount: 0,
-        rentalStatus: 'AVAILABLE',
-        lowStockThreshold: 10,
-        categoryId: decoCategory.id,
-        isActive: true,
-      },
-    }),
-    prisma.inventoryItem.upsert({
-      where: { sku: 'EQ-CAMERA-001' },
-      update: {},
-      create: {
-        name: 'Canon EOS R5 Camera Body',
-        description: 'Full-frame mirrorless camera for wedding photography',
-        type: 'RENTAL',
-        sku: 'EQ-CAMERA-001',
-        costPrice: 85000000,
-        sellPrice: 0,
-        rentalPricePerDay: 2000000,
-        rentalDeposit: 5000000,
-        stockCount: 3,
-        checkedOutCount: 0,
-        rentalStatus: 'AVAILABLE',
-        lowStockThreshold: 1,
-        categoryId: equipCategory.id,
-        isActive: true,
-      },
-    }),
-    prisma.inventoryItem.upsert({
-      where: { sku: 'ATT-DRESS-001' },
-      update: {},
-      create: {
-        name: 'Bridal Gown - Classic White',
-        description: 'A-line wedding dress with lace detailing',
-        type: 'RENTAL',
-        sku: 'ATT-DRESS-001',
-        costPrice: 12000000,
-        sellPrice: 0,
-        rentalPricePerDay: 3000000,
-        rentalDeposit: 5000000,
-        stockCount: 2,
-        checkedOutCount: 0,
-        rentalStatus: 'AVAILABLE',
-        lowStockThreshold: 1,
-        categoryId: attireCategory.id,
-        isActive: true,
-      },
-    }),
-  ]);
-
-  console.log(`  ✓ Created ${items.length} inventory items`);
-  return items;
+  console.log('⏭️ Skipping inventory seed: inventory models are not in current schema');
 }
 
 /**
@@ -1356,47 +1258,8 @@ async function seedChatThreads(customers: Array<{ id: string }>) {
 /**
  * Seed reminder records
  */
-async function seedReminders(customers: Array<{ id: string }>, bookingId: string) {
-  console.log('⏰ Seeding reminders...');
-
-  const seededCustomer = customers?.[0];
-  const reminders = await Promise.all([
-    prisma.reminder.create({
-      data: {
-        type: 'BOOKING_REMINDER',
-        title: 'Booking Confirmation Reminder',
-        message: 'Follow up with customer to confirm booking details for April 20.',
-        status: 'PENDING',
-        scheduledAt: new Date('2026-04-10T09:00:00.000Z'),
-        customerId: seededCustomer?.id,
-        bookingId: bookingId,
-      },
-    }),
-    prisma.reminder.create({
-      data: {
-        type: 'PAYMENT_REMINDER',
-        title: 'Payment Due Reminder',
-        message: 'Customer deposit payment is pending. Send follow-up message.',
-        status: 'PENDING',
-        scheduledAt: new Date('2026-04-15T10:00:00.000Z'),
-        customerId: seededCustomer?.id,
-        bookingId: bookingId,
-      },
-    }),
-    prisma.reminder.create({
-      data: {
-        type: 'CUSTOM',
-        title: 'Venue Visit Scheduled',
-        message: 'Schedule venue visit with customer for final walkthrough before the wedding.',
-        status: 'PENDING',
-        scheduledAt: new Date('2026-04-18T14:00:00.000Z'),
-        customerId: seededCustomer?.id,
-      },
-    }),
-  ]);
-
-  console.log(`  ✓ Created ${reminders.length} reminders`);
-  return reminders;
+async function seedReminders(_customers: Array<{ id: string }>, _bookingId: string) {
+  console.log('⏭️ Skipping reminder seed: reminder model is not in current schema');
 }
 
 /**
@@ -1508,14 +1371,8 @@ async function main() {
     // Seed booking/session fixtures
     await seedBookingFixtures(customers, configuredServices, adminUser.id);
 
-    // Seed inventory items
-    await seedInventory();
-
     // Seed chat threads
     await seedChatThreads(customers);
-
-    // Seed reminders
-    await seedReminders(customers, SEEDED_BOOKING_ID);
 
     // Seed albums
     await seedAlbums(adminUser.id);

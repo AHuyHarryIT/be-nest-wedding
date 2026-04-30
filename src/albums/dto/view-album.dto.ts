@@ -140,6 +140,14 @@ export class ViewAlbumDto {
   @IsUUID('4')
   bookingId?: string;
 
+  @ApiPropertyOptional({
+    description: 'Assigned customer ID',
+    example: 'uuid-customer-1',
+  })
+  @IsOptional()
+  @IsUUID('4')
+  customerId?: string;
+
   @ApiProperty({
     description: 'Album title',
     example: 'Wedding Photos',

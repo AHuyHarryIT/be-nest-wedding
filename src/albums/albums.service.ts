@@ -39,6 +39,14 @@ const albumOwnerSelect = {
   updatedAt: true,
 } satisfies Prisma.StaffSelect;
 
+const albumCustomerSelect = {
+  id: true,
+  phoneNumber: true,
+  firstName: true,
+  lastName: true,
+  email: true,
+} satisfies Prisma.CustomerSelect;
+
 @Injectable()
 export class AlbumsService {
   constructor(
@@ -67,6 +75,18 @@ export class AlbumsService {
       if (!booking) {
         throw new NotFoundException(
           `Booking with ID ${createAlbumDto.bookingId} not found`,
+        );
+      }
+    }
+
+    // Validate customer exists if provided
+    if (createAlbumDto.customerId) {
+      const customer = await this.databaseService.customer.findFirst({
+        where: { id: createAlbumDto.customerId, deletedAt: null },
+      });
+      if (!customer) {
+        throw new NotFoundException(
+          `Customer with ID ${createAlbumDto.customerId} not found`,
         );
       }
     }
@@ -128,6 +148,10 @@ export class AlbumsService {
       data.booking = { connect: { id: createAlbumDto.bookingId } };
     }
 
+    if (createAlbumDto.customerId) {
+      data.customer = { connect: { id: createAlbumDto.customerId } };
+    }
+
     if (createAlbumDto.coverFileId) {
       data.coverFile = { connect: { id: createAlbumDto.coverFileId } };
     }
@@ -136,6 +160,7 @@ export class AlbumsService {
       data,
       include: {
         owner: { select: albumOwnerSelect },
+        customer: { select: albumCustomerSelect },
         booking: true,
         coverFile: true,
       },
@@ -185,6 +210,7 @@ export class AlbumsService {
       where,
       include: {
         owner: { select: albumOwnerSelect },
+        customer: { select: albumCustomerSelect },
         booking: true,
         coverFile: true,
         _count: { select: { files: true } },
@@ -202,10 +228,41 @@ export class AlbumsService {
       where: { isPublic: true, deletedAt: null },
       include: {
         owner: { select: albumOwnerSelect },
+        customer: { select: albumCustomerSelect },
         coverFile: true,
       },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  async findPublicById(id: string) {
+    const album = await this.databaseService.album.findFirst({
+      where: {
+        id,
+        isPublic: true,
+        deletedAt: null,
+      },
+      include: {
+        owner: { select: albumOwnerSelect },
+        customer: { select: albumCustomerSelect },
+        coverFile: true,
+        files: {
+          include: {
+            file: true,
+          },
+          where: {
+            file: { deletedAt: null },
+          },
+          orderBy: { sortOrder: 'asc' },
+        },
+      },
+    });
+
+    if (!album) {
+      throw new NotFoundException(`Public album with ID ${id} not found`);
+    }
+
+    return album;
   }
 
   async findCustomerPrivateAlbums(
@@ -214,20 +271,37 @@ export class AlbumsService {
   ) {
     const { page, limit, search, sortBy, sortOrder } =
       PaginationHelper.mergeWithDefaults(params || {});
+    const safePage =
+      typeof page === 'number' && Number.isFinite(page) && page > 0 ? page : 1;
+    const safeLimit =
+      typeof limit === 'number' && Number.isFinite(limit) && limit > 0
+        ? limit
+        : 10;
 
     const where: Prisma.AlbumWhereInput = {
       deletedAt: null,
       isPublic: false,
-      booking: {
-        customerId,
-        deletedAt: null,
-      },
+      OR: [
+        {
+          customerId,
+        },
+        {
+          booking: {
+            customerId,
+            deletedAt: null,
+          },
+        },
+      ],
     };
 
     if (search) {
-      where.OR = [
-        { title: { contains: search, mode: 'insensitive' } },
-        { description: { contains: search, mode: 'insensitive' } },
+      where.AND = [
+        {
+          OR: [
+            { title: { contains: search, mode: 'insensitive' } },
+            { description: { contains: search, mode: 'insensitive' } },
+          ],
+        },
       ];
     }
 
@@ -247,7 +321,7 @@ export class AlbumsService {
         : { [normalizedSortBy]: sortOrder };
 
     const total = await this.databaseService.album.count({ where });
-    const skip = (page - 1) * limit;
+    const skip = (safePage - 1) * safeLimit;
 
     const albums = await this.databaseService.album.findMany({
       where,
@@ -272,7 +346,7 @@ export class AlbumsService {
       },
       orderBy,
       skip,
-      take: limit,
+      take: safeLimit,
     });
 
     const data = albums.map((album) => ({
@@ -284,7 +358,12 @@ export class AlbumsService {
       coverFile: album.coverFile,
     }));
 
-    return PaginationHelper.createPaginatedResponse(data, page, limit, total);
+    return PaginationHelper.createPaginatedResponse(
+      data,
+      safePage,
+      safeLimit,
+      total,
+    );
   }
 
   private async assertCustomerAlbumAccess(
@@ -296,12 +375,19 @@ export class AlbumsService {
         id: albumId,
         deletedAt: null,
         isPublic: false,
-        booking: {
-          is: {
+        OR: [
+          {
             customerId,
-            deletedAt: null,
           },
-        },
+          {
+            booking: {
+              is: {
+                customerId,
+                deletedAt: null,
+              },
+            },
+          },
+        ],
       },
       select: {
         id: true,
@@ -439,6 +525,7 @@ export class AlbumsService {
       },
       include: {
         owner: { select: albumOwnerSelect },
+        customer: { select: albumCustomerSelect },
         booking: true,
         coverFile: true,
         files: { include: { file: true }, orderBy: { sortOrder: 'asc' } },
@@ -462,6 +549,7 @@ export class AlbumsService {
       where: { id, deletedAt: null },
       include: {
         owner: { select: albumOwnerSelect },
+        customer: { select: albumCustomerSelect },
         booking: true,
         coverFile: true,
         files: {
@@ -505,12 +593,39 @@ export class AlbumsService {
   async update(id: string, updateAlbumDto: UpdateAlbumDto) {
     await this.findOne(id);
 
+    if (updateAlbumDto.bookingId) {
+      const booking = await this.databaseService.booking.findFirst({
+        where: { id: updateAlbumDto.bookingId, deletedAt: null },
+      });
+      if (!booking) {
+        throw new NotFoundException(
+          `Booking with ID ${updateAlbumDto.bookingId} not found`,
+        );
+      }
+    }
+
+    if (updateAlbumDto.customerId) {
+      const customer = await this.databaseService.customer.findFirst({
+        where: { id: updateAlbumDto.customerId, deletedAt: null },
+      });
+      if (!customer) {
+        throw new NotFoundException(
+          `Customer with ID ${updateAlbumDto.customerId} not found`,
+        );
+      }
+    }
+
     const data: Prisma.AlbumUpdateInput = {};
     if (updateAlbumDto.ownerUserId)
       data.owner = { connect: { id: updateAlbumDto.ownerUserId } };
     if (updateAlbumDto.bookingId !== undefined) {
       data.booking = updateAlbumDto.bookingId
         ? { connect: { id: updateAlbumDto.bookingId } }
+        : { disconnect: true };
+    }
+    if (updateAlbumDto.customerId !== undefined) {
+      data.customer = updateAlbumDto.customerId
+        ? { connect: { id: updateAlbumDto.customerId } }
         : { disconnect: true };
     }
     if (updateAlbumDto.title) data.title = updateAlbumDto.title;
@@ -536,6 +651,7 @@ export class AlbumsService {
       data,
       include: {
         owner: { select: albumOwnerSelect },
+        customer: { select: albumCustomerSelect },
         booking: true,
         coverFile: true,
       },
@@ -582,6 +698,7 @@ export class AlbumsService {
       where,
       include: {
         owner: { select: albumOwnerSelect },
+        customer: { select: albumCustomerSelect },
         booking: true,
         coverFile: true,
         _count: { select: { files: true } },
@@ -608,6 +725,7 @@ export class AlbumsService {
       data: { deletedAt: null },
       include: {
         owner: { select: albumOwnerSelect },
+        customer: { select: albumCustomerSelect },
         booking: true,
         coverFile: true,
       },
@@ -1037,12 +1155,19 @@ export class AlbumsService {
             album: {
               deletedAt: null,
               isPublic: false,
-              booking: {
-                is: {
+              OR: [
+                {
                   customerId,
-                  deletedAt: null,
                 },
-              },
+                {
+                  booking: {
+                    is: {
+                      customerId,
+                      deletedAt: null,
+                    },
+                  },
+                },
+              ],
             },
           },
         },
@@ -1088,6 +1213,55 @@ export class AlbumsService {
     }
 
     const stream = await this.oneDriveService.getFileStream(storageKey);
+
+    return {
+      stream,
+      mimeType: file.mimeType,
+      byteSize: file.byteSize,
+      name: file.name,
+    };
+  }
+
+  private async assertPublicAlbumFileAccess(fileId: string) {
+    const file = await this.databaseService.file.findFirst({
+      where: {
+        id: fileId,
+        deletedAt: null,
+        albums: {
+          some: {
+            album: {
+              deletedAt: null,
+              isPublic: true,
+            },
+          },
+        },
+      },
+      select: {
+        storageKey: true,
+        mimeType: true,
+        byteSize: true,
+        name: true,
+      },
+    });
+
+    if (!file) {
+      throw new NotFoundException(`File with ID ${fileId} not found`);
+    }
+
+    return file;
+  }
+
+  async getPublicThumbnailStream(
+    fileId: string,
+  ): Promise<{ stream: NodeJS.ReadableStream; contentType: string }> {
+    const { storageKey } = await this.assertPublicAlbumFileAccess(fileId);
+
+    return this.oneDriveService.getThumbnailStream(storageKey);
+  }
+
+  async getPublicFileStream(fileId: string) {
+    const file = await this.assertPublicAlbumFileAccess(fileId);
+    const stream = await this.oneDriveService.getFileStream(file.storageKey);
 
     return {
       stream,

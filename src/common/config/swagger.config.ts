@@ -24,8 +24,7 @@ export function setupSwagger(app: INestApplication): void {
     .setTitle('Wedding Studio API')
     .setDescription(
       'Comprehensive RESTful API for wedding photography and services management. ' +
-        'Includes booking management, payment processing, inventory management, ' +
-        'and role-based access control.',
+        'Includes booking management, payment processing, and role-based access control.',
     )
     .setVersion('1.0.0')
     .setContact(

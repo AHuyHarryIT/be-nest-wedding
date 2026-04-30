@@ -98,6 +98,79 @@ export class AlbumsController {
     );
   }
 
+  @Get('public/:id')
+  @ApiOperation({
+    summary: 'Get public album by ID (no authentication required)',
+  })
+  @ApiSuccessResponse({ description: 'Public album retrieved successfully' })
+  async findPublicById(@Param('id') id: string) {
+    const album = await this.albumsService.findPublicById(id);
+    return ResponseBuilder.success(
+      album,
+      'Public album retrieved successfully',
+    );
+  }
+
+  @Get('public/file/:fileId/thumbnail')
+  @ApiOperation({ summary: 'Get public album thumbnail image' })
+  @ApiSuccessResponse({
+    description: 'Public thumbnail image streamed successfully',
+  })
+  async getPublicThumbnail(
+    @Param('fileId') fileId: string,
+    @Res() res: Response,
+  ) {
+    try {
+      const result = await this.albumsService.getPublicThumbnailStream(fileId);
+
+      res.set({
+        'Content-Type': result.contentType || 'image/jpeg',
+        'Cache-Control': 'public, max-age=3600',
+      });
+
+      result.stream.pipe(res);
+    } catch (error: unknown) {
+      console.error(
+        `[getPublicThumbnail] Error getting thumbnail ${fileId}:`,
+        error,
+      );
+      const errorMessage =
+        error instanceof Error ? error.message : 'Failed to get thumbnail';
+      throw new InternalServerErrorException(errorMessage);
+    }
+  }
+
+  @Get('public/file/:fileId/content')
+  @ApiOperation({ summary: 'Get public album file content (streamed)' })
+  @ApiSuccessResponse({
+    description: 'Public file content streamed successfully',
+  })
+  async getPublicFileContent(
+    @Param('fileId') fileId: string,
+    @Res() res: Response,
+  ) {
+    try {
+      const { stream, mimeType, name } =
+        await this.albumsService.getPublicFileStream(fileId);
+
+      res.set({
+        'Content-Type': mimeType || 'application/octet-stream',
+        'Content-Disposition': `inline; filename="${encodeURIComponent(name)}"`,
+        'Cache-Control': 'public, max-age=3600',
+      });
+
+      stream.pipe(res);
+    } catch (error: unknown) {
+      console.error(
+        `[getPublicFileContent] Error streaming file ${fileId}:`,
+        error,
+      );
+      const errorMessage =
+        error instanceof Error ? error.message : 'Failed to get file';
+      throw new InternalServerErrorException(errorMessage);
+    }
+  }
+
   @Get('deleted')
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @RequirePermissions('albums:read')
@@ -123,7 +196,8 @@ export class AlbumsController {
   }
 
   @Get('file/:fileId/thumbnail')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions('albums:read')
   @ApiOperation({ summary: 'Get proxied thumbnail image' })
   @ApiSuccessResponse({ description: 'Thumbnail image proxied successfully' })
   async getThumbnail(@Param('fileId') fileId: string, @Res() res: Response) {
@@ -145,7 +219,8 @@ export class AlbumsController {
   }
 
   @Get('file/:fileId/content')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions('albums:read')
   @ApiOperation({ summary: 'Get original file content (streamed)' })
   @ApiSuccessResponse({ description: 'File content streamed successfully' })
   async getFileContent(@Param('fileId') fileId: string, @Res() res: Response) {

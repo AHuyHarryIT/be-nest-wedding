@@ -27,6 +27,15 @@ export class CreateAlbumDto {
   @IsOptional()
   bookingId?: string;
 
+  @ApiPropertyOptional({
+    description: 'Assigned customer ID (UUID format)',
+    example: 'uuid-customer-1234',
+    format: 'uuid',
+  })
+  @IsUUID('4', { message: 'Customer ID must be a valid UUID' })
+  @IsOptional()
+  customerId?: string;
+
   @ApiProperty({
     description: 'Album title (max 255 characters)',
     example: 'Wedding Photos',

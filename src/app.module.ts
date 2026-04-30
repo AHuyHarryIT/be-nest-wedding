@@ -24,9 +24,7 @@ import { SelectionModule } from './selection/selection.module';
 import { ChatModule } from './chat/chat.module';
 import { StaffChatModule } from './staff-chat/staff-chat.module';
 import { AiChatModule } from './ai-chat/ai-chat.module';
-import { InventoryModule } from './inventory/inventory.module';
 import { AutoRefreshMiddleware } from './auth/auto-refresh.middleware';
-import { RemindersModule } from './reminders/reminders.module';
 import { PublicInquiriesModule } from './public-inquiries/public-inquiries.module';
 
 @Module({
@@ -59,8 +57,6 @@ import { PublicInquiriesModule } from './public-inquiries/public-inquiries.modul
     ChatModule,
     StaffChatModule,
     AiChatModule,
-    InventoryModule,
-    RemindersModule,
     PublicInquiriesModule,
   ],
   controllers: [AppController],

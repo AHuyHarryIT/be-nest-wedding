@@ -42,7 +42,7 @@ describe('UsersService', () => {
       createMany: jest.fn(),
       deleteMany: jest.fn(),
     },
-    $transaction: jest.fn(async (callback: any) => callback(transactionMock)),
+    $transaction: jest.fn((callback: any) => callback(transactionMock)),
   } as any;
 
   const configServiceMock = {
@@ -596,7 +596,9 @@ describe('UsersService', () => {
 
   it('resets staff password and revokes active sessions', async () => {
     (bcrypt.hash as jest.Mock).mockResolvedValue('hashed-new-password');
-    databaseServiceMock.staff.findUnique.mockResolvedValueOnce({ id: 'STF-001' });
+    databaseServiceMock.staff.findUnique.mockResolvedValueOnce({
+      id: 'STF-001',
+    });
     transactionMock.staff.update.mockResolvedValue({ id: 'STF-001' });
     transactionMock.authSession.updateMany.mockResolvedValue({ count: 2 });
 
