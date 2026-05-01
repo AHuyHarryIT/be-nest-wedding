@@ -360,7 +360,7 @@ export class OneDriveService {
 
   async getThumbnail(
     fileId: string,
-    size: 'small' | 'medium' | 'large' = 'medium',
+    size: 'small' | 'medium' | 'large' = 'large',
   ): Promise<string | null> {
     try {
       // Check if thumbnail is permanently missing
@@ -607,7 +607,7 @@ export class OneDriveService {
 
   async getThumbnailStream(
     fileId: string,
-    size: 'small' | 'medium' | 'large' = 'medium',
+    size: 'small' | 'medium' | 'large' = 'large',
   ): Promise<{ stream: NodeJS.ReadableStream; contentType: string }> {
     // First get the CDN URL
     const url = await this.getThumbnailUrl(fileId, size);
@@ -627,7 +627,7 @@ export class OneDriveService {
 
   async getThumbnailUrl(
     fileId: string,
-    size: 'small' | 'medium' | 'large' = 'medium',
+    size: 'small' | 'medium' | 'large' = 'large',
   ): Promise<string> {
     // Check if thumbnail is permanently missing
     if (this.noThumbSet.has(fileId)) {
