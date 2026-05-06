@@ -62,6 +62,26 @@ export interface MomoTransactionQueryResponse {
   responseTime: number;
 }
 
+interface MomoRefundRequest {
+  amount: number;
+  transId: string;
+  description: string;
+  orderId: string;
+  requestId?: string;
+}
+
+export interface MomoRefundResponse {
+  partnerCode: string;
+  requestId: string;
+  orderId: string;
+  amount: number;
+  transId: string;
+  resultCode: number;
+  message: string;
+  responseTime?: number;
+  refundTransId?: string;
+}
+
 @Injectable()
 export class MomoPaymentService {
   async createPayment(
@@ -165,6 +185,53 @@ export class MomoPaymentService {
    * Can be used to check payment status if IPN is delayed or to complement IPN callbacks
    * @param orderId - The unique order ID returned from createPayment (includes timestamp)
    */
+  async refundTransaction(
+    refundData: MomoRefundRequest,
+  ): Promise<MomoRefundResponse> {
+    try {
+      const { accessKey, secretKey, partnerCode, refundEndpoint, lang } =
+        MomoConfig;
+
+      const requestId =
+        refundData.requestId || `${partnerCode}_refund_${Date.now()}`;
+
+      const rawSignature = `accessKey=${accessKey}&amount=${refundData.amount}&description=${refundData.description}&orderId=${refundData.orderId}&partnerCode=${partnerCode}&requestId=${requestId}&transId=${refundData.transId}`;
+
+      const signature = crypto
+        .createHmac('sha256', secretKey)
+        .update(rawSignature)
+        .digest('hex');
+
+      const requestBody = {
+        partnerCode,
+        requestId,
+        amount: refundData.amount,
+        orderId: refundData.orderId,
+        transId: refundData.transId,
+        lang,
+        description: refundData.description,
+        signature,
+      };
+
+      const response = await axios.post(refundEndpoint, requestBody, {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const momoResponse = response.data as MomoRefundResponse;
+
+      return {
+        ...momoResponse,
+        requestId,
+      };
+    } catch (error) {
+      throw new BadRequestException(
+        `Momo refund failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
   async queryTransactionStatus(
     orderId: string,
   ): Promise<MomoTransactionQueryResponse> {

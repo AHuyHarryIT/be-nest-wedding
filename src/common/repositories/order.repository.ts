@@ -31,14 +31,8 @@ export class OrderRepository extends BaseRepository<any> {
         payments: {
           include: {
             attempts: true,
-            gatewayTransactions: true,
           },
           orderBy: { paymentSequence: 'asc' },
-        },
-        paymentPlans: {
-          include: {
-            schedules: true,
-          },
         },
         refunds: {
           include: {
@@ -72,7 +66,6 @@ export class OrderRepository extends BaseRepository<any> {
       include: {
         payments: true,
         refunds: true,
-        paymentPlans: true,
       },
     });
   }
@@ -169,28 +162,6 @@ export class OrderRepository extends BaseRepository<any> {
       },
       orderBy: { createdAt: 'asc' },
       ...params,
-    });
-  }
-
-  /**
-   * Create order with initial payment plan
-   */
-  async createWithPaymentPlan(orderData: any, paymentPlanData?: any) {
-    return this.db.$transaction(async (tx) => {
-      const order = await tx.order.create({
-        data: orderData,
-      });
-
-      if (paymentPlanData) {
-        await tx.paymentPlan.create({
-          data: {
-            ...paymentPlanData,
-            orderId: order.id,
-          },
-        });
-      }
-
-      return order;
     });
   }
 

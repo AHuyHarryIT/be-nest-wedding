@@ -97,17 +97,12 @@ export class OrderManagementService {
         booking: true,
         payments: {
           include: {
-            attempts: {
-              include: { gatewayTransaction: true },
-            },
+            attempts: true,
           },
           orderBy: { paymentSequence: 'asc' },
         },
         refunds: {
           include: { attempts: true },
-        },
-        paymentPlans: {
-          include: { schedules: true },
         },
       },
     });

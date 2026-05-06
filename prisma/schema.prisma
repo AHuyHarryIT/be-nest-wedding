@@ -92,32 +92,6 @@ enum RefundAttemptStatus {
   TIMEOUT
 }
 
-enum PaymentPlanType {
-  ONE_TIME
-  INSTALLMENT_2
-  INSTALLMENT_3
-  INSTALLMENT_6
-  INSTALLMENT_12
-  CUSTOM
-}
-
-enum PaymentPlanStatus {
-  PENDING
-  ACTIVE
-  COMPLETED
-  CANCELLED
-  SUSPENDED
-}
-
-enum PaymentScheduleStatus {
-  PENDING
-  DUE
-  OVERDUE
-  PAID
-  CANCELLED
-  SKIPPED
-}
-
 enum VisibilityLevel {
   PUBLIC
   PRIVATE
@@ -520,10 +494,9 @@ model Order {
   cancelledAt        DateTime?   @map("cancelled_at")
 
   // relation
-  booking      Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  payments     Payment[]
-  paymentPlans PaymentPlan[]
-  refunds      Refund[]
+  booking  Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  payments Payment[]
+  refunds  Refund[]
 
   // timestamps
   createdAt DateTime  @default(now()) @map("created_at")
@@ -556,9 +529,8 @@ model Payment {
   cancellationReason  String?       @map("cancellation_reason")
 
   // relation
-  order               Order                       @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  attempts            PaymentAttempt[]
-  gatewayTransactions PaymentGatewayTransaction[]
+  order    Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  attempts PaymentAttempt[]
 
   // timestamps
   createdAt DateTime @default(now()) @map("created_at")
@@ -573,16 +545,15 @@ model Payment {
 }
 
 model PaymentAttempt {
-  id                   String               @id @default(uuid())
-  paymentId            String               @map("payment_id")
-  attemptNumber        Int                  @map("attempt_number")
-  status               PaymentAttemptStatus @default(INITIATED)
-  resultCode           String?              @map("result_code")
-  resultMessage        String?              @map("result_message")
-  errorReason          String?              @map("error_reason")
-  attemptedAmount      Float                @default(0) @map("attempted_amount")
-  gatewayTransactionId String?              @unique @map("gateway_transaction_id")
-  idempotencyKey       String               @unique @map("idempotency_key")
+  id              String               @id @default(uuid())
+  paymentId       String               @map("payment_id")
+  attemptNumber   Int                  @map("attempt_number")
+  status          PaymentAttemptStatus @default(INITIATED)
+  resultCode      String?              @map("result_code")
+  resultMessage   String?              @map("result_message")
+  errorReason     String?              @map("error_reason")
+  attemptedAmount Float                @default(0) @map("attempted_amount")
+  idempotencyKey  String               @unique @map("idempotency_key")
   userAgent            String?              @map("user_agent")
   ipAddress            String?              @map("ip_address")
   deviceInfo           String?              @map("device_info")
@@ -593,8 +564,7 @@ model PaymentAttempt {
   duration             Int?
 
   // relation
-  payment            Payment                    @relation(fields: [paymentId], references: [id], onDelete: Cascade)
-  gatewayTransaction PaymentGatewayTransaction? @relation(fields: [gatewayTransactionId], references: [id], onDelete: SetNull)
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
 
   // timestamps
   createdAt DateTime @default(now()) @map("created_at")
@@ -603,49 +573,8 @@ model PaymentAttempt {
   @@unique([paymentId, attemptNumber])
   @@index([paymentId])
   @@index([status])
-  @@index([gatewayTransactionId])
   @@index([requestedAt])
   @@map("payment_attempts")
-}
-
-model PaymentGatewayTransaction {
-  id                   String    @id @default(uuid())
-  paymentId            String    @map("payment_id")
-  paymentAttemptId     String?   @map("payment_attempt_id")
-  gatewayProvider      String    @map("gateway_provider") // "momo", "zalo", "stripe", etc.
-  gatewayName          String?   @map("gateway_name")
-  gatewayTransactionId String?   @map("gateway_transaction_id")
-  gatewayOrderId       String?   @map("gateway_order_id")
-  gatewayCorrelationId String?   @map("gateway_correlation_id")
-  amount               Float
-  currency             String    @default("VND")
-  gatewayStatus        String?   @map("gateway_status")
-  requestedAt          DateTime  @default(now()) @map("requested_at")
-  respondedAt          DateTime? @map("responded_at")
-  settledAt            DateTime? @map("settled_at")
-  webhookReceivedAt    DateTime? @map("webhook_received_at")
-  webhookId            String?   @map("webhook_id")
-  webhookStatus        String?   @map("webhook_status")
-  gatewayRequest       Json?     @map("gateway_request")
-  gatewayResponse      Json?     @map("gateway_response")
-  notes                String?
-  internalNotes        String?   @map("internal_notes")
-
-  // relation
-  payment  Payment          @relation(fields: [paymentId], references: [id], onDelete: Cascade)
-  attempts PaymentAttempt[]
-
-  // timestamps
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  @@index([paymentId])
-  @@index([gatewayProvider])
-  @@index([gatewayTransactionId])
-  @@index([gatewayOrderId])
-  @@index([settledAt])
-  @@index([webhookReceivedAt])
-  @@map("payment_gateway_transactions")
 }
 
 model Refund {
@@ -703,51 +632,6 @@ model RefundAttempt {
   @@index([refundId])
   @@index([status])
   @@map("refund_attempts")
-}
-
-model PaymentPlan {
-  id               String            @id @default(uuid())
-  orderId          String            @map("order_id")
-  planType         PaymentPlanType   @default(ONE_TIME) @map("plan_type")
-  installmentCount Int               @default(1) @map("installment_count")
-  status           PaymentPlanStatus @default(PENDING)
-
-  // relation
-  order     Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  schedules PaymentSchedule[]
-
-  // timestamps
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  @@index([orderId])
-  @@index([status])
-  @@map("payment_plans")
-}
-
-model PaymentSchedule {
-  id                    String                @id @default(uuid())
-  paymentPlanId         String                @map("payment_plan_id")
-  scheduleNumber        Int                   @map("schedule_number")
-  dueDate               DateTime              @map("due_date")
-  amount                Float
-  status                PaymentScheduleStatus @default(PENDING)
-  paidDate              DateTime?             @map("paid_date")
-  reminderSentAt        DateTime?             @map("reminder_sent_at")
-  overdueReminderSentAt DateTime?             @map("overdue_reminder_sent_at")
-
-  // relation
-  paymentPlan PaymentPlan @relation(fields: [paymentPlanId], references: [id], onDelete: Cascade)
-
-  // timestamps
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  @@unique([paymentPlanId, scheduleNumber])
-  @@index([paymentPlanId])
-  @@index([dueDate])
-  @@index([status])
-  @@map("payment_schedules")
 }
 
 // Media and Albums

@@ -25,7 +25,6 @@ export interface UpdatePaymentAttemptDto {
   errorReason?: string;
   respondedAt?: Date;
   duration?: number;
-  gatewayTransactionId?: string;
 }
 
 @Injectable()

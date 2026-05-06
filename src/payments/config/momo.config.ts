@@ -24,6 +24,7 @@ export const MomoConfig = {
   partnerCode: 'MOMO',
   endpoint: `${momoEndpoint}/v2/gateway/api/create`,
   queryEndpoint: `${momoEndpoint}/v2/gateway/api/query`,
+  refundEndpoint: `${momoEndpoint}/v2/gateway/api/refund`,
   redirectUrl:
     process.env.MOMO_REDIRECT_URL || `${baseUrl}/bookings/payment-result`,
   ipnUrl: process.env.MOMO_IPN_URL || `${baseUrl}/orders/momo/callback`,

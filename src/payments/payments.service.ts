@@ -82,26 +82,30 @@ export class PaymentsService {
   }
 
   /**
-   * Find payment by transaction ID (for idempotency checking)
-   * NOTE: This now needs to check payment attempts + gateway transactions
+   * Find payment by transaction identifier
    */
   async findByTransactionId(txnId: string) {
-    // First try to find the gateway transaction
-    const gatewayTransaction =
-      await this.databaseService.paymentGatewayTransaction.findFirst({
-        where: { gatewayTransactionId: txnId },
-        include: {
-          payment: {
-            include: { order: true },
-          },
-        },
-      });
+    const payment = await this.databaseService.payment.findUnique({
+      where: { id: txnId },
+      include: { order: true },
+    });
 
-    if (gatewayTransaction?.payment) {
-      return gatewayTransaction.payment;
+    if (payment) {
+      return payment;
     }
 
-    return null;
+    const attempt = await this.databaseService.paymentAttempt.findFirst({
+      where: {
+        OR: [{ idempotencyKey: txnId }, { resultCode: txnId }],
+      },
+      include: {
+        payment: {
+          include: { order: true },
+        },
+      },
+    });
+
+    return attempt?.payment || null;
   }
 
   /**
@@ -126,10 +130,7 @@ export class PaymentsService {
       where: { id },
       include: {
         order: true,
-        attempts: {
-          include: { gatewayTransaction: true },
-        },
-        gatewayTransactions: true,
+        attempts: true,
       },
     });
 
@@ -148,7 +149,7 @@ export class PaymentsService {
 
     const attempts = await this.databaseService.paymentAttempt.findMany({
       where: { paymentId: id },
-      include: { gatewayTransaction: true },
+      include: { payment: true },
       orderBy: { attemptNumber: 'asc' },
     });
 

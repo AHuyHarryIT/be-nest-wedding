@@ -26,13 +26,7 @@ export class PaymentRepository extends BaseRepository<any> {
           },
         },
         attempts: {
-          include: {
-            gatewayTransaction: true,
-          },
           orderBy: { attemptNumber: 'asc' },
-        },
-        gatewayTransactions: {
-          orderBy: { createdAt: 'desc' },
         },
       },
     });
@@ -51,7 +45,6 @@ export class PaymentRepository extends BaseRepository<any> {
         attempts: {
           orderBy: { attemptNumber: 'asc' },
         },
-        gatewayTransactions: true,
       },
       orderBy: { paymentSequence: 'asc' },
       ...params,
@@ -222,23 +215,11 @@ export class PaymentRepository extends BaseRepository<any> {
     return (lastPayment?.paymentSequence || 0) + 1;
   }
 
-  /**
-   * Get payment with attempts and gateway transactions
-   */
   async findWithTransactions(paymentId: string) {
     return this.db.payment.findUnique({
       where: { id: paymentId },
       include: {
-        attempts: {
-          include: {
-            gatewayTransaction: true,
-          },
-        },
-        gatewayTransactions: {
-          include: {
-            attempts: true,
-          },
-        },
+        attempts: true,
       },
     });
   }

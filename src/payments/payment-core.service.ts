@@ -14,7 +14,6 @@ import {
 import { DatabaseService } from '../database/database.service';
 import { PaymentRepository } from '../common/repositories';
 import { PaymentAttemptService } from './payment-attempt.service';
-import { PaymentGatewayTransactionService } from './payment-gateway-transaction.service';
 import { GenericRecord } from '../common/types';
 
 export interface CreatePaymentDto {
@@ -68,7 +67,6 @@ export class PaymentCoreService {
     private readonly databaseService: DatabaseService,
     private readonly paymentRepository: PaymentRepository,
     private readonly paymentAttemptService: PaymentAttemptService,
-    private readonly gatewayTransactionService: PaymentGatewayTransactionService,
   ) {}
 
   /**
@@ -292,13 +290,7 @@ export class PaymentCoreService {
       include: {
         order: true,
         attempts: {
-          include: {
-            gatewayTransaction: true,
-          },
           orderBy: { attemptNumber: 'asc' },
-        },
-        gatewayTransactions: {
-          orderBy: { createdAt: 'asc' },
         },
       },
     });
@@ -312,7 +304,6 @@ export class PaymentCoreService {
       where: { orderId },
       include: {
         attempts: true,
-        gatewayTransactions: true,
       },
       orderBy: { paymentSequence: 'asc' },
     });
@@ -509,29 +500,6 @@ export class PaymentCoreService {
             resultCode: attemptData.resultCode,
           },
         });
-      }
-
-      const gatewayTx =
-        attemptData.gatewayTransaction as GenericRecord<unknown>;
-      if (gatewayTx) {
-        timeline.push({
-          timestamp: gatewayTx.createdAt as Date,
-          event: 'GATEWAY_TRANSACTION_RECORDED',
-          details: {
-            gateway: gatewayTx.gatewayProvider,
-            transactionId: gatewayTx.gatewayTransactionId,
-          },
-        });
-
-        if (gatewayTx.settledAt) {
-          timeline.push({
-            timestamp: gatewayTx.settledAt as unknown as Date,
-            event: 'GATEWAY_SETTLED',
-            details: {
-              gateway: gatewayTx.gatewayProvider,
-            },
-          });
-        }
       }
     }
 

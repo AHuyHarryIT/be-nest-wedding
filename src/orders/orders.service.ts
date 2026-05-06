@@ -21,7 +21,6 @@ import {
 } from '../payments/momo.service';
 import { PaymentAttemptService } from '../payments/payment-attempt.service';
 import { PaymentCoreService as PaymentService } from '../payments/payment-core.service';
-import { PaymentGatewayTransactionService } from '../payments/payment-gateway-transaction.service';
 import { RefundService } from '../payments/refund.service';
 import { MomoTransactionQueryResponse } from '../payments/momo.service';
 import { CheckoutDto, PayRemainingDto } from './dto';
@@ -37,7 +36,6 @@ export class OrdersService {
     private readonly momoService: MomoPaymentService,
     private readonly paymentService: PaymentService,
     private readonly paymentAttemptService: PaymentAttemptService,
-    private readonly gatewayTransactionService: PaymentGatewayTransactionService,
     private readonly paymentEventsService: PaymentEventsService,
     private readonly refundService: RefundService,
   ) {}
@@ -452,7 +450,6 @@ export class OrdersService {
    * Complete non-E-WALLET payment immediately
    */
   private async completeNonEWalletPayment(paymentId: string, txnId?: string) {
-    // Create attempt
     const attempt = await this.paymentAttemptService.createAttempt({
       paymentId,
       attemptNumber: 1,
@@ -465,23 +462,10 @@ export class OrdersService {
         )?.amount || 0,
     });
 
-    // Record gateway transaction
-    if (txnId) {
-      await this.gatewayTransactionService.recordTransaction({
-        paymentId,
-        paymentAttemptId: attempt.id,
-        gatewayProvider: 'manual',
-        gatewayTransactionId: txnId,
-        amount: attempt.attemptedAmount,
-        gatewayStatus: 'SUCCESS',
-      });
-    }
-
-    // Mark as successful
     await this.paymentService.completePaymentAttempt(
       attempt.id,
       'SUCCESS',
-      '0',
+      txnId || '0',
       'Manual payment',
     );
   }
@@ -547,8 +531,7 @@ export class OrdersService {
         },
         payments: {
           include: {
-            attempts: { include: { gatewayTransaction: true } },
-            gatewayTransactions: true,
+            attempts: true,
           },
           orderBy: { paymentSequence: 'asc' },
         },
@@ -678,37 +661,16 @@ export class OrdersService {
       return;
     }
 
-    const existingGatewayTransaction =
-      await this.databaseService.paymentGatewayTransaction.findFirst({
-        where: {
-          paymentId: payment.id,
-          gatewayProvider: 'momo',
-          OR: [
-            { gatewayOrderId },
-            ...(status.transId
-              ? [{ gatewayTransactionId: status.transId.toString() }]
-              : []),
-          ],
-        },
-      });
+    const transId = status.transId?.toString();
+    const existingSuccessfulAttemptForTransId = transId
+      ? payment.attempts.find(
+          (attempt) =>
+            attempt.status === 'SUCCESS' && attempt.resultCode === transId,
+        )
+      : undefined;
 
     if (payment.status === PaymentStatus.SUCCESSFUL) {
-      if (!existingGatewayTransaction) {
-        const successfulAttempt = payment.attempts.find(
-          (attempt) => attempt.status === 'SUCCESS',
-        );
-
-        await this.gatewayTransactionService.recordTransaction({
-          paymentId: payment.id,
-          paymentAttemptId: successfulAttempt?.id,
-          gatewayProvider: 'momo',
-          gatewayTransactionId: status.transId?.toString(),
-          gatewayOrderId,
-          amount: payment.amount,
-          gatewayStatus: status.resultCode?.toString(),
-          gatewayResponse: status,
-        });
-
+      if (!existingSuccessfulAttemptForTransId) {
         await this.createDuplicateDepositRefundIfNeeded(
           payment,
           gatewayOrderId,
@@ -721,7 +683,9 @@ export class OrdersService {
     }
 
     const successfulAttempt = payment.attempts.find(
-      (attempt) => attempt.status === 'SUCCESS',
+      (attempt) =>
+        attempt.status === 'SUCCESS' &&
+        (!transId || attempt.resultCode === transId),
     );
 
     const attempt =
@@ -732,19 +696,6 @@ export class OrdersService {
         status: 'SUCCESS',
         attemptedAmount: payment.amount,
       }));
-
-    if (!existingGatewayTransaction) {
-      await this.gatewayTransactionService.recordTransaction({
-        paymentId: payment.id,
-        paymentAttemptId: attempt.id,
-        gatewayProvider: 'momo',
-        gatewayTransactionId: status.transId?.toString(),
-        gatewayOrderId,
-        amount: payment.amount,
-        gatewayStatus: status.resultCode?.toString(),
-        gatewayResponse: status,
-      });
-    }
 
     await this.paymentService.completePaymentAttempt(
       attempt.id,
@@ -811,28 +762,6 @@ export class OrdersService {
   ): Promise<void> {
     const bookingId = this.extractBookingIdFromMomoOrderId(momoOrderId);
     if (!bookingId) {
-      return;
-    }
-
-    const existingTransaction =
-      await this.databaseService.paymentGatewayTransaction.findFirst({
-        where: {
-          gatewayProvider: 'momo',
-          OR: [
-            { gatewayOrderId: momoOrderId },
-            ...(status.transId
-              ? [{ gatewayTransactionId: status.transId.toString() }]
-              : []),
-          ],
-        },
-      });
-
-    if (existingTransaction) {
-      await this.finalizeSuccessfulMomoPayment(
-        existingTransaction.paymentId,
-        momoOrderId,
-        status,
-      );
       return;
     }
 
@@ -958,15 +887,19 @@ export class OrdersService {
 
       // Check idempotency
       const transIdStr = callbackData.transId?.toString() || '';
-      const existingTransaction =
-        await this.gatewayTransactionService.getByGatewayTransactionId(
-          'momo',
-          transIdStr,
-        );
+      const existingAttempt = transIdStr
+        ? await this.databaseService.paymentAttempt.findFirst({
+            where: {
+              status: 'SUCCESS',
+              resultCode: transIdStr,
+            },
+            select: { paymentId: true },
+          })
+        : null;
 
-      if (existingTransaction) {
+      if (existingAttempt?.paymentId) {
         await this.finalizeSuccessfulMomoPayment(
-          existingTransaction.paymentId,
+          existingAttempt.paymentId,
           callbackData.orderId,
           callbackData,
         );
